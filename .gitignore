@@ -1,3 +1,7 @@
+# Node & Build
+node_modules/
+dist/
+
 # Python
 __pycache__/
 *.py[cod]
@@ -17,5 +21,6 @@ ENV/
 .vscode/
 .idea/
 
-# Local data / usage
+# Local data & history
 # daily_usage.json
+# leads_history.json
