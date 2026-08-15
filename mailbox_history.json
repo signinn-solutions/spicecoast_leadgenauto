@@ -1,0 +1,16 @@
+[
+  {
+    "id": "msg-1786817659416",
+    "sender": "buyer@nordicspice.se",
+    "senderName": "Lars Lindqvist",
+    "subject": "Inquiry: Organic Cardamom & Turmeric Quotation",
+    "body": "Dear SpiceCoast, We are interested in purchasing 10 MT of organic Alleppey green cardamom and high curcumin turmeric. Could you send catalog and CIF Gothenburg pricing?",
+    "draftReply": "Dear Lars Lindqvist,\n\nThank you for contacting The Spice Coast! We appreciate your interest in our premium export-grade spices.\n\nWe specialize in direct-origin Malabar Black Pepper, Alleppey Green Cardamom, High-Curcumin Turmeric, and Cinnamon. Our team is currently preparing our updated product catalog and seasonal export pricing for you.\n\nTo provide an accurate quote, could you please confirm your estimated order volume and preferred delivery terms (FOB / CIF destination port)?\n\nWarm regards,\nThe SpiceCoast Export Desk\noutreach@thespicecoast.com",
+    "status": "drafted",
+    "error": null,
+    "autoSend": false,
+    "model": "DeepSeek Simulated",
+    "mailbox": "outreach@thespicecoast.com",
+    "receivedAt": "2026-08-15 23:44:19"
+  }
+]

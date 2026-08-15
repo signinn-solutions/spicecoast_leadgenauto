@@ -1,0 +1,386 @@
+{
+  "leads": [
+    {
+      "id": "sim-1786630193986-0",
+      "name": "Hamburg Spice Spice Co.",
+      "address": "100 Hamburg Trade Avenue, Hamburg, Germany",
+      "phone": "+91 92378 19599",
+      "phoneStatus": "valid",
+      "email": "contact@hamburgspicespiceco.com",
+      "emailStatus": "deliverable",
+      "website": "https://hamburgspicespiceco.com",
+      "foundAt": "2026-08-13",
+      "source": "simulated"
+    },
+    {
+      "id": "sim-1786630193986-1",
+      "name": "Hamburg Spice Spice Co.",
+      "address": "114 Hamburg Trade Avenue, Hamburg, Germany",
+      "phone": "+91 71741 60243",
+      "phoneStatus": "valid",
+      "email": "contact@hamburgspicespiceco.com",
+      "emailStatus": "deliverable",
+      "website": "https://hamburgspicespiceco.com",
+      "foundAt": "2026-08-13",
+      "source": "simulated"
+    },
+    {
+      "id": "sim-1786630318902-0",
+      "name": "Dubai Spice Merchants",
+      "address": "100 Dubai Trade Avenue, Dubai, Uae",
+      "phone": "+91 76524 52357",
+      "phoneStatus": "valid",
+      "email": "\u2014",
+      "emailStatus": "not_found",
+      "website": "https://dubaispicemerchants.com",
+      "foundAt": "2026-08-13",
+      "source": "simulated"
+    },
+    {
+      "id": "sim-1786630318902-1",
+      "name": "Dubai Spice Trading House",
+      "address": "114 Dubai Trade Avenue, Dubai, Uae",
+      "phone": "\u2014",
+      "phoneStatus": "invalid",
+      "email": "contact@dubaispicetradinghouse.com",
+      "emailStatus": "deliverable",
+      "website": "https://dubaispicetradinghouse.com",
+      "foundAt": "2026-08-13",
+      "source": "simulated"
+    },
+    {
+      "id": "sim-1786630318902-2",
+      "name": "Dubai Spice Merchants",
+      "address": "128 Dubai Trade Avenue, Dubai, Uae",
+      "phone": "+91 97425 50901",
+      "phoneStatus": "valid",
+      "email": "contact@dubaispicemerchants.com",
+      "emailStatus": "deliverable",
+      "website": "https://dubaispicemerchants.com",
+      "foundAt": "2026-08-13",
+      "source": "simulated"
+    },
+    {
+      "id": "live-1786630353120-0",
+      "name": "Eswar Spices",
+      "address": "149, Audiappa Naicken St, kothawal bazaar, Kothwal Chavadi, George Town, Chennai, Tamil Nadu 600001, India",
+      "phone": "099405 70305",
+      "phoneStatus": "valid",
+      "email": "\u2014",
+      "emailStatus": "not_found",
+      "website": "https://eswarspices.com/",
+      "foundAt": "2026-08-13",
+      "source": "live"
+    },
+    {
+      "id": "live-1786630354310-1",
+      "name": "ALR EXPORT",
+      "address": "18-10, Kamala Nehru Nagar 1st St, Kamala Nehru Nagar, Vinayakapuram, Arumbakkam, Chennai, Tamil Nadu 600106, India",
+      "phone": "098840 16643",
+      "phoneStatus": "valid",
+      "email": "\u2014",
+      "emailStatus": "not_found",
+      "website": "https://www.alrexport.com/",
+      "foundAt": "2026-08-13",
+      "source": "live"
+    },
+    {
+      "id": "live-1786630355691-2",
+      "name": "Kass Export & Import (Mamu Masala)",
+      "address": "Old 122/1, New 18, Ramaswamy St, Mannadi, George Town, Chennai, Tamil Nadu 600001, India",
+      "phone": "081228 72218",
+      "phoneStatus": "valid",
+      "email": "\u2014",
+      "emailStatus": "not_found",
+      "website": "https://kassgroups.com/",
+      "foundAt": "2026-08-13",
+      "source": "live"
+    },
+    {
+      "id": "live-1786630357366-3",
+      "name": "Green Globe Trading Company",
+      "address": "65, Govindappa Naicken St, Sowcarpet, George Town, Chennai, Tamil Nadu 600001, India",
+      "phone": "099621 56699",
+      "phoneStatus": "valid",
+      "email": "\u2014",
+      "emailStatus": "not_found",
+      "website": "http://ggtc.in/?utm_source=gmb&utm_medium=referral",
+      "foundAt": "2026-08-13",
+      "source": "live"
+    },
+    {
+      "id": "live-1786630361217-4",
+      "name": "Rigel Spices",
+      "address": "PLOT NOS 487/488, Sivaprakasam Nagar Main Rd, Sivaprakasam Nagar, Surapet, Chennai, Tamil Nadu 600066, India",
+      "phone": "\u2014",
+      "phoneStatus": "invalid",
+      "email": "sales@rigelspices.com",
+      "emailStatus": "invalid",
+      "website": "https://www.rigelspices.com/",
+      "foundAt": "2026-08-13",
+      "source": "live"
+    },
+    {
+      "id": "live-1786630442236-0",
+      "name": "calicutspicetraders LLP",
+      "address": "CALICUT SPICE TRADERS LLP, Suite No. A63, Door No. 63/700, D Space, 6th Floor, Bank Rd, Mavoor Road Junction, Tazhekkod, Kozhikode, Kerala 673001, India",
+      "phone": "\u2014",
+      "phoneStatus": "invalid",
+      "email": "\u2014",
+      "emailStatus": "not_found",
+      "website": "https://calicutspicetraders.com/",
+      "foundAt": "2026-08-13",
+      "source": "live"
+    },
+    {
+      "id": "live-1786630447854-1",
+      "name": "MarketWorth Spices",
+      "address": "MarketWorth Commodity Management LLP, 6/519, Kunduparamba Rd, Puthiyangadi, Kozhikode, Kerala 673005, India",
+      "phone": "070126 42599",
+      "phoneStatus": "valid",
+      "email": "ujwel@marketworthspices.com",
+      "emailStatus": "invalid",
+      "website": "http://www.marketworthspices.com/",
+      "foundAt": "2026-08-13",
+      "source": "live"
+    },
+    {
+      "id": "live-1786630450561-2",
+      "name": "FLORAFOODSINDIA",
+      "address": "Kuttichira, Kozhikode, Kerala 673001, India",
+      "phone": "096059 27945",
+      "phoneStatus": "valid",
+      "email": "it@instagram.com",
+      "emailStatus": "risky",
+      "website": "https://www.instagram.com/florafoodsindia?igsh=cTg4ODVobjFhaTkz",
+      "foundAt": "2026-08-13",
+      "source": "live"
+    },
+    {
+      "id": "live-1786630460346-3",
+      "name": "IISR- SPIISRY",
+      "address": "ICAR Indian Institute of Spices Research Pallithazham, Marikunnu, PO, Chelavoor, Kozhikode, Kerala 673571, India",
+      "phone": "099958 26799",
+      "phoneStatus": "valid",
+      "email": "info@spiisry.in",
+      "emailStatus": "deliverable",
+      "website": "https://www.spiisry.in/",
+      "foundAt": "2026-08-13",
+      "source": "live"
+    },
+    {
+      "id": "live-1786630460347-4",
+      "name": "EKM international",
+      "address": "Valyangadi, Big Bazaar Rd, Big Bazaar, Mananchira, Kozhikode, Kerala 673001, India",
+      "phone": "075949 48281",
+      "phoneStatus": "valid",
+      "email": "\u2014",
+      "emailStatus": "not_found",
+      "website": "#",
+      "foundAt": "2026-08-13",
+      "source": "live"
+    },
+    {
+      "id": "live-1786630653521-0",
+      "name": "Al Malik Gold And Diamond Jewellery Wholesale",
+      "address": "DRD Tower, Puthenpally, Pallikkulam, Thrissur, Kerala 680005, India",
+      "phone": "090722 22112",
+      "phoneStatus": "valid",
+      "email": "\u2014",
+      "emailStatus": "not_found",
+      "website": "https://almalikgoldwholesale.com/",
+      "foundAt": "2026-08-13",
+      "source": "live"
+    },
+    {
+      "id": "live-1786630655230-1",
+      "name": "Anna Gold and Diamonds",
+      "address": "opp. Bible Tower, behind New Church Road, Erinjery Angady, Pallikkulam, Thrissur, Kerala 680001, India",
+      "phone": "090721 70916",
+      "phoneStatus": "valid",
+      "email": "\u2014",
+      "emailStatus": "not_found",
+      "website": "https://www.annagoldanddiamonds.com/",
+      "foundAt": "2026-08-13",
+      "source": "live"
+    },
+    {
+      "id": "live-1786630658609-2",
+      "name": "REGAL JEWELLERS THRISSUR",
+      "address": "2nd floor, New Millennium Tower, Ikkanda Warrior Rd, Erinjery Angady, Pallikkulam, Thrissur, Kerala 680001, India",
+      "phone": "062359 09090",
+      "phoneStatus": "valid",
+      "email": "allen@regaljewellers.net",
+      "emailStatus": "deliverable",
+      "website": "http://www.regaljewellers.net/",
+      "foundAt": "2026-08-13",
+      "source": "live"
+    },
+    {
+      "id": "live-1786630658610-3",
+      "name": "EZA Gold & Diamond",
+      "address": "No. 9, Raphael Building, 601, First St, Erinjery Angady, Pallikkulam, Thrissur, Kerala 680001, India",
+      "phone": "075588 90015",
+      "phoneStatus": "valid",
+      "email": "\u2014",
+      "emailStatus": "not_found",
+      "website": "#",
+      "foundAt": "2026-08-13",
+      "source": "live"
+    },
+    {
+      "id": "live-1786630658611-4",
+      "name": "Trinity Gold Thrissur",
+      "address": "behind New Church Road, near Marthoma Girls HSS, Erinjery Angady, Pallikkulam, Thrissur, Kerala 680001, India",
+      "phone": "099465 06916",
+      "phoneStatus": "valid",
+      "email": "\u2014",
+      "emailStatus": "not_found",
+      "website": "#",
+      "foundAt": "2026-08-13",
+      "source": "live"
+    },
+    {
+      "id": "live-1786788066066-0",
+      "name": "La Femme Beauty Parlour Thrissur - Ladies Beauty Parlour in Thrissur, Salon in Thrissur",
+      "address": "Thekkemadam Rd, near Pearl Regency, Marar Road Area, Thrissur, Kerala 680001, India",
+      "phone": "0487 242 4505",
+      "phoneStatus": "valid",
+      "email": "\u2014",
+      "emailStatus": "not_found",
+      "website": "https://lafemme.in/",
+      "foundAt": "2026-08-15",
+      "source": "live"
+    },
+    {
+      "id": "live-1786788067727-1",
+      "name": "She Zone Beauty Lounge and Spa",
+      "address": "VILLA NO.5A, SANTHIGRAMAM, behind ELITE MISSION HOSPITAL, Koorkenchery, Thrissur, Kerala 680007, India",
+      "phone": "087147 90112",
+      "phoneStatus": "valid",
+      "email": "\u2014",
+      "emailStatus": "not_found",
+      "website": "https://www.shezonebeautylounge.com/",
+      "foundAt": "2026-08-15",
+      "source": "live"
+    },
+    {
+      "id": "live-1786788067728-2",
+      "name": "The Hair Family",
+      "address": "Door No:23/63, Ras Centre, 7, RC Bishop House Rd, East Fort, Keerankulangara, Thrissur, Kerala 680005, India",
+      "phone": "080890 41777",
+      "phoneStatus": "valid",
+      "email": "\u2014",
+      "emailStatus": "not_found",
+      "website": "#",
+      "foundAt": "2026-08-15",
+      "source": "live"
+    },
+    {
+      "id": "sim-1786815122319-0",
+      "name": "Kochi Spice International",
+      "address": "100 Kochi Trade Avenue, Kochi, India",
+      "phone": "+91 97935 23329",
+      "phoneStatus": "valid",
+      "email": "contact@kochispiceinternational.com",
+      "emailStatus": "deliverable",
+      "website": "https://kochispiceinternational.com",
+      "foundAt": "2026-08-15",
+      "source": "simulated"
+    },
+    {
+      "id": "sim-1786815122319-1",
+      "name": "Kochi Spice Trading House",
+      "address": "114 Kochi Trade Avenue, Kochi, India",
+      "phone": "+91 98676 81288",
+      "phoneStatus": "valid",
+      "email": "contact@kochispicetradinghouse.com",
+      "emailStatus": "risky",
+      "website": "https://kochispicetradinghouse.com",
+      "foundAt": "2026-08-15",
+      "source": "simulated"
+    },
+    {
+      "id": "live-1786815301477-0",
+      "name": "Rahimi Handel Import / Export Inh. Habibullah Rahimi",
+      "address": "Am Sandtorkai 34, 20457 Hamburg, Germany",
+      "phone": "040 364719",
+      "phoneStatus": "valid",
+      "email": "kontakt@1001-basar.de",
+      "emailStatus": "deliverable",
+      "website": "http://1001-basar.de/",
+      "foundAt": "2026-08-15",
+      "source": "live"
+    },
+    {
+      "id": "live-1786815304307-1",
+      "name": "Dostana Store",
+      "address": "Stralsunder Str. 3, 20099 Hamburg, Germany",
+      "phone": "040 28051445",
+      "phoneStatus": "valid",
+      "email": "support@dostana-foods.com",
+      "emailStatus": "deliverable",
+      "website": "http://dostana-foods.com/",
+      "foundAt": "2026-08-15",
+      "source": "live"
+    }
+  ],
+  "searches": [
+    {
+      "id": 1786815304309,
+      "query": "spice importer \u00b7 Hamburg, Germany",
+      "count": 2,
+      "date": "2026-08-15",
+      "mode": "live"
+    },
+    {
+      "id": 1786815122320,
+      "query": "spice trader \u00b7 Kochi, India",
+      "count": 2,
+      "date": "2026-08-15",
+      "mode": "simulated"
+    },
+    {
+      "id": 1786788067728,
+      "query": "beautyparlour \u00b7 thrissur, India",
+      "count": 3,
+      "date": "2026-08-15",
+      "mode": "live"
+    },
+    {
+      "id": 1786630658612,
+      "query": "gold wholesale \u00b7 thrissur, india",
+      "count": 5,
+      "date": "2026-08-13",
+      "mode": "live"
+    },
+    {
+      "id": 1786630460348,
+      "query": "spice importer \u00b7 kozhikode, india",
+      "count": 5,
+      "date": "2026-08-13",
+      "mode": "live"
+    },
+    {
+      "id": 1786630361218,
+      "query": "spice importer \u00b7 chennai, india",
+      "count": 5,
+      "date": "2026-08-13",
+      "mode": "live"
+    },
+    {
+      "id": 1786630318903,
+      "query": "spice distributor \u00b7 Dubai, UAE",
+      "count": 3,
+      "date": "2026-08-13",
+      "mode": "simulated"
+    },
+    {
+      "id": 1786630193989,
+      "query": "spice importer \u00b7 Hamburg, Germany",
+      "count": 2,
+      "date": "2026-08-13",
+      "mode": "simulated"
+    }
+  ]
+}

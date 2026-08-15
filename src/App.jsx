@@ -5,7 +5,8 @@ import {
 import {
   Search, BarChart3, List, Phone, Mail, Globe, CheckCircle2, XCircle,
   AlertCircle, Loader2, MapPin, Tag, ChevronRight, Sprout, Download,
-  RefreshCw, Filter, Sparkles, Database, ExternalLink
+  RefreshCw, Filter, Sparkles, Database, ExternalLink, Send, Bot,
+  Inbox, Copy, Check, Settings, ShieldCheck, ArrowUpRight, Zap
 } from "lucide-react";
 
 const DAILY_LIMIT = 50;
@@ -77,16 +78,17 @@ const STYLES = `
   .lf-budget-label { font-size: 12px; color: var(--text-muted); }
   .lf-budget-count { font-family: 'IBM Plex Mono', monospace; font-weight: 600; color: var(--text); }
 
-  .lf-main { max-width: 1020px; margin: 0 auto; padding: 36px 24px 80px; }
+  .lf-main { max-width: 1060px; margin: 0 auto; padding: 36px 24px 80px; }
 
   .lf-hero { margin-bottom: 28px; }
   .lf-hero h1 { font-size: 32px; font-weight: 600; margin: 0 0 8px; letter-spacing: -0.015em; color: var(--text); }
-  .lf-hero p { color: var(--text-muted); font-size: 14.5px; margin: 0; max-width: 580px; line-height: 1.5; }
+  .lf-hero p { color: var(--text-muted); font-size: 14.5px; margin: 0; max-width: 620px; line-height: 1.5; }
 
   .lf-card {
     background: var(--surface); border: 1px solid var(--border-soft);
     border-radius: 16px; padding: 28px;
     box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+    margin-bottom: 24px;
   }
 
   .lf-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 22px; }
@@ -99,15 +101,21 @@ const STYLES = `
   .lf-input {
     background: var(--ink); border: 1px solid var(--border); border-radius: 9px;
     padding: 12px 14px; color: var(--text); font-size: 14.5px; font-family: inherit;
-    outline: none; transition: all 0.15s ease;
+    outline: none; transition: all 0.15s ease; width: 100%; box-sizing: border-box;
   }
-  .lf-input:focus { border-color: var(--turmeric); box-shadow: 0 0 0 3px var(--turmeric-soft); }
-  .lf-input::placeholder { color: var(--text-faint); }
+  .lf-textarea {
+    background: var(--ink); border: 1px solid var(--border); border-radius: 9px;
+    padding: 12px 14px; color: var(--text); font-size: 13.5px; font-family: inherit;
+    outline: none; transition: all 0.15s ease; width: 100%; box-sizing: border-box; resize: vertical;
+    min-height: 85px; line-height: 1.45;
+  }
+  .lf-input:focus, .lf-textarea:focus { border-color: var(--turmeric); box-shadow: 0 0 0 3px var(--turmeric-soft); }
+  .lf-input::placeholder, .lf-textarea::placeholder { color: var(--text-faint); }
   .lf-hint { font-size: 12px; color: var(--text-faint); margin-top: 4px; display: flex; align-items: center; gap: 6px; }
   .lf-hint.warn { color: var(--paprika); font-weight: 500; }
 
   .lf-mode-selector {
-    display: flex; gap: 10px; margin-top: 6px;
+    display: flex; gap: 10px; margin-top: 6px; flex-wrap: wrap;
   }
   .lf-mode-chip {
     display: flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 8px;
@@ -160,6 +168,8 @@ const STYLES = `
     font-size: 12.5px; font-weight: 500; cursor: pointer; transition: all 0.15s ease;
   }
   .lf-action-btn:hover { background: var(--surface-hover); border-color: var(--turmeric); color: var(--turmeric); }
+  .lf-action-btn.gold { background: var(--turmeric-soft); border-color: var(--turmeric); color: var(--turmeric); }
+  .lf-action-btn.gold:hover { background: var(--turmeric); color: #1a1509; }
 
   .lf-table-wrap { border: 1px solid var(--border-soft); border-radius: 14px; overflow: hidden; background: var(--surface); }
   .lf-row {
@@ -211,6 +221,51 @@ const STYLES = `
   .lf-search-history-item:last-child { border-bottom: none; }
   .lf-search-history-item .q { color: var(--text); font-weight: 500; display: flex; align-items: center; gap: 6px; }
   .lf-search-history-item .meta { color: var(--text-faint); font-size: 12px; font-family: 'IBM Plex Mono', monospace; }
+
+  /* MAILBOX SPECIFIC STYLES */
+  .lf-mail-header-banner {
+    display: flex; align-items: center; justify-content: space-between; gap: 16px;
+    background: linear-gradient(145deg, rgba(227,162,46,0.1), rgba(192,75,50,0.08));
+    border: 1px solid var(--border); border-radius: 14px; padding: 16px 20px; margin-bottom: 24px;
+    flex-wrap: wrap;
+  }
+  .lf-mail-meta-item { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-muted); }
+  .lf-mail-meta-val { font-family: 'IBM Plex Mono', monospace; font-weight: 600; color: var(--text); }
+  
+  .lf-msg-card {
+    background: var(--surface); border: 1px solid var(--border-soft); border-radius: 14px;
+    padding: 20px; margin-bottom: 16px; transition: all 0.2s ease;
+  }
+  .lf-msg-card:hover { border-color: var(--border); }
+  .lf-msg-top {
+    display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; margin-bottom: 12px;
+    flex-wrap: wrap;
+  }
+  .lf-msg-sender { font-size: 15px; font-weight: 600; color: var(--text); }
+  .lf-msg-subject { font-size: 13.5px; font-weight: 500; color: var(--turmeric); margin-top: 2px; }
+  .lf-msg-date { font-size: 11.5px; font-family: 'IBM Plex Mono', monospace; color: var(--text-faint); }
+  
+  .lf-msg-body-preview {
+    background: var(--ink); border: 1px solid var(--border-soft); border-radius: 8px;
+    padding: 12px 14px; font-size: 13px; color: var(--text-muted); line-height: 1.45;
+    white-space: pre-wrap; margin-bottom: 14px;
+  }
+  .lf-draft-box {
+    background: rgba(227, 162, 46, 0.04); border: 1px dashed var(--turmeric);
+    border-radius: 10px; padding: 14px 16px; margin-top: 10px;
+  }
+  .lf-draft-header {
+    display: flex; align-items: center; justify-content: space-between; font-size: 12px;
+    font-weight: 600; color: var(--turmeric); text-transform: uppercase; letter-spacing: 0.05em;
+    margin-bottom: 8px;
+  }
+  .lf-draft-text {
+    font-size: 13px; color: var(--text); line-height: 1.5; white-space: pre-wrap;
+    font-family: 'Inter', sans-serif;
+  }
+  .lf-draft-actions {
+    display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 12px;
+  }
 
   .lf-loading { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 80px 0; color: var(--text-muted); }
   .spin { animation: lf-spin 0.9s linear infinite; }
@@ -311,7 +366,7 @@ const EmailBadge = ({ status }) => {
 };
 
 export default function LeadFinderApp() {
-  const [view, setView] = useState("search");
+  const [view, setView] = useState("search"); // search, results, analytics, mailbox
   const [loading, setLoading] = useState(true);
   const [searching, setSearching] = useState(false);
   const [error, setError] = useState(null);
@@ -328,39 +383,77 @@ export default function LeadFinderApp() {
   const [allLeads, setAllLeads] = useState([]);
   const [searchHistory, setSearchHistory] = useState([]);
 
+  // MAILBOX STATE
+  const [mailboxStatus, setMailboxStatus] = useState({
+    mailbox: "outreach@thespicecoast.com",
+    auto_send: false,
+    daily_limit: 30,
+    used_today: 0,
+    remaining_today: 30,
+    has_deepseek_key: false,
+    has_hostinger_token: false,
+    deepseek_model: "deepseek-chat"
+  });
+  const [mailboxMessages, setMailboxMessages] = useState([]);
+  const [simulatingMail, setSimulatingMail] = useState(false);
+  const [simSender, setSimSender] = useState("inquiry@eurospice-hamburg.de");
+  const [simName, setSimName] = useState("Markus Weber");
+  const [simSubject, setSimSubject] = useState("Inquiry: Bulk Malabar Black Pepper & Cardamom FOB pricing");
+  const [simBody, setSimBody] = useState("Hello SpiceCoast Team,\n\nWe are looking to import 2 FCL containers of TGSEB Black Pepper and Alleppey Green Cardamom (8mm). Please share your current specification sheet and FOB price quotation.\n\nBest regards,\nMarkus Weber");
+  const [copiedId, setCopiedId] = useState(null);
+  const [sendingMsgId, setSendingMsgId] = useState(null);
+
   const today = new Date().toISOString().slice(0, 10);
   const remaining = usage.date === today ? Math.max(0, DAILY_LIMIT - usage.count) : DAILY_LIMIT;
 
-  // Load initial persisted data
-  useEffect(() => {
-    (async () => {
+  // Load initial persisted data & backend status
+  const fetchAllData = useCallback(async () => {
+    try {
+      // Check Flask backend API status
       try {
-        // Check if Flask backend API is available
-        try {
-          const res = await fetch("/api/status");
-          if (res.ok) {
-            const data = await res.json();
-            if (data.date) setUsage({ date: data.date, count: data.count });
-          }
-        } catch {
-          // Backend offline, fallback to local storage
+        const res = await fetch("/api/status");
+        if (res.ok) {
+          const data = await res.json();
+          if (data.date) setUsage({ date: data.date, count: data.count });
         }
-
-        const [u, leads, hist] = await Promise.all([
-          storage.get("usage").catch(() => null),
-          storage.get("all-leads").catch(() => null),
-          storage.get("search-history").catch(() => null),
-        ]);
-        if (u?.value && !usage.date) setUsage(JSON.parse(u.value));
-        if (leads?.value) setAllLeads(JSON.parse(leads.value));
-        if (hist?.value) setSearchHistory(JSON.parse(hist.value));
-      } catch (e) {
-        console.warn("Storage initial load issue:", e);
-      } finally {
-        setLoading(false);
+      } catch {
+        // Backend offline
       }
-    })();
-  }, []);
+
+      // Check Mailbox Status
+      try {
+        const mRes = await fetch("/api/mailbox/status");
+        if (mRes.ok) {
+          const mData = await mRes.json();
+          setMailboxStatus(mData);
+        }
+        const msgsRes = await fetch("/api/mailbox/messages");
+        if (msgsRes.ok) {
+          const msgsData = await msgsRes.json();
+          setMailboxMessages(msgsData.messages || []);
+        }
+      } catch {
+        // Mailbox offline
+      }
+
+      const [u, leads, hist] = await Promise.all([
+        storage.get("usage").catch(() => null),
+        storage.get("all-leads").catch(() => null),
+        storage.get("search-history").catch(() => null),
+      ]);
+      if (u?.value && !usage.date) setUsage(JSON.parse(u.value));
+      if (leads?.value) setAllLeads(JSON.parse(leads.value));
+      if (hist?.value) setSearchHistory(JSON.parse(hist.value));
+    } catch (e) {
+      console.warn("Storage initial load issue:", e);
+    } finally {
+      setLoading(false);
+    }
+  }, [usage.date]);
+
+  useEffect(() => {
+    fetchAllData();
+  }, [fetchAllData]);
 
   const persist = useCallback(async (key, value) => {
     try {
@@ -425,7 +518,7 @@ export default function LeadFinderApp() {
 
     // Client-side fallback if backend was unavailable
     if (leads.length === 0) {
-      await new Promise((r) => setTimeout(r, 1200)); // UI polish delay
+      await new Promise((r) => setTimeout(r, 1200));
       leads = generateMockLeads(businessType, city, country, count);
       const newUsage = { date: today, count: (usage.date === today ? usage.count : 0) + count };
       setUsage(newUsage);
@@ -449,44 +542,132 @@ export default function LeadFinderApp() {
     setCurrentResults(leads);
     await persist("all-leads", newAllLeads);
     await persist("search-history", newHistory);
-
     setSearching(false);
     setView("results");
   };
 
+  // MAILBOX ACTIONS
+  const handleSimulateInboundMail = async (e) => {
+    e.preventDefault();
+    if (!simSender.trim() || !simSubject.trim() || !simBody.trim()) return;
+
+    setSimulatingMail(true);
+    try {
+      const res = await fetch("/api/mailbox/test-incoming", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          from: simSender.trim(),
+          from_name: simName.trim(),
+          subject: simSubject.trim(),
+          message: simBody.trim(),
+          auto_send: mailboxStatus.auto_send,
+        }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.message) {
+          setMailboxMessages((prev) => [data.message, ...prev]);
+        }
+        if (data.usage) {
+          setMailboxStatus((prev) => ({
+            ...prev,
+            used_today: data.usage.count,
+            remaining_today: data.usage.remaining,
+          }));
+        }
+      }
+    } catch (err) {
+      console.warn("Error running mail simulation:", err);
+    } finally {
+      setSimulatingMail(false);
+    }
+  };
+
+  const handleToggleAutoSend = async () => {
+    const nextState = !mailboxStatus.auto_send;
+    try {
+      const res = await fetch("/api/mailbox/toggle-autosend", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ auto_send: nextState }),
+      });
+      if (res.ok) {
+        setMailboxStatus((prev) => ({ ...prev, auto_send: nextState }));
+      }
+    } catch (err) {
+      console.warn("Error toggling auto-send:", err);
+    }
+  };
+
+  const handleSendDraft = async (msg) => {
+    setSendingMsgId(msg.id);
+    try {
+      const res = await fetch("/api/mailbox/send-draft", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: msg.id,
+          to: msg.sender,
+          subject: msg.subject,
+          reply: msg.draftReply,
+        }),
+      });
+      if (res.ok) {
+        setMailboxMessages((prev) =>
+          prev.map((m) => (m.id === msg.id ? { ...m, status: "sent", sentAt: new Date().toLocaleTimeString() } : m))
+        );
+      }
+    } catch (err) {
+      console.warn("Failed to dispatch draft:", err);
+    } finally {
+      setSendingMsgId(null);
+    }
+  };
+
+  const copyToClipboard = (text, id) => {
+    navigator.clipboard.writeText(text);
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 2000);
+  };
+
   const filteredResults = useMemo(() => {
-    if (filterMode === "emails") return currentResults.filter((l) => l.emailStatus === "deliverable" || l.emailStatus === "valid");
-    if (filterMode === "phones") return currentResults.filter((l) => l.phoneStatus === "valid");
-    if (filterMode === "both") return currentResults.filter((l) => (l.emailStatus === "deliverable" || l.emailStatus === "valid") && l.phoneStatus === "valid");
-    return currentResults;
+    return currentResults.filter((lead) => {
+      const hasDeliverableEmail = lead.emailStatus === "deliverable" || lead.emailStatus === "valid";
+      const hasValidPhone = lead.phoneStatus === "valid";
+      if (filterMode === "emails") return hasDeliverableEmail;
+      if (filterMode === "phones") return hasValidPhone;
+      if (filterMode === "both") return hasDeliverableEmail && hasValidPhone;
+      return true;
+    });
   }, [currentResults, filterMode]);
 
   const summary = useMemo(() => {
-    const validPhones = currentResults.filter((l) => l.phoneStatus === "valid").length;
+    const total = currentResults.length;
     const validEmails = currentResults.filter((l) => l.emailStatus === "deliverable" || l.emailStatus === "valid").length;
-    const bothValid = currentResults.filter((l) => (l.emailStatus === "deliverable" || l.emailStatus === "valid") && l.phoneStatus === "valid").length;
-    return { total: currentResults.length, validPhones, validEmails, bothValid };
+    const validPhones = currentResults.filter((l) => l.phoneStatus === "valid").length;
+    const bothValid = currentResults.filter(
+      (l) => (l.emailStatus === "deliverable" || l.emailStatus === "valid") && l.phoneStatus === "valid"
+    ).length;
+    return { total, validEmails, validPhones, bothValid };
   }, [currentResults]);
 
   const chartData = useMemo(() => {
-    const counts = { deliverable: 0, risky: 0, not_found: 0 };
-    allLeads.forEach((l) => {
-      const s = l.emailStatus === "valid" ? "deliverable" : l.emailStatus;
-      counts[s] = (counts[s] || 0) + 1;
-    });
+    const deliverable = allLeads.filter((l) => l.emailStatus === "deliverable" || l.emailStatus === "valid").length;
+    const risky = allLeads.filter((l) => l.emailStatus === "risky" || l.emailStatus === "accept_all").length;
+    const notFound = allLeads.filter((l) => l.emailStatus === "not_found" || l.emailStatus === "invalid").length;
     return [
-      { name: "Deliverable", value: counts.deliverable, color: "#7ea86e" },
-      { name: "Risky", value: counts.risky, color: "#e3a22e" },
-      { name: "Not found", value: counts.not_found, color: "#c04b32" },
+      { name: "Deliverable", value: deliverable, color: "var(--cardamom)" },
+      { name: "Risky / Accept All", value: risky, color: "var(--turmeric)" },
+      { name: "Not Found", value: notFound, color: "var(--paprika)" },
     ];
   }, [allLeads]);
 
   const exportCSV = () => {
-    const dataToExport = filteredResults.length > 0 ? filteredResults : currentResults;
-    if (dataToExport.length === 0) return;
-
-    const headers = ["Company", "Address", "Phone", "Phone_Status", "Email", "Email_Status", "Website", "Found_At"];
-    const rows = dataToExport.map((l) => [
+    if (filteredResults.length === 0) return;
+    const headers = ["Company Name", "Address", "Phone", "Phone Status", "Email", "Email Status", "Website", "Date Found"];
+    const rows = filteredResults.map((l) => [
       `"${(l.name || "").replace(/"/g, '""')}"`,
       `"${(l.address || "").replace(/"/g, '""')}"`,
       `"${l.phone || ""}"`,
@@ -526,7 +707,7 @@ export default function LeadFinderApp() {
           <div className="lf-brand-mark"><Sprout size={20} /></div>
           <div>
             <div className="lf-brand-name lf-display">SpiceCoast</div>
-            <div className="lf-brand-sub">spicecoast · Lead Automation</div>
+            <div className="lf-brand-sub">Lead Automation & AI Mailbox</div>
           </div>
         </div>
 
@@ -537,15 +718,22 @@ export default function LeadFinderApp() {
           <button className={`lf-tab ${view === "results" ? "active" : ""}`} onClick={() => setView("results")}>
             <List size={15} /> Results {currentResults.length > 0 && `(${currentResults.length})`}
           </button>
+          <button className={`lf-tab ${view === "mailbox" ? "active" : ""}`} onClick={() => setView("mailbox")}>
+            <Mail size={15} /> AI Mailbox {mailboxMessages.length > 0 && `(${mailboxMessages.length})`}
+          </button>
           <button className={`lf-tab ${view === "analytics" ? "active" : ""}`} onClick={() => setView("analytics")}>
             <BarChart3 size={15} /> Analytics
           </button>
         </div>
 
         <div className="lf-nav-right">
-          <div className="lf-budget" title={`Daily limit resets at midnight. Max ${DAILY_LIMIT}/day.`}>
-            <span className="lf-budget-label">Today's harvest</span>
+          <div className="lf-budget" title={`Daily lead limit resets at midnight. Max ${DAILY_LIMIT}/day.`}>
+            <span className="lf-budget-label">Leads</span>
             <span className="lf-budget-count">{Math.max(0, usage.date === today ? usage.count : 0)}/{DAILY_LIMIT}</span>
+          </div>
+          <div className="lf-budget" title={`Daily AI replies quota.`}>
+            <span className="lf-budget-label">AI Replies</span>
+            <span className="lf-budget-count" style={{ color: "var(--turmeric)" }}>{mailboxStatus.used_today}/{mailboxStatus.daily_limit}</span>
           </div>
         </div>
       </nav>
@@ -600,26 +788,14 @@ export default function LeadFinderApp() {
                         <Globe size={13} /> Live Places & Hunter.io
                       </div>
                       <div className={`lf-mode-chip ${searchMode === "simulated" ? "active" : ""}`} onClick={() => setSearchMode("simulated")}>
-                        <Sparkles size={13} /> Instant Simulation
+                        <Sparkles size={13} /> Simulation Test (No API credits used)
                       </div>
-                    </div>
-                  </div>
-
-                  <div className="lf-field span-2">
-                    <div className={`lf-hint ${remaining <= 0 ? "warn" : ""}`}>
-                      <AlertCircle size={13} />
-                      {remaining} of {DAILY_LIMIT} searches remaining in today's quota
-                      {remaining <= 0 ? " — quota resets tomorrow." : ""}
                     </div>
                   </div>
                 </div>
 
-                <button className="lf-submit" type="submit" disabled={searching || remaining <= 0}>
-                  {searching ? (
-                    <><Loader2 size={18} className="spin" /> Harvesting & Verifying Leads...</>
-                  ) : (
-                    <><Search size={18} /> Find & Verify Leads</>
-                  )}
+                <button className="lf-submit" type="submit" disabled={searching}>
+                  {searching ? <><Loader2 size={16} className="spin" /> Searching & Verifying Leads...</> : <><Search size={16} /> Harvest Leads ({count})</>}
                 </button>
               </form>
             </div>
@@ -631,16 +807,16 @@ export default function LeadFinderApp() {
           <>
             <div className="lf-hero">
               <h1 className="lf-display">Harvested Leads</h1>
-              <p>{summary.total > 0 ? `Showing results from your latest search.` : "Run a search to see leads here."}</p>
+              <p>Review verified business profiles, deliverable email addresses, and verified phone lines.</p>
             </div>
 
-            {summary.total > 0 && (
+            {currentResults.length > 0 && (
               <>
                 <div className="lf-summary-row">
-                  <div className="lf-stat"><div className="lf-stat-label">Total Found</div><div className="lf-stat-value gold lf-mono">{summary.total}</div></div>
-                  <div className="lf-stat"><div className="lf-stat-label">Valid Phone</div><div className="lf-stat-value green lf-mono">{summary.validPhones}</div></div>
+                  <div className="lf-stat"><div className="lf-stat-label">Total Found</div><div className="lf-stat-value lf-mono">{summary.total}</div></div>
                   <div className="lf-stat"><div className="lf-stat-label">Deliverable Email</div><div className="lf-stat-value green lf-mono">{summary.validEmails}</div></div>
-                  <div className="lf-stat"><div className="lf-stat-label">Fully Verified</div><div className="lf-stat-value lf-mono">{summary.bothValid}</div></div>
+                  <div className="lf-stat"><div className="lf-stat-label">Valid Phone</div><div className="lf-stat-value green lf-mono">{summary.validPhones}</div></div>
+                  <div className="lf-stat"><div className="lf-stat-label">Fully Verified</div><div className="lf-stat-value gold lf-mono">{summary.bothValid}</div></div>
                 </div>
 
                 <div className="lf-toolbar">
@@ -706,6 +882,168 @@ export default function LeadFinderApp() {
           </>
         )}
 
+        {/* AI MAILBOX VIEW */}
+        {view === "mailbox" && (
+          <>
+            <div className="lf-hero">
+              <h1 className="lf-display">AI Mailbox & Auto-Responder</h1>
+              <p>DeepSeek AI intelligence chained with Hostinger's Agentic Mail API to automatically qualify inbound B2B lead inquiries and draft contextual replies.</p>
+            </div>
+
+            {/* Mailbox Status & Webhook Info Banner */}
+            <div className="lf-mail-header-banner">
+              <div className="lf-mail-meta-item">
+                <Mail size={16} color="var(--turmeric)" />
+                <span>Mailbox:</span>
+                <span className="lf-mail-meta-val">{mailboxStatus.mailbox}</span>
+              </div>
+
+              <div className="lf-mail-meta-item">
+                <Bot size={16} color="var(--cardamom)" />
+                <span>Model:</span>
+                <span className="lf-mail-meta-val">{mailboxStatus.deepseek_model}</span>
+              </div>
+
+              <div className="lf-mail-meta-item">
+                <ShieldCheck size={16} color="var(--turmeric)" />
+                <span>Mode:</span>
+                <button
+                  className={`lf-action-btn ${mailboxStatus.auto_send ? "gold" : ""}`}
+                  style={{ padding: "4px 10px", fontSize: "12px" }}
+                  onClick={handleToggleAutoSend}
+                >
+                  <Zap size={12} /> {mailboxStatus.auto_send ? "Auto-Send Enabled" : "Draft-Only Review Mode"}
+                </button>
+              </div>
+
+              <div className="lf-mail-meta-item">
+                <button
+                  className="lf-action-btn"
+                  style={{ fontSize: "12px", padding: "4px 10px" }}
+                  onClick={() => copyToClipboard("https://your-domain.com/webhook", "webhook-url")}
+                >
+                  {copiedId === "webhook-url" ? <Check size={12} color="var(--cardamom)" /> : <Copy size={12} />}
+                  <span>Copy Webhook URL</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Inbound Simulator / Test Card */}
+            <div className="lf-card">
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+                <h3 style={{ margin: 0, fontSize: "15px", fontWeight: 600, color: "var(--text)", display: "flex", alignItems: "center", gap: 8 }}>
+                  <Sparkles size={16} color="var(--turmeric)" /> Simulate Inbound Inquiry
+                </h3>
+                <span style={{ fontSize: "12px", color: "var(--text-faint)" }}>Test DeepSeek drafting without waiting for live emails</span>
+              </div>
+
+              <form onSubmit={handleSimulateInboundMail}>
+                <div className="lf-form-grid" style={{ marginTop: 10 }}>
+                  <div className="lf-field">
+                    <label>From Email</label>
+                    <input className="lf-input" value={simSender} onChange={(e) => setSimSender(e.target.value)} />
+                  </div>
+                  <div className="lf-field">
+                    <label>Contact / Company Name</label>
+                    <input className="lf-input" value={simName} onChange={(e) => setSimName(e.target.value)} />
+                  </div>
+                  <div className="lf-field span-2">
+                    <label>Subject</label>
+                    <input className="lf-input" value={simSubject} onChange={(e) => setSimSubject(e.target.value)} />
+                  </div>
+                  <div className="lf-field span-2">
+                    <label>Inquiry Message Body</label>
+                    <textarea className="lf-textarea" value={simBody} onChange={(e) => setSimBody(e.target.value)} />
+                  </div>
+                </div>
+
+                <button className="lf-submit" type="submit" disabled={simulatingMail} style={{ marginTop: 18 }}>
+                  {simulatingMail ? (
+                    <><Loader2 size={16} className="spin" /> DeepSeek Drafting Reply...</>
+                  ) : (
+                    <><Bot size={16} /> Process & Draft Reply</>
+                  )}
+                </button>
+              </form>
+            </div>
+
+            {/* Inbound History & AI Drafts */}
+            <div style={{ marginBottom: 14, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <h3 style={{ margin: 0, fontSize: "16px", fontWeight: 600, color: "var(--text)", display: "flex", alignItems: "center", gap: 8 }}>
+                <Inbox size={16} color="var(--turmeric)" /> Recent Lead Inquiries ({mailboxMessages.length})
+              </h3>
+              <button className="lf-action-btn" onClick={fetchAllData}>
+                <RefreshCw size={13} /> Refresh Inbox
+              </button>
+            </div>
+
+            {mailboxMessages.length === 0 ? (
+              <div className="lf-card lf-empty">
+                <Inbox size={34} />
+                <p>No inbound emails received yet. Use the simulator above or configure Hostinger Webhook to start receiving messages.</p>
+              </div>
+            ) : (
+              <div>
+                {mailboxMessages.map((msg) => (
+                  <div className="lf-msg-card" key={msg.id}>
+                    <div className="lf-msg-top">
+                      <div>
+                        <div className="lf-msg-sender">{msg.senderName || msg.sender} &lt;{msg.sender}&gt;</div>
+                        <div className="lf-msg-subject">{msg.subject}</div>
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <span className={`lf-badge ${msg.status === "sent" ? "green" : "gold"}`}>
+                          {msg.status === "sent" ? <CheckCircle2 size={12} /> : <Bot size={12} />}
+                          {msg.status === "sent" ? "Sent via Hostinger" : "Drafted for Review"}
+                        </span>
+                        <span className="lf-msg-date">{msg.receivedAt || msg.sentAt || "Today"}</span>
+                      </div>
+                    </div>
+
+                    <div className="lf-msg-body-preview">
+                      <strong style={{ color: "var(--text-faint)", fontSize: 11, textTransform: "uppercase", display: "block", marginBottom: 4 }}>Original Inquiry:</strong>
+                      {msg.body}
+                    </div>
+
+                    {msg.draftReply && (
+                      <div className="lf-draft-box">
+                        <div className="lf-draft-header">
+                          <span style={{ display: "flex", alignItems: "center", gap: 6 }}><Bot size={14} /> DeepSeek AI Response Draft</span>
+                          <span style={{ fontSize: "11px", color: "var(--text-faint)", fontFamily: "IBM Plex Mono, monospace" }}>{msg.model || "DeepSeek"}</span>
+                        </div>
+                        <div className="lf-draft-text">{msg.draftReply}</div>
+
+                        <div className="lf-draft-actions">
+                          <button
+                            className="lf-action-btn"
+                            style={{ fontSize: "12px" }}
+                            onClick={() => copyToClipboard(msg.draftReply, msg.id)}
+                          >
+                            {copiedId === msg.id ? <Check size={12} color="var(--cardamom)" /> : <Copy size={12} />}
+                            {copiedId === msg.id ? "Copied" : "Copy Reply"}
+                          </button>
+
+                          {msg.status !== "sent" && (
+                            <button
+                              className="lf-action-btn gold"
+                              style={{ fontSize: "12px" }}
+                              disabled={sendingMsgId === msg.id}
+                              onClick={() => handleSendDraft(msg)}
+                            >
+                              {sendingMsgId === msg.id ? <Loader2 size={12} className="spin" /> : <Send size={12} />}
+                              <span>Dispatch via Hostinger</span>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+
         {/* ANALYTICS VIEW */}
         {view === "analytics" && (
           <>
@@ -718,7 +1056,7 @@ export default function LeadFinderApp() {
               <div className="lf-stat"><div className="lf-stat-label">Total Leads Harvested</div><div className="lf-stat-value gold lf-mono">{allLeads.length}</div></div>
               <div className="lf-stat"><div className="lf-stat-label">Deliverable Emails</div><div className="lf-stat-value green lf-mono">{allLeads.filter(l => l.emailStatus === "deliverable" || l.emailStatus === "valid").length}</div></div>
               <div className="lf-stat"><div className="lf-stat-label">Valid Phone Numbers</div><div className="lf-stat-value green lf-mono">{allLeads.filter(l => l.phoneStatus === "valid").length}</div></div>
-              <div className="lf-stat"><div className="lf-stat-label">Today's Usage</div><div className="lf-stat-value lf-mono">{usage.date === today ? usage.count : 0}/{DAILY_LIMIT}</div></div>
+              <div className="lf-stat"><div className="lf-stat-label">Today's Leads Usage</div><div className="lf-stat-value lf-mono">{usage.date === today ? usage.count : 0}/{DAILY_LIMIT}</div></div>
             </div>
 
             <div className="lf-analytics-grid">
