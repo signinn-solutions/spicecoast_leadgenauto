@@ -27,6 +27,8 @@ HUNTER_API_KEY = os.getenv("HUNTER_API_KEY", "")
 
 DAILY_LIMIT = 50            # hard cap: max businesses found + enriched per day
 USAGE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "daily_usage.json")
+SEEN_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "seen_places.json")
+MAX_PAGES = 3                # Google Text Search allows up to 3 pages (~60 results) per query
 
 
 def load_daily_usage(usage_file=USAGE_FILE):
@@ -50,6 +52,26 @@ def save_daily_usage(today, count, usage_file=USAGE_FILE):
             json.dump({"date": today, "count": count}, f, indent=2)
     except OSError as e:
         print(f"[Warning] Could not save daily usage to {usage_file}: {e}")
+
+
+def load_seen_place_ids(seen_file=SEEN_FILE):
+    """place_id -> {name, address, phone, website, email, email_status, first_found_date}, kept forever (never resets daily)."""
+    if os.path.exists(seen_file):
+        try:
+            with open(seen_file, "r") as f:
+                return json.load(f)
+        except (json.JSONDecodeError, OSError, ValueError):
+            return {}
+    return {}
+
+
+def save_seen_place_ids(seen, seen_file=SEEN_FILE):
+    """Persist seen place IDs and business details to local storage (seen_places.json)."""
+    try:
+        with open(seen_file, "w") as f:
+            json.dump(seen, f, indent=2)
+    except OSError as e:
+        print(f"[Warning] Could not save seen places to {seen_file}: {e}")
 
 
 def get_user_inputs(remaining_today):
@@ -97,58 +119,95 @@ def get_user_inputs(remaining_today):
     return query, requested
 
 
-def search_places(query, max_results=20):
-    """Step 1: Find businesses via Google Places Text Search (New API).
-    Supports pagination if max_results > 20 (Google Places API returns max 20 per page).
+def search_places(query, page_token=None):
+    """Step 1: Find businesses via Google Places Text Search. Returns
+    (places, next_page_token). Pass page_token to fetch the next page
+    of up to 20 more results (Google allows up to 3 pages / ~60 total).
     """
     url = "https://places.googleapis.com/v1/places:searchText"
     headers = {
         "Content-Type": "application/json",
         "X-Goog-Api-Key": GOOGLE_API_KEY,
         "X-Goog-FieldMask": (
-            "places.displayName,places.formattedAddress,"
+            "places.id,places.displayName,places.formattedAddress,"
             "places.websiteUri,places.nationalPhoneNumber,nextPageToken"
         ),
     }
+    body = {"textQuery": query}
+    if page_token:
+        body["pageToken"] = page_token
 
-    all_places = []
+    try:
+        resp = requests.post(url, headers=headers, json=body, timeout=15)
+        if resp.status_code == 403:
+            error_data = resp.json() if resp.headers.get("content-type", "").startswith("application/json") else {}
+            error_msg = error_data.get("error", {}).get("message", "Permission Denied")
+            print(f"\n[Google Places API Error 403]: {error_msg}")
+            print("-> Please ensure 'Places API (New)' is enabled in your Google Cloud Console project:")
+            print("   https://console.cloud.google.com/apis/library/places.googleapis.com")
+            print("-> Also verify that the API key has no restrictions blocking Places API and billing is enabled.\n")
+            return [], None
+        resp.raise_for_status()
+        data = resp.json()
+        return data.get("places", []), data.get("nextPageToken")
+    except requests.exceptions.RequestException as e:
+        print(f"[Google Places API Request Error]: {e}")
+        return [], None
+
+
+def is_place_duplicate(place, seen_ids):
+    place_id = place.get("id")
+    if place_id and place_id in seen_ids:
+        return True
+    website = place.get("websiteUri", "")
+    domain = extract_domain(website)
+    name = place.get("displayName", {}).get("text", "").lower().strip()
+
+    for pid, details in seen_ids.items():
+        if isinstance(details, dict):
+            if domain and details.get("domain") and details.get("domain").lower() == domain.lower():
+                return True
+            if name and details.get("name") and details.get("name").lower().strip() == name:
+                return True
+    return False
+
+
+def search_new_places(query, needed, seen_ids=None):
+    """Pages through Text Search results, skipping any place already
+    in seen_ids (by id, domain, or name), until we've collected `needed`
+    new businesses or run out of pages.
+    """
+    if seen_ids is None:
+        seen_ids = load_seen_place_ids()
+
+    collected = []
+    duplicates_skipped = 0
     page_token = None
 
-    while len(all_places) < max_results:
-        page_size = min(max_results - len(all_places), 20)
-        body = {
-            "textQuery": query,
-            "pageSize": page_size
-        }
+    for page_num in range(MAX_PAGES):
         if page_token:
-            body["pageToken"] = page_token
+            time.sleep(1.5)  # Google requires a short delay before a pageToken becomes valid
+        places, next_token = search_places(query, page_token)
 
-        try:
-            resp = requests.post(url, headers=headers, json=body, timeout=15)
-            if resp.status_code == 403:
-                error_data = resp.json() if resp.headers.get("content-type", "").startswith("application/json") else {}
-                error_msg = error_data.get("error", {}).get("message", "Permission Denied")
-                print(f"\n[Google Places API Error 403]: {error_msg}")
-                print("-> Please ensure 'Places API (New)' is enabled in your Google Cloud Console project:")
-                print("   https://console.cloud.google.com/apis/library/places.googleapis.com")
-                print("-> Also verify that the API key has no restrictions blocking Places API and billing is enabled.\n")
-                break
-            resp.raise_for_status()
-            data = resp.json()
-            places = data.get("places", [])
-            if not places:
-                break
-            all_places.extend(places)
+        for p in places:
+            if is_place_duplicate(p, seen_ids):
+                duplicates_skipped += 1
+            else:
+                collected.append(p)
+                if len(collected) >= needed:
+                    break
 
-            page_token = data.get("nextPageToken")
-            if not page_token or len(all_places) >= max_results:
-                break
-            time.sleep(1)
-        except requests.exceptions.RequestException as e:
-            print(f"[Google Places API Request Error]: {e}")
+        print(f"  Page {page_num + 1}: {len(places)} results processed, "
+              f"{len(collected)} new unique collected, {duplicates_skipped} duplicates skipped.")
+
+        if len(collected) >= needed or not next_token:
             break
+        page_token = next_token
 
-    return all_places[:max_results]
+    if len(collected) < needed:
+        print(f"  Note: only {len(collected)} new businesses available for this query.")
+
+    return collected[:needed], duplicates_skipped
 
 
 def extract_domain(website_url):
@@ -212,17 +271,19 @@ def main():
     print(f"Remaining budget for today: {remaining}\n")
 
     query, requested = get_user_inputs(remaining)
+    seen_ids = load_seen_place_ids()
+
+    print(f"\nSearching Google Places for: '{query}' (requesting {requested}, "
+          f"skipping {len(seen_ids)} previously-found businesses)\n")
 
     # Cap to whichever is smaller: what the user asked for, or what's left today
     fetch_count = min(requested, remaining)
-    print(f"\nSearching Google Places for: '{query}' (requesting {fetch_count})\n")
-
-    places = search_places(query, max_results=fetch_count)
+    places, duplicates_skipped = search_new_places(query, fetch_count, seen_ids)
     if not places:
-        print("No businesses found from Google Places search.")
+        print(f"No new businesses found from Google Places search. ({duplicates_skipped} duplicates skipped)")
         return
 
-    print(f"Found {len(places)} businesses (capped to your request / remaining daily budget).\n")
+    print(f"\nFound {len(places)} NEW businesses ({duplicates_skipped} duplicates skipped).\n")
 
     leads = []
 
@@ -233,6 +294,7 @@ def main():
             break
 
         name = place.get("displayName", {}).get("text", "Unknown")
+        place_id = place.get("id")
         address = place.get("formattedAddress", "")
         phone = place.get("nationalPhoneNumber", "")
         website = place.get("websiteUri", "")
@@ -244,33 +306,48 @@ def main():
         used_today += 1
         save_daily_usage(today, used_today)
 
+        best_email = None
+        status = "not_found"
+
         if not domain:
             print("    No website found, skipping email lookup.\n")
-            continue
+        else:
+            emails = find_emails(domain)
+            time.sleep(1)  # be polite to the API rate limits
 
-        emails = find_emails(domain)
-        time.sleep(1)  # be polite to the API rate limits
+            if not emails:
+                print("    No emails found on this domain.\n")
+            else:
+                best_email = emails[0].get("value")
+                status = verify_email(best_email)
+                time.sleep(1)
 
-        if not emails:
-            print("    No emails found on this domain.\n")
-            continue
+                print(f"    Email candidate: {best_email} -> {status}\n")
 
-        best_email = emails[0].get("value")
-        status = verify_email(best_email)
-        time.sleep(1)
+                leads.append({
+                    "business": name,
+                    "address": address,
+                    "phone": phone,
+                    "website": website,
+                    "email": best_email,
+                    "email_status": status,
+                })
 
-        print(f"    Email candidate: {best_email} -> {status}\n")
+        # Mark as seen immediately & save details to local storage (seen_places.json)
+        if place_id:
+            seen_ids[place_id] = {
+                "name": name,
+                "address": address,
+                "phone": phone,
+                "website": website,
+                "domain": domain,
+                "email": best_email,
+                "email_status": status,
+                "first_found_date": today
+            }
+            save_seen_place_ids(seen_ids)
 
-        leads.append({
-            "business": name,
-            "address": address,
-            "phone": phone,
-            "website": website,
-            "email": best_email,
-            "email_status": status,
-        })
-
-    print("\n=== VALID LEADS (deliverable/valid emails only) ===")
+    print("\n=== VALID LEADS (deliverable emails only) ===")
     valid_leads = [l for l in leads if l["email_status"] in ("valid", "deliverable")]
     for lead in valid_leads:
         print(lead)
@@ -283,3 +360,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

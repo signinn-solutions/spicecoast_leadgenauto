@@ -62,7 +62,7 @@ class TestLeadFinderLimits(unittest.TestCase):
         used_today = 48
         DAILY_LIMIT = 50
         fake_places = [
-            {"displayName": {"text": f"Biz {i}"}, "websiteUri": f"http://biz{i}.com"}
+            {"id": f"p-{i}", "displayName": {"text": f"Biz {i}"}, "websiteUri": f"http://biz{i}.com"}
             for i in range(5)
         ]
 
@@ -76,5 +76,43 @@ class TestLeadFinderLimits(unittest.TestCase):
         self.assertEqual(processed, 2)
         self.assertEqual(used_today, 50)
 
+    def test_seen_places_persistence(self):
+        seen_file = os.path.join(self.temp_dir.name, "seen_places.json")
+        self.assertEqual(lft.load_seen_place_ids(seen_file), {})
+
+        sample_data = {
+            "place123": {
+                "name": "Hamburg Spice Co",
+                "address": "123 Port St",
+                "phone": "+49 40 123456",
+                "website": "https://hamburgspice.de",
+                "domain": "hamburgspice.de",
+                "email": "contact@hamburgspice.de",
+                "email_status": "deliverable",
+                "first_found_date": str(date.today())
+            }
+        }
+        lft.save_seen_place_ids(sample_data, seen_file)
+        loaded = lft.load_seen_place_ids(seen_file)
+        self.assertEqual(loaded, sample_data)
+
+    def test_search_new_places_skips_seen(self):
+        seen_ids = {"place1": {"name": "Old Business"}}
+        mock_page1 = ([
+            {"id": "place1", "displayName": {"text": "Old Business"}},
+            {"id": "place2", "displayName": {"text": "New Business 1"}},
+        ], "token123")
+        mock_page2 = ([
+            {"id": "place3", "displayName": {"text": "New Business 2"}},
+        ], None)
+
+        with patch("lead_finder_test.search_places", side_effect=[mock_page1, mock_page2]):
+            with patch("time.sleep", return_value=None):
+                results = lft.search_new_places("spices in Hamburg", needed=5, seen_ids=seen_ids)
+                self.assertEqual(len(results), 2)
+                self.assertEqual([r["id"] for r in results], ["place2", "place3"])
+
+
 if __name__ == "__main__":
     unittest.main()
+

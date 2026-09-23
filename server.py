@@ -129,13 +129,12 @@ def search_leads():
     fetch_count = min(requested_count, remaining)
     query = f"{business_type} in {city}, {country}"
 
-    processed_leads = []
-    is_live_mode = False
-
+    duplicates_skipped = 0
     # Try Live Google Places & Hunter.io APIs if configured and requested
     if mode in ("live", "auto") and lft.GOOGLE_API_KEY and lft.HUNTER_API_KEY:
         try:
-            places = lft.search_places(query, max_results=fetch_count)
+            seen_ids = lft.load_seen_place_ids()
+            places, duplicates_skipped = lft.search_new_places(query, fetch_count, seen_ids)
             if places:
                 is_live_mode = True
                 for idx, place in enumerate(places):
@@ -143,6 +142,7 @@ def search_leads():
                         break
 
                     name = place.get("displayName", {}).get("text", f"{city} {business_type.title()} {idx+1}")
+                    place_id = place.get("id")
                     address = place.get("formattedAddress", f"{city}, {country}")
                     phone = place.get("nationalPhoneNumber", "—")
                     website = place.get("websiteUri", "")
@@ -165,6 +165,20 @@ def search_leads():
                             email_status = "deliverable" if status in ("valid", "deliverable") else (
                                 "risky" if status in ("accept_all", "webmail") else "invalid"
                             )
+
+                    # Save to seen places database with complete details
+                    if place_id:
+                        seen_ids[place_id] = {
+                            "name": name,
+                            "address": address,
+                            "phone": phone,
+                            "website": website,
+                            "domain": domain,
+                            "email": email,
+                            "email_status": email_status,
+                            "first_found_date": today
+                        }
+                        lft.save_seen_place_ids(seen_ids)
 
                     phone_status = "valid" if phone and phone != "—" else "invalid"
 
@@ -206,6 +220,7 @@ def search_leads():
         "id": int(time.time() * 1000),
         "query": f"{business_type} · {city}, {country}",
         "count": len(processed_leads),
+        "duplicatesSkipped": duplicates_skipped,
         "date": str(date.today()),
         "mode": "live" if is_live_mode else "simulated"
     }
@@ -217,6 +232,7 @@ def search_leads():
     return jsonify({
         "leads": processed_leads,
         "count": len(processed_leads),
+        "duplicatesSkipped": duplicates_skipped,
         "mode": "live" if is_live_mode else "simulated",
         "usage": {"date": today, "count": used_today, "remaining": max(0, lft.DAILY_LIMIT - used_today)}
     })

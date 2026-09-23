@@ -1,17 +1,25 @@
 {
-  "name": "spicecoast-lead-finder",
+  "name": "spicecoast-automation",
   "private": true,
   "version": "1.0.0",
   "type": "module",
+  "main": "server/server.js",
   "scripts": {
-    "dev": "vite",
+    "start": "node server/server.js",
+    "server": "node server/server.js",
+    "dev:server": "node server/server.js",
+    "dev:ui": "vite",
+    "dev": "concurrently \"node server/server.js\" \"vite\"",
     "build": "vite build",
-    "preview": "vite preview",
-    "server": "python3 server.py",
-    "start": "concurrently \"python3 server.py\" \"vite\""
+    "preview": "vite preview"
   },
   "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
     "lucide-react": "^1.16.0",
+    "nodemailer": "^6.10.0",
+    "openai": "^4.85.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "recharts": "^2.15.1"

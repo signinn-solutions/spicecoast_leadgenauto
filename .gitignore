@@ -21,6 +21,9 @@ ENV/
 .vscode/
 .idea/
 
+# Binaries & Temporary
+.bin/
+
 # Local data & history
 # daily_usage.json
 # leads_history.json
