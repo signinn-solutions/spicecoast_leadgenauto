@@ -9,6 +9,7 @@ import {
   saveSeenPlaces,
   loadOutreachHistory,
   saveOutreachHistory,
+  withStorageOperationLock,
 } from './storageService.js';
 import { generateColdEmail } from './deepseekService.js';
 
@@ -248,11 +249,15 @@ export async function verifyEmail(email) {
   }
 }
 
-export async function executeLeadSearch({ businessType, city, country, requestedCount = 20, mode = 'auto' }) {
+export async function executeLeadSearch(options) {
+  return withStorageOperationLock('lead-search', () => runLeadSearch(options));
+}
+
+async function runLeadSearch({ businessType, city, country, requestedCount = 20, mode = 'auto' }) {
   const cleanType = (businessType || '').trim();
   const cleanCity = (city || '').trim();
   const cleanCountry = (country || '').trim();
-  const count = parseInt(requestedCount, 10) || 20;
+  const count = requestedCount == null || requestedCount === '' ? 20 : Number(requestedCount);
 
   if (!cleanType || !cleanCity || !cleanCountry) {
     const err = new Error('Business type, city, and country are required.');
@@ -260,9 +265,21 @@ export async function executeLeadSearch({ businessType, city, country, requested
     throw err;
   }
 
-  if (count < 1 || count > 50) {
+  if (!Number.isInteger(count) || count < 1 || count > 50) {
     const err = new Error('Number to find must be between 1 and 50.');
     err.statusCode = 400;
+    throw err;
+  }
+
+  if (!['auto', 'live', 'simulated'].includes(mode)) {
+    const err = new Error('Search mode must be auto, live, or simulated.');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  if (mode === 'live' && (!config.GOOGLE_API_KEY || !config.HUNTER_API_KEY)) {
+    const err = new Error('Live search requires Google Places and Hunter API keys.');
+    err.statusCode = 503;
     throw err;
   }
 
@@ -386,6 +403,12 @@ export async function executeLeadSearch({ businessType, city, country, requested
     }
   }
 
+  if (mode === 'live' && processedLeads.length === 0) {
+    const err = new Error('Live search returned no new leads.');
+    err.statusCode = 404;
+    throw err;
+  }
+
   // Simulation fallback if live search yielded no results or mode was simulated
   if (processedLeads.length === 0) {
     const simLeads = generateSimulatedLeads(cleanType, cleanCity, cleanCountry, fetchCount, seenMap, existingLeads);
@@ -395,7 +418,7 @@ export async function executeLeadSearch({ businessType, city, country, requested
       saveDailyUsage(today, usedToday);
 
       if (lead.emailStatus === 'deliverable' || lead.emailStatus === 'valid') {
-        const draft = await generateColdEmail(lead);
+        const draft = await generateColdEmail(lead, { useAI: false });
         lead.coldMailDraft = {
           subject: draft.subject,
           body: draft.body,
@@ -447,6 +470,7 @@ export async function executeLeadSearch({ businessType, city, country, requested
       const outreachRecord = {
         id: `outreach-${lead.id}`,
         leadId: lead.id,
+        source: lead.source,
         leadName: lead.name,
         recipient: lead.email,
         company: lead.name,

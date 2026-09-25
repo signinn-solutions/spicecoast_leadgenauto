@@ -14,9 +14,8 @@ function startServer(port) {
   server.on('error', (err) => {
     if (err.code === 'EADDRINUSE') {
       console.warn(`⚠️  [Port Conflict] Port ${port} is occupied (e.g. by macOS AirPlay or another process).`);
-      const fallbackPort = port === 5000 ? 5001 : port + 1;
-      console.log(`🔄  Attempting to bind on fallback port http://${config.HOST}:${fallbackPort} ...\n`);
-      startServer(fallbackPort);
+      console.error(`[Port Conflict] Configured port ${port} is occupied. Set PORT to an available port.`);
+      process.exit(1);
     } else {
       console.error('❌  [Server Error]:', err);
       process.exit(1);

@@ -1,7 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
-import {
-  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell,
-} from "recharts";
+import React, { lazy, Suspense, useState, useEffect, useMemo, useCallback, useRef } from "react";
 import {
   Search, BarChart3, List, Phone, Mail, Globe, CheckCircle, CheckCircle2, XCircle,
   AlertCircle, Loader2, MapPin, Tag, ChevronRight, Sprout, Download,
@@ -10,375 +7,30 @@ import {
   Edit3, Eye, FileText, Clock, Compass, Anchor, Package, UserCheck, Radio
 } from "lucide-react";
 
-const DAILY_LIMIT = 50;
+const AnalyticsChart = lazy(() => import("./AnalyticsChart.jsx"));
 
-const STYLES = `
-  @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
 
-  .lf-root {
-    --ink: #17140f;
-    --surface: #211c15;
-    --surface-2: #2a2318;
-    --surface-hover: #332b1d;
-    --border: #3c3324;
-    --border-soft: #2d2718;
-    --turmeric: #e3a22e;
-    --turmeric-soft: rgba(227, 162, 46, 0.14);
-    --turmeric-glow: rgba(227, 162, 46, 0.25);
-    --paprika: #c04b32;
-    --paprika-soft: rgba(192, 75, 50, 0.14);
-    --cardamom: #7ea86e;
-    --cardamom-soft: rgba(126, 168, 110, 0.14);
-    --blue: #38bdf8;
-    --blue-soft: rgba(56, 189, 248, 0.14);
-    --text: #f3ecdd;
-    --text-muted: #b3a892;
-    --text-faint: #7d735f;
-    font-family: 'Inter', -apple-system, sans-serif;
-    background: var(--ink);
-    background-image:
-      radial-gradient(circle at 1px 1px, rgba(227,162,46,0.06) 1px, transparent 0);
-    background-size: 22px 22px;
-    color: var(--text);
-    min-height: 100vh;
-    width: 100%;
-    box-sizing: border-box;
-  }
-  .lf-display { font-family: 'Fraunces', serif; }
-  .lf-mono { font-family: 'IBM Plex Mono', monospace; }
+const isLiveLead = (lead) => lead.source !== "simulated";
+const isLiveOutreach = (item, leads) => item.source !== "simulated" && leads.find((lead) => lead.id === item.leadId)?.source !== "simulated";
 
-  .lf-nav {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 16px 28px; border-bottom: 1px solid var(--border-soft);
-    background: rgba(23,20,15,0.92); backdrop-filter: blur(8px);
-    position: sticky; top: 0; z-index: 20; gap: 16px; flex-wrap: wrap;
-  }
-  .lf-brand { display: flex; align-items: center; gap: 12px; }
-  .lf-brand-mark {
-    width: 36px; height: 36px; border-radius: 10px;
-    background: linear-gradient(155deg, var(--turmeric), #b5761e);
-    display: flex; align-items: center; justify-content: center;
-    color: #1a1509; flex-shrink: 0;
-    box-shadow: 0 4px 12px rgba(227, 162, 46, 0.2);
-  }
-  .lf-brand-name { font-size: 19px; font-weight: 600; letter-spacing: -0.01em; color: var(--text); }
-  .lf-brand-sub { font-size: 11px; color: var(--text-faint); margin-top: -2px; font-family: 'IBM Plex Mono', monospace; }
-
-  .lf-tabs { display: flex; gap: 4px; background: var(--surface); padding: 4px; border-radius: 11px; border: 1px solid var(--border-soft); }
-  .lf-tab {
-    display: flex; align-items: center; gap: 7px; padding: 8px 14px; border-radius: 8px;
-    font-size: 13.5px; font-weight: 500; color: var(--text-muted); cursor: pointer;
-    border: none; background: transparent; transition: all 0.15s ease;
-  }
-  .lf-tab:hover { color: var(--text); background: var(--surface-hover); }
-  .lf-tab.active { background: var(--turmeric-soft); color: var(--turmeric); }
-
-  .lf-nav-right { display: flex; align-items: center; gap: 12px; }
-  .lf-budget {
-    display: flex; align-items: center; gap: 9px; padding: 7px 14px;
-    background: var(--surface); border: 1px solid var(--border-soft); border-radius: 100px;
-  }
-  .lf-budget-label { font-size: 12px; color: var(--text-muted); }
-  .lf-budget-count { font-family: 'IBM Plex Mono', monospace; font-weight: 600; color: var(--text); }
-
-  .lf-live-indicator {
-    display: flex; align-items: center; gap: 6px; font-size: 11px; font-family: 'IBM Plex Mono', monospace;
-    color: var(--cardamom); background: var(--cardamom-soft); padding: 4px 10px; border-radius: 100px;
-    border: 1px solid rgba(126, 168, 110, 0.3);
-  }
-  .lf-live-dot {
-    width: 7px; height: 7px; border-radius: 50%; background: var(--cardamom);
-    box-shadow: 0 0 8px var(--cardamom); animation: pulse-live 1.8s infinite;
-  }
-  @keyframes pulse-live { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
-
-  .lf-main { max-width: 1080px; margin: 0 auto; padding: 36px 24px 80px; }
-
-  .lf-hero { margin-bottom: 28px; }
-  .lf-hero h1 { font-size: 32px; font-weight: 600; margin: 0 0 8px; letter-spacing: -0.015em; color: var(--text); }
-  .lf-hero p { color: var(--text-muted); font-size: 14.5px; margin: 0; max-width: 650px; line-height: 1.5; }
-
-  .lf-card {
-    background: var(--surface); border: 1px solid var(--border-soft);
-    border-radius: 16px; padding: 28px;
-    box-shadow: 0 8px 24px rgba(0,0,0,0.2);
-    margin-bottom: 24px;
-  }
-
-  .lf-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 22px; }
-  .lf-field { display: flex; flex-direction: column; gap: 7px; }
-  .lf-field.span-2 { grid-column: span 2; }
-  .lf-field label {
-    font-size: 11.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em;
-    color: var(--text-faint); display: flex; align-items: center; gap: 6px;
-  }
-  .lf-input {
-    background: var(--ink); border: 1px solid var(--border); border-radius: 9px;
-    padding: 12px 14px; color: var(--text); font-size: 14.5px; font-family: inherit;
-    outline: none; transition: all 0.15s ease; width: 100%; box-sizing: border-box;
-  }
-  .lf-textarea {
-    background: var(--ink); border: 1px solid var(--border); border-radius: 9px;
-    padding: 12px 14px; color: var(--text); font-size: 13.5px; font-family: inherit;
-    outline: none; transition: all 0.15s ease; width: 100%; box-sizing: border-box; resize: vertical;
-    min-height: 95px; line-height: 1.45;
-  }
-  .lf-input:focus, .lf-textarea:focus { border-color: var(--turmeric); box-shadow: 0 0 0 3px var(--turmeric-soft); }
-  .lf-input::placeholder, .lf-textarea::placeholder { color: var(--text-faint); }
-  .lf-hint { font-size: 12px; color: var(--text-faint); margin-top: 4px; display: flex; align-items: center; gap: 6px; }
-
-  .lf-mode-selector {
-    display: flex; gap: 10px; margin-top: 6px; flex-wrap: wrap;
-  }
-  .lf-mode-chip {
-    display: flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 8px;
-    font-size: 12px; cursor: pointer; border: 1px solid var(--border); background: var(--ink);
-    color: var(--text-muted); transition: all 0.15s ease;
-  }
-  .lf-mode-chip.active {
-    border-color: var(--turmeric); background: var(--turmeric-soft); color: var(--turmeric); font-weight: 500;
-  }
-
-  .lf-submit {
-    margin-top: 24px; display: flex; align-items: center; justify-content: center; gap: 10px;
-    width: 100%; padding: 14px; border-radius: 10px; border: none; cursor: pointer;
-    background: linear-gradient(155deg, var(--turmeric), #c98722); color: #1a1509;
-    font-weight: 600; font-size: 15px; transition: all 0.15s ease;
-    box-shadow: 0 4px 14px rgba(227, 162, 46, 0.25);
-  }
-  .lf-submit:hover:not(:disabled) { filter: brightness(1.08); transform: translateY(-1px); }
-  .lf-submit:active:not(:disabled) { transform: translateY(0); }
-  .lf-submit:disabled { opacity: 0.5; cursor: not-allowed; filter: grayscale(0.5); }
-
-  .lf-summary-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 24px; }
-  .lf-stat {
-    background: var(--surface); border: 1px solid var(--border-soft); border-radius: 14px; padding: 18px 20px;
-    transition: border-color 0.2s ease;
-  }
-  .lf-stat:hover { border-color: var(--border); }
-  .lf-stat-label { font-size: 11px; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 6px; }
-  .lf-stat-value { font-family: 'IBM Plex Mono', monospace; font-size: 24px; font-weight: 600; }
-  .lf-stat-value.gold { color: var(--turmeric); }
-  .lf-stat-value.green { color: var(--cardamom); }
-  .lf-stat-value.red { color: var(--paprika); }
-  .lf-stat-value.blue { color: var(--blue); }
-
-  .lf-toolbar {
-    display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px;
-    flex-wrap: wrap; gap: 12px;
-  }
-  .lf-filters { display: flex; gap: 6px; flex-wrap: wrap; }
-  .lf-filter-btn {
-    padding: 5px 11px; border-radius: 7px; font-size: 12px; cursor: pointer;
-    background: var(--surface); border: 1px solid var(--border-soft); color: var(--text-muted);
-    transition: all 0.15s ease;
-  }
-  .lf-filter-btn:hover { color: var(--text); background: var(--surface-hover); }
-  .lf-filter-btn.active { background: var(--turmeric-soft); color: var(--turmeric); border-color: var(--turmeric); }
-
-  .lf-action-btn {
-    display: inline-flex; align-items: center; gap: 6px; padding: 7px 13px; border-radius: 8px;
-    background: var(--surface); border: 1px solid var(--border); color: var(--text);
-    font-size: 12.5px; font-weight: 500; cursor: pointer; transition: all 0.15s ease;
-  }
-  .lf-action-btn:hover { background: var(--surface-hover); border-color: var(--turmeric); color: var(--turmeric); }
-  .lf-action-btn.gold { background: var(--turmeric-soft); border-color: var(--turmeric); color: var(--turmeric); }
-  .lf-action-btn.gold:hover { background: var(--turmeric); color: #1a1509; }
-  .lf-action-btn.green { background: var(--cardamom-soft); border-color: var(--cardamom); color: var(--cardamom); }
-  .lf-action-btn.green:hover { background: var(--cardamom); color: #1a1509; }
-
-  .lf-table-wrap { border: 1px solid var(--border-soft); border-radius: 14px; overflow: hidden; background: var(--surface); }
-  .lf-row {
-    display: grid; grid-template-columns: 1.6fr 1fr 1.3fr 0.9fr; gap: 14px;
-    padding: 16px 20px; align-items: center; border-bottom: 1px solid var(--border-soft);
-    background: var(--surface); transition: background 0.1s ease;
-  }
-  .lf-row:hover:not(.header) { background: var(--surface-hover); }
-  .lf-row:last-child { border-bottom: none; }
-  .lf-row.header {
-    background: var(--surface-2); font-size: 11px; text-transform: uppercase;
-    letter-spacing: 0.06em; color: var(--text-faint); font-weight: 600; padding: 12px 20px;
-  }
-  .lf-company-name { font-weight: 600; font-size: 14.5px; margin-bottom: 3px; color: var(--text); }
-  .lf-company-addr { font-size: 12px; color: var(--text-faint); display: flex; align-items: center; gap: 5px; }
-
-  .lf-badge {
-    display: inline-flex; align-items: center; gap: 6px; padding: 4px 9px; border-radius: 100px;
-    font-size: 11.5px; font-weight: 500; font-family: 'IBM Plex Mono', monospace;
-  }
-  .lf-badge.green { background: var(--cardamom-soft); color: var(--cardamom); }
-  .lf-badge.gold { background: var(--turmeric-soft); color: var(--turmeric); }
-  .lf-badge.red { background: var(--paprika-soft); color: var(--paprika); }
-  .lf-badge.blue { background: var(--blue-soft); color: var(--blue); }
-  .lf-badge-sub { display: block; font-size: 11px; color: var(--text-faint); margin-top: 4px; font-family: 'IBM Plex Mono', monospace; }
-
-  .lf-subtab-bar {
-    display: flex; gap: 8px; margin-bottom: 20px; border-bottom: 1px solid var(--border-soft);
-    padding-bottom: 12px;
-  }
-  .lf-subtab-btn {
-    display: flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 8px;
-    font-size: 13px; font-weight: 500; cursor: pointer; border: 1px solid var(--border-soft);
-    background: var(--surface); color: var(--text-muted); transition: all 0.15s ease;
-  }
-  .lf-subtab-btn:hover { color: var(--text); background: var(--surface-hover); }
-  .lf-subtab-btn.active { background: var(--turmeric-soft); border-color: var(--turmeric); color: var(--turmeric); font-weight: 600; }
-
-  /* RICH INBOUND EMAIL CARD */
-  .lf-inbound-card {
-    background: var(--surface); border: 1px solid var(--border-soft); border-radius: 16px;
-    padding: 24px; margin-bottom: 20px; box-shadow: 0 6px 20px rgba(0,0,0,0.25);
-    transition: all 0.2s ease;
-  }
-  .lf-inbound-card:hover { border-color: var(--border); }
-  
-  .lf-inbound-header-grid {
-    display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
-    background: var(--surface-2); border: 1px solid var(--border-soft); border-radius: 12px;
-    padding: 16px; margin-bottom: 16px;
-  }
-  .lf-party-box { display: flex; flex-direction: column; gap: 3px; }
-  .lf-party-label {
-    font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em;
-    color: var(--text-faint); display: flex; align-items: center; gap: 5px;
-  }
-  .lf-party-name { font-size: 14px; font-weight: 600; color: var(--text); }
-  .lf-party-email { font-size: 12px; font-family: 'IBM Plex Mono', monospace; color: var(--turmeric); }
-
-  .lf-data-matrix {
-    display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 16px;
-  }
-  .lf-matrix-item {
-    background: var(--ink); border: 1px solid var(--border-soft); border-radius: 8px; padding: 10px 12px;
-  }
-  .lf-matrix-label { font-size: 10.5px; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 3px; }
-  .lf-matrix-val { font-size: 12.5px; font-weight: 600; color: var(--text); }
-  .lf-matrix-val.gold { color: var(--turmeric); }
-  .lf-matrix-val.green { color: var(--cardamom); }
-  .lf-matrix-val.blue { color: var(--blue); }
-
-  .lf-chips-row { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; }
-  .lf-meta-chip {
-    display: inline-flex; align-items: center; gap: 5px; padding: 4px 9px; border-radius: 6px;
-    font-size: 11.5px; font-family: 'IBM Plex Mono', monospace; background: var(--ink); border: 1px solid var(--border-soft);
-    color: var(--text-muted);
-  }
-  .lf-meta-chip.product { border-color: rgba(126, 168, 110, 0.4); color: var(--cardamom); background: rgba(126, 168, 110, 0.08); }
-  .lf-meta-chip.intent { border-color: rgba(227, 162, 46, 0.4); color: var(--turmeric); background: rgba(227, 162, 46, 0.08); }
-  .lf-meta-chip.priority { border-color: rgba(192, 75, 50, 0.4); color: #f87171; background: rgba(192, 75, 50, 0.08); }
-
-  .lf-msg-body-preview {
-    background: var(--ink); border: 1px solid var(--border-soft); border-radius: 10px;
-    padding: 14px 16px; font-size: 13px; color: var(--text); line-height: 1.5;
-    white-space: pre-wrap; margin-bottom: 16px;
-  }
-  .lf-draft-box {
-    background: rgba(227, 162, 46, 0.04); border: 1px dashed var(--turmeric);
-    border-radius: 12px; padding: 18px; margin-top: 12px;
-  }
-  .lf-draft-header {
-    display: flex; align-items: center; justify-content: space-between; font-size: 12px;
-    font-weight: 600; color: var(--turmeric); text-transform: uppercase; letter-spacing: 0.05em;
-    margin-bottom: 10px;
-  }
-  .lf-draft-text {
-    font-size: 13.5px; color: var(--text); line-height: 1.55; white-space: pre-wrap;
-    font-family: 'Inter', sans-serif;
-  }
-  .lf-draft-actions {
-    display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 16px;
-    flex-wrap: wrap;
-  }
-
-  /* MODAL STYLES */
-  .lf-modal-backdrop {
-    position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-    background: rgba(15, 12, 8, 0.82); backdrop-filter: blur(6px);
-    display: flex; align-items: center; justify-content: center; z-index: 100;
-    padding: 20px; box-sizing: border-box;
-  }
-  .lf-modal-card {
-    background: var(--surface); border: 1px solid var(--border); border-radius: 18px;
-    width: 100%; max-width: 680px; max-height: 90vh; overflow-y: auto;
-    padding: 28px; box-shadow: 0 16px 40px rgba(0,0,0,0.5);
-  }
-  .lf-modal-header {
-    display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px;
-  }
-  .lf-modal-title { font-size: 18px; font-weight: 600; color: var(--text); }
-  .lf-modal-close {
-    background: transparent; border: none; color: var(--text-faint); cursor: pointer;
-    font-size: 18px; display: flex; align-items: center; justify-content: center;
-  }
-  .lf-modal-close:hover { color: var(--text); }
-
-  .lf-empty {
-    text-align: center; padding: 70px 20px; color: var(--text-faint);
-  }
-  .lf-empty svg { margin-bottom: 14px; opacity: 0.5; color: var(--turmeric); }
-  .lf-empty p { font-size: 14px; margin: 0; }
-
-  .lf-analytics-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 24px; }
-  .lf-panel { background: var(--surface); border: 1px solid var(--border-soft); border-radius: 16px; padding: 24px; }
-  .lf-panel h3 { font-size: 13px; font-weight: 600; margin: 0 0 18px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
-
-  .lf-loading { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 80px 0; color: var(--text-muted); }
-  .spin { animation: lf-spin 0.9s linear infinite; }
-  @keyframes lf-spin { to { transform: rotate(360deg); } }
-
-  @media (max-width: 768px) {
-    .lf-form-grid { grid-template-columns: 1fr; }
-    .lf-field.span-2 { grid-column: span 1; }
-    .lf-summary-row { grid-template-columns: 1fr 1fr; }
-    .lf-analytics-grid { grid-template-columns: 1fr; }
-    .lf-data-matrix { grid-template-columns: 1fr 1fr; }
-    .lf-inbound-header-grid { grid-template-columns: 1fr; }
-    .lf-row { grid-template-columns: 1fr; gap: 8px; }
-    .lf-row.header { display: none; }
-    .lf-nav { padding: 14px 16px; }
-  }
-`;
-
-// Cross-environment storage wrapper
-const storage = {
-  get: async (key) => {
-    try {
-      if (typeof window !== "undefined" && window.storage?.get) {
-        return await window.storage.get(key);
-      }
-      const val = localStorage.getItem(`spicecoast_${key}`);
-      return val ? { value: val } : null;
-    } catch {
-      return null;
-    }
-  },
-  set: async (key, value) => {
-    try {
-      if (typeof window !== "undefined" && window.storage?.set) {
-        return await window.storage.set(key, value);
-      }
-      localStorage.setItem(`spicecoast_${key}`, value);
-    } catch (e) {
-      console.warn("Storage error:", e);
-    }
-  },
-};
-
-const PhoneBadge = ({ status }) => {
+const PhoneBadge = ({ status, simulated }) => {
+  if (simulated) return <span className="lf-badge gold">Demo contact</span>;
   if (status === "valid") return <span className="lf-badge green"><CheckCircle2 size={12} /> Valid</span>;
   return <span className="lf-badge red"><XCircle size={12} /> Invalid</span>;
 };
 
-const EmailBadge = ({ status }) => {
+const EmailBadge = ({ status, simulated }) => {
+  if (simulated) return <span className="lf-badge gold">Demo email</span>;
   if (status === "deliverable" || status === "valid") return <span className="lf-badge green"><CheckCircle2 size={12} /> Deliverable</span>;
   if (status === "risky" || status === "accept_all") return <span className="lf-badge gold"><AlertCircle size={12} /> Risky</span>;
   return <span className="lf-badge red"><XCircle size={12} /> Not found</span>;
 };
 
 export default function LeadFinderApp() {
-  const [view, setView] = useState("search"); // search | results | mailbox | analytics
+  const [view, setView] = useState("dashboard"); // dashboard | search | results | outreach | mailbox | analytics
   const [mailboxSubTab, setMailboxSubTab] = useState("inbound"); // inbound | outreach | simulate
   const [loading, setLoading] = useState(true);
+  const [serverOnline, setServerOnline] = useState(false);
   const [searching, setSearching] = useState(false);
   const [error, setError] = useState(null);
   const [filterMode, setFilterMode] = useState("all"); // all, emails, phones, both
@@ -390,6 +42,7 @@ export default function LeadFinderApp() {
   const [count, setCount] = useState(15);
 
   const [usage, setUsage] = useState({ date: "", count: 0 });
+  const [leadLimit, setLeadLimit] = useState(50);
   const [currentResults, setCurrentResults] = useState([]);
   const [allLeads, setAllLeads] = useState([]);
   const [searchHistory, setSearchHistory] = useState([]);
@@ -418,6 +71,7 @@ export default function LeadFinderApp() {
 
   // REVIEW & EDIT MODAL STATE
   const [activeColdMailModal, setActiveColdMailModal] = useState(null);
+  const modalRef = useRef(null);
   const [editingSubject, setEditingSubject] = useState("");
   const [editingBody, setEditingBody] = useState("");
   const [generatingDraftForLeadId, setGeneratingDraftForLeadId] = useState(null);
@@ -425,19 +79,23 @@ export default function LeadFinderApp() {
   const [lastSearchInfo, setLastSearchInfo] = useState(null);
 
   const today = new Date().toISOString().slice(0, 10);
-  const remaining = usage.date === today ? Math.max(0, DAILY_LIMIT - usage.count) : DAILY_LIMIT;
+  const remaining = usage.date === today ? Math.max(0, leadLimit - usage.count) : leadLimit;
 
   // Load all initial data
   const fetchAllData = useCallback(async () => {
     try {
-      // Backend Status
-      try {
-        const res = await fetch("/api/status");
-        if (res.ok) {
-          const data = await res.json();
-          if (data.date) setUsage({ date: data.date, count: data.count });
-        }
-      } catch {}
+      const [statusRes, leadsRes] = await Promise.all([
+        fetch("/api/status"),
+        fetch("/api/leads"),
+      ]);
+      if (!statusRes.ok || !leadsRes.ok) throw new Error("Could not load lead data from the API.");
+      const [statusData, leadsData] = await Promise.all([statusRes.json(), leadsRes.json()]);
+      setServerOnline(true);
+      setUsage({ date: statusData.date, count: statusData.count });
+      setLeadLimit(statusData.limit);
+      setAllLeads(leadsData.all_leads || []);
+      setSearchHistory(leadsData.search_history || []);
+      setCurrentResults((previous) => previous.length ? previous : (leadsData.all_leads || []));
 
       // Mailbox & Outreach Data
       try {
@@ -457,25 +115,48 @@ export default function LeadFinderApp() {
         }
       } catch {}
 
-      const [u, leads, hist] = await Promise.all([
-        storage.get("usage").catch(() => null),
-        storage.get("all-leads").catch(() => null),
-        storage.get("search-history").catch(() => null),
-      ]);
-      if (u?.value && !usage.date) setUsage(JSON.parse(u.value));
-      if (leads?.value) setAllLeads(JSON.parse(leads.value));
-      if (hist?.value) setSearchHistory(JSON.parse(hist.value));
     } catch (e) {
-      console.warn("Storage initial load issue:", e);
+      setServerOnline(false);
+      setError(e.message);
     } finally {
       setLoading(false);
     }
-  }, [usage.date]);
+  }, []);
 
   // Initial load
   useEffect(() => {
     fetchAllData();
   }, [fetchAllData]);
+
+  const modalOpen = Boolean(activeColdMailModal);
+  useEffect(() => {
+    if (!modalOpen) return;
+    const previousFocus = document.activeElement;
+    modalRef.current?.querySelector('input')?.focus();
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        setActiveColdMailModal(null);
+        return;
+      }
+      if (event.key !== 'Tab') return;
+      const controls = [...(modalRef.current?.querySelectorAll('button:not([disabled]), input:not([disabled]), textarea:not([disabled]), a[href]') || [])];
+      if (!controls.length) return;
+      const first = controls[0];
+      const last = controls[controls.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      previousFocus?.focus?.();
+    };
+  }, [modalOpen]);
 
   // Real-time automatic polling every 4 seconds to pick up live Webhook events seamlessly
   useEffect(() => {
@@ -495,14 +176,6 @@ export default function LeadFinderApp() {
     return () => clearInterval(pollInterval);
   }, []);
 
-  const persist = useCallback(async (key, value) => {
-    try {
-      await storage.set(key, JSON.stringify(value));
-    } catch (e) {
-      console.warn("Error saving locally:", e);
-    }
-  }, []);
-
   const handleSearch = async (e) => {
     e.preventDefault();
     setError(null);
@@ -515,7 +188,7 @@ export default function LeadFinderApp() {
       return;
     }
     if (count > remaining) {
-      setError(`Only ${remaining} searches remaining in today's daily limit of ${DAILY_LIMIT}.`);
+      setError(`Only ${remaining} leads remain in today's daily limit of ${leadLimit}.`);
       return;
     }
 
@@ -537,11 +210,8 @@ export default function LeadFinderApp() {
       if (response.ok) {
         const data = await response.json();
         const leads = data.leads || [];
-        const isLive = data.mode === "live";
-
         if (data.usage) {
           setUsage(data.usage);
-          await persist("usage", data.usage);
         }
 
         const seenLeadKeys = new Set();
@@ -552,29 +222,15 @@ export default function LeadFinderApp() {
           return true;
         });
 
-        const newHistory = [
-          {
-            id: Date.now(),
-            query: `${businessType} · ${city}, ${country}`,
-            count: leads.length,
-            date: new Date().toISOString(),
-            isLive,
-          },
-          ...searchHistory,
-        ].slice(0, 30);
-
         setAllLeads(newAllLeads);
-        setSearchHistory(newHistory);
         setCurrentResults(leads);
         setLastSearchInfo({
           count: leads.length,
           duplicatesSkipped: data.duplicatesSkipped || 0,
           mode: data.mode,
         });
-        await persist("all-leads", newAllLeads);
-        await persist("search-history", newHistory);
 
-        // Refresh outreach list as new cold drafts are generated
+        // Refresh saved lead and outreach history from the API.
         fetchAllData();
 
         setSearching(false);
@@ -629,6 +285,7 @@ export default function LeadFinderApp() {
         subject: draft.subject,
         body: draft.body,
         status: draft.status || "pending_review",
+        source: lead.source,
       });
       setEditingSubject(draft.subject);
       setEditingBody(draft.body);
@@ -640,7 +297,7 @@ export default function LeadFinderApp() {
   const handleSaveDraftChanges = async () => {
     if (!activeColdMailModal) return;
     try {
-      await fetch("/api/mailbox/update-draft", {
+      const response = await fetch("/api/mailbox/update-draft", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -649,6 +306,7 @@ export default function LeadFinderApp() {
           body: editingBody,
         }),
       });
+      if (!response.ok) throw new Error((await response.json().catch(() => ({}))).error || "Could not save draft.");
 
       setActiveColdMailModal((prev) => ({
         ...prev,
@@ -667,7 +325,7 @@ export default function LeadFinderApp() {
 
       fetchAllData();
     } catch (e) {
-      console.warn("Failed to save draft:", e);
+      setError(e.message);
     }
   };
 
@@ -701,9 +359,11 @@ export default function LeadFinderApp() {
         );
 
         fetchAllData();
+      } else {
+        throw new Error((await res.json().catch(() => ({}))).error || "Could not send outreach email.");
       }
     } catch (err) {
-      console.warn("Failed to send cold mail:", err);
+      setError(err.message);
     } finally {
       setSendingMsgId(null);
       setConfirmSendId(null);
@@ -727,7 +387,6 @@ export default function LeadFinderApp() {
           to_name: "The Spice Coast (Sales Desk)",
           subject: simSubject.trim(),
           message: simBody.trim(),
-          auto_send: mailboxStatus.auto_send,
         }),
       });
 
@@ -795,8 +454,8 @@ export default function LeadFinderApp() {
 
   const filteredResults = useMemo(() => {
     return currentResults.filter((lead) => {
-      const hasDeliverableEmail = lead.emailStatus === "deliverable" || lead.emailStatus === "valid";
-      const hasValidPhone = lead.phoneStatus === "valid";
+      const hasDeliverableEmail = isLiveLead(lead) && (lead.emailStatus === "deliverable" || lead.emailStatus === "valid");
+      const hasValidPhone = isLiveLead(lead) && lead.phoneStatus === "valid";
       if (filterMode === "emails") return hasDeliverableEmail;
       if (filterMode === "phones") return hasValidPhone;
       if (filterMode === "both") return hasDeliverableEmail && hasValidPhone;
@@ -806,53 +465,51 @@ export default function LeadFinderApp() {
 
   const summary = useMemo(() => {
     const total = currentResults.length;
-    const validEmails = currentResults.filter((l) => l.emailStatus === "deliverable" || l.emailStatus === "valid").length;
-    const validPhones = currentResults.filter((l) => l.phoneStatus === "valid").length;
+    const validEmails = currentResults.filter((l) => isLiveLead(l) && (l.emailStatus === "deliverable" || l.emailStatus === "valid")).length;
+    const validPhones = currentResults.filter((l) => isLiveLead(l) && l.phoneStatus === "valid").length;
     const bothValid = currentResults.filter(
-      (l) => (l.emailStatus === "deliverable" || l.emailStatus === "valid") && l.phoneStatus === "valid"
+      (l) => isLiveLead(l) && (l.emailStatus === "deliverable" || l.emailStatus === "valid") && l.phoneStatus === "valid"
     ).length;
     return { total, validEmails, validPhones, bothValid };
   }, [currentResults]);
 
   const chartData = useMemo(() => {
-    const deliverable = allLeads.filter((l) => l.emailStatus === "deliverable" || l.emailStatus === "valid").length;
-    const risky = allLeads.filter((l) => l.emailStatus === "risky" || l.emailStatus === "accept_all").length;
-    const notFound = allLeads.filter((l) => l.emailStatus === "not_found" || l.emailStatus === "invalid").length;
+    const liveLeads = allLeads.filter(isLiveLead);
+    const deliverable = liveLeads.filter((l) => l.emailStatus === "deliverable" || l.emailStatus === "valid").length;
+    const risky = liveLeads.filter((l) => l.emailStatus === "risky" || l.emailStatus === "accept_all").length;
+    const notFound = liveLeads.filter((l) => l.emailStatus === "not_found" || l.emailStatus === "invalid").length;
     return [
       { name: "Deliverable", value: deliverable, color: "var(--cardamom)" },
       { name: "Risky / Accept All", value: risky, color: "var(--turmeric)" },
       { name: "Not Found", value: notFound, color: "var(--paprika)" },
+      { name: "Simulation", value: allLeads.length - liveLeads.length, color: "var(--text-faint)" },
     ];
   }, [allLeads]);
 
   const exportCSV = () => {
     if (filteredResults.length === 0) return;
-    const headers = ["Company Name", "Address", "Phone", "Phone Status", "Email", "Email Status", "Website", "Date Found"];
-    const rows = filteredResults.map((l) => [
-      `"${(l.name || "").replace(/"/g, '""')}"`,
-      `"${(l.address || "").replace(/"/g, '""')}"`,
-      `"${l.phone || ""}"`,
-      `"${l.phoneStatus || ""}"`,
-      `"${l.email || ""}"`,
-      `"${l.emailStatus || ""}"`,
-      `"${l.website || ""}"`,
-      `"${l.foundAt || ""}"`,
+    const headers = ["Company Name", "Source", "Address", "Phone", "Phone Status", "Email", "Email Status", "Website", "Date Found"];
+    const rows = filteredResults.map((lead) => [
+      lead.name, lead.source || "unknown", lead.address, lead.phone,
+      isLiveLead(lead) ? lead.phoneStatus : "simulated",
+      lead.email, isLiveLead(lead) ? lead.emailStatus : "simulated",
+      lead.website, lead.foundAt,
     ]);
-
-    const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ...rows.map((e) => e.join(","))].join("\n");
-    const encodedUri = encodeURI(csvContent);
+    const quote = (value) => `"${String(value ?? "").replaceAll('"', '""')}"`;
+    const csv = [headers, ...rows].map((row) => row.map(quote).join(",")).join("\r\n");
+    const url = URL.createObjectURL(new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" }));
     const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
+    link.setAttribute("href", url);
     link.setAttribute("download", `spicecoast_leads_${today}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    setTimeout(() => URL.revokeObjectURL(url), 0);
   };
 
   if (loading) {
     return (
       <div className="lf-root">
-        <style>{STYLES}</style>
         <div className="lf-loading"><Loader2 size={24} className="spin" /> Initializing SpiceCoast Automation...</div>
       </div>
     );
@@ -860,85 +517,128 @@ export default function LeadFinderApp() {
 
   return (
     <div className="lf-root">
-      <style>{STYLES}</style>
 
-      {/* Navigation */}
-      <nav className="lf-nav">
+      <aside className="lf-nav" aria-label="Workspace navigation">
         <div className="lf-brand">
           <div className="lf-brand-mark"><Sprout size={20} /></div>
           <div>
             <div className="lf-brand-name lf-display">SpiceCoast</div>
-            <div className="lf-brand-sub">B2B Automation & AI Mailbox</div>
+            <div className="lf-brand-sub">Lead workspace</div>
           </div>
         </div>
 
-        <div className="lf-tabs">
-          <button className={`lf-tab ${view === "search" ? "active" : ""}`} onClick={() => setView("search")}>
-            <Search size={15} /> Search
+        <div className="lf-tabs" aria-label="Main navigation">
+          <button aria-current={view === "dashboard" ? "page" : undefined} className={`lf-tab ${view === "dashboard" ? "active" : ""}`} onClick={() => setView("dashboard")}>
+            <Compass size={16} /> Overview
           </button>
-          <button className={`lf-tab ${view === "results" ? "active" : ""}`} onClick={() => setView("results")}>
-            <List size={15} /> Results {currentResults.length > 0 && `(${currentResults.length})`}
+          <button aria-current={view === "search" ? "page" : undefined} className={`lf-tab ${view === "search" ? "active" : ""}`} onClick={() => setView("search")}>
+            <Search size={16} /> Discovery
           </button>
-          <button className={`lf-tab ${view === "mailbox" ? "active" : ""}`} onClick={() => setView("mailbox")}>
-            <Mail size={15} /> Inbound Webhooks & AI Mailbox {mailboxMessages.length > 0 && `(${mailboxMessages.length})`}
+          <button aria-current={view === "results" ? "page" : undefined} className={`lf-tab ${view === "results" ? "active" : ""}`} onClick={() => setView("results")}>
+            <List size={16} /> Leads {currentResults.length > 0 && <span className="lf-nav-count">{currentResults.length}</span>}
           </button>
-          <button className={`lf-tab ${view === "analytics" ? "active" : ""}`} onClick={() => setView("analytics")}>
-            <BarChart3 size={15} /> Analytics
+          <button aria-current={view === "outreach" ? "page" : undefined} className={`lf-tab ${view === "outreach" ? "active" : ""}`} onClick={() => { setMailboxSubTab("outreach"); setView("outreach"); }}>
+            <Send size={16} /> Outreach {outreachList.filter(o => o.status === "pending_review" && isLiveOutreach(o, allLeads)).length > 0 && <span className="lf-nav-count">{outreachList.filter(o => o.status === "pending_review" && isLiveOutreach(o, allLeads)).length}</span>}
+          </button>
+          <button aria-current={view === "mailbox" ? "page" : undefined} className={`lf-tab ${view === "mailbox" ? "active" : ""}`} onClick={() => { setMailboxSubTab("inbound"); setView("mailbox"); }}>
+            <Mail size={16} /> Mailbox {mailboxMessages.length > 0 && <span className="lf-nav-count">{mailboxMessages.length}</span>}
+          </button>
+          <button aria-current={view === "analytics" ? "page" : undefined} className={`lf-tab ${view === "analytics" ? "active" : ""}`} onClick={() => setView("analytics")}>
+            <BarChart3 size={16} /> Analytics
           </button>
         </div>
 
         <div className="lf-nav-right">
-          <div className="lf-live-indicator" title="Live Webhook listener active on Cloudflare Tunnel">
+          <div className={`lf-live-indicator ${serverOnline ? "" : "offline"}`} title={serverOnline ? "API server reachable" : "API server unavailable"}>
             <span className="lf-live-dot"></span>
-            <span>Webhook Live</span>
+            <span>{serverOnline ? "API online" : "API offline"}</span>
           </div>
 
-          <div className="lf-budget" title={`Daily lead limit resets at midnight. Max ${DAILY_LIMIT}/day.`}>
+          <div className="lf-budget" title={`Daily lead limit resets at midnight. Max ${leadLimit}/day.`}>
             <span className="lf-budget-label">Leads</span>
-            <span className="lf-budget-count">{Math.max(0, usage.date === today ? usage.count : 0)}/{DAILY_LIMIT}</span>
+            <span className="lf-budget-count">{Math.max(0, usage.date === today ? usage.count : 0)}/{leadLimit}</span>
           </div>
           <div className="lf-budget" title={`Daily AI replies quota.`}>
             <span className="lf-budget-label">Replies</span>
             <span className="lf-budget-count" style={{ color: "var(--turmeric)" }}>{mailboxStatus.used_today}/{mailboxStatus.daily_limit}</span>
           </div>
         </div>
-      </nav>
+      </aside>
 
       {/* Main Content Area */}
-      <main className="lf-main">
+      <main className="lf-main" id="main-content">
         {error && (
-          <div style={{ background: "var(--paprika-soft)", border: "1px solid var(--paprika)", color: "#f87171", padding: "14px 18px", borderRadius: 12, marginBottom: 24, fontSize: 14, display: "flex", alignItems: "center", gap: 10 }}>
+          <div role="alert" style={{ background: "var(--paprika-soft)", border: "1px solid var(--paprika)", color: "#f87171", padding: "14px 18px", borderRadius: 12, marginBottom: 24, fontSize: 14, display: "flex", alignItems: "center", gap: 10 }}>
             <AlertCircle size={18} />
             <span>{error}</span>
           </div>
+        )}
+
+        {view === "dashboard" && (
+          <>
+            <div className="lf-hero lf-dashboard-hero">
+              <div>
+                <span className="lf-eyebrow">Workspace overview</span>
+                <h1>Find the right buyers. Move the conversation forward.</h1>
+                <p>Discover businesses, review verified contacts and drafts, then manage replies from one workspace.</p>
+              </div>
+              <button className="lf-action-btn gold" onClick={() => setView("search")}><Search size={16} /> Start discovery <ChevronRight size={16} /></button>
+            </div>
+            <div className="lf-summary-row" aria-label="Workspace metrics">
+              <div className="lf-stat"><div className="lf-stat-label">Live leads</div><div className="lf-stat-value lf-mono">{allLeads.filter(isLiveLead).length}</div></div>
+              <div className="lf-stat"><div className="lf-stat-label">Deliverable email</div><div className="lf-stat-value green lf-mono">{allLeads.filter(l => isLiveLead(l) && (l.emailStatus === "deliverable" || l.emailStatus === "valid")).length}</div></div>
+              <div className="lf-stat"><div className="lf-stat-label">Live drafts pending</div><div className="lf-stat-value gold lf-mono">{outreachList.filter(o => o.status === "pending_review" && isLiveOutreach(o, allLeads)).length}</div></div>
+              <div className="lf-stat"><div className="lf-stat-label">Inbound messages</div><div className="lf-stat-value lf-mono">{mailboxMessages.length}</div></div>
+            </div>
+            <div className="lf-dashboard-grid">
+              <section className="lf-panel">
+                <h2>Continue your workflow</h2>
+                <div className="lf-workflow-list">
+                  <button onClick={() => setView("search")}><span className="lf-step-icon"><Search size={18} /></span><span><strong>Discover businesses</strong><small>Search by industry and location</small></span><ChevronRight size={17} /></button>
+                  <button onClick={() => setView("results")}><span className="lf-step-icon"><List size={18} /></span><span><strong>Review leads</strong><small>Filter contacts and export the current batch</small></span><ChevronRight size={17} /></button>
+                  <button onClick={() => { setMailboxSubTab("outreach"); setView("outreach"); }}><span className="lf-step-icon"><Send size={18} /></span><span><strong>Review outreach</strong><small>Edit and approve generated drafts</small></span><ChevronRight size={17} /></button>
+                  <button onClick={() => { setMailboxSubTab("inbound"); setView("mailbox"); }}><span className="lf-step-icon"><Inbox size={18} /></span><span><strong>Handle replies</strong><small>Inspect inbound messages and draft responses</small></span><ChevronRight size={17} /></button>
+                </div>
+              </section>
+              <section className="lf-panel">
+                <h2>Recent searches</h2>
+                {searchHistory.length === 0 ? <p className="lf-dashboard-empty">Your completed searches will appear here.</p> : searchHistory.slice(0, 5).map(h => (
+                  <button className="lf-recent-search" key={h.id} onClick={() => setView("analytics")}>
+                    <span><Search size={15} /><strong>{h.query}</strong></span><small>{h.count} leads · {new Date(h.date).toLocaleDateString()}</small>
+                  </button>
+                ))}
+              </section>
+            </div>
+          </>
         )}
 
         {/* SEARCH VIEW */}
         {view === "search" && (
           <>
             <div className="lf-hero">
-              <h1 className="lf-display">Discover & Verify B2B Leads</h1>
-              <p>Find targeted spice importers with Google Places, verify deliverability via Hunter.io, and automatically generate personalized DeepSeek AI cold emails.</p>
+              <h1 className="lf-display">Discover businesses</h1>
+              <p>Search by business type and location. Review verified contact details and generated outreach drafts after the search finishes.</p>
             </div>
 
             <div className="lf-card">
               <form onSubmit={handleSearch}>
                 <div className="lf-form-grid">
                   <div className="lf-field">
-                    <label><Tag size={12} /> Business type</label>
-                    <input className="lf-input" placeholder="e.g. spice importer, food distributor" value={businessType} onChange={(e) => setBusinessType(e.target.value)} />
+                    <label htmlFor="business-type"><Tag size={12} /> Business type</label>
+                    <input id="business-type" className="lf-input" placeholder="e.g. spice importer, food distributor" value={businessType} onChange={(e) => setBusinessType(e.target.value)} required />
                   </div>
                   <div className="lf-field">
-                    <label><MapPin size={12} /> City</label>
-                    <input className="lf-input" placeholder="e.g. Hamburg, Dubai, Kochi" value={city} onChange={(e) => setCity(e.target.value)} />
+                    <label htmlFor="search-city"><MapPin size={12} /> City</label>
+                    <input id="search-city" className="lf-input" placeholder="e.g. Hamburg, Dubai, Kochi" value={city} onChange={(e) => setCity(e.target.value)} required />
                   </div>
                   <div className="lf-field">
-                    <label><Globe size={12} /> Country</label>
-                    <input className="lf-input" placeholder="e.g. Germany, UAE, India" value={country} onChange={(e) => setCountry(e.target.value)} />
+                    <label htmlFor="search-country"><Globe size={12} /> Country</label>
+                    <input id="search-country" className="lf-input" placeholder="e.g. Germany, UAE, India" value={country} onChange={(e) => setCountry(e.target.value)} required />
                   </div>
                   <div className="lf-field">
-                    <label>Number to find (max 50)</label>
+                    <label htmlFor="search-count">Number to find (max 50)</label>
                     <input
+                      id="search-count"
                       className="lf-input" type="number" min={1} max={50}
                       value={count} onChange={(e) => setCount(parseInt(e.target.value || "0", 10))}
                     />
@@ -947,15 +647,15 @@ export default function LeadFinderApp() {
                   <div className="lf-field span-2">
                     <label><Sparkles size={12} /> Search Mode</label>
                     <div className="lf-mode-selector">
-                      <div className={`lf-mode-chip ${searchMode === "auto" ? "active" : ""}`} onClick={() => setSearchMode("auto")}>
+                      <button type="button" aria-pressed={searchMode === "auto"} className={`lf-mode-chip ${searchMode === "auto" ? "active" : ""}`} onClick={() => setSearchMode("auto")}>
                         <Database size={13} /> Auto (Live API + Fallback)
-                      </div>
-                      <div className={`lf-mode-chip ${searchMode === "live" ? "active" : ""}`} onClick={() => setSearchMode("live")}>
+                      </button>
+                      <button type="button" aria-pressed={searchMode === "live"} className={`lf-mode-chip ${searchMode === "live" ? "active" : ""}`} onClick={() => setSearchMode("live")}>
                         <Globe size={13} /> Live Places & Hunter.io
-                      </div>
-                      <div className={`lf-mode-chip ${searchMode === "simulated" ? "active" : ""}`} onClick={() => setSearchMode("simulated")}>
-                        <Sparkles size={13} /> Simulation Test (No API credits used)
-                      </div>
+                      </button>
+                      <button type="button" aria-pressed={searchMode === "simulated"} className={`lf-mode-chip ${searchMode === "simulated" ? "active" : ""}`} onClick={() => setSearchMode("simulated")}>
+                        <Sparkles size={13} /> Simulated test data (no API credits)
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -972,8 +672,8 @@ export default function LeadFinderApp() {
         {view === "results" && (
           <>
             <div className="lf-hero">
-              <h1 className="lf-display">Harvested Leads & Cold Email Drafts</h1>
-              <p>Deliverable emails have AI-personalized cold outreach drafts generated by DeepSeek. Review and confirm before dispatching.</p>
+              <h1 className="lf-display">Review leads</h1>
+              <p>Filter the latest search, inspect contact verification, export a CSV, or open a draft for review.</p>
             </div>
 
             {lastSearchInfo && (
@@ -993,10 +693,10 @@ export default function LeadFinderApp() {
             {currentResults.length > 0 && (
               <>
                 <div className="lf-summary-row">
-                  <div className="lf-stat"><div className="lf-stat-label">Total Found</div><div className="lf-stat-value lf-mono">{summary.total}</div></div>
+                  <div className="lf-stat"><div className="lf-stat-label">Records shown</div><div className="lf-stat-value lf-mono">{summary.total}</div></div>
                   <div className="lf-stat"><div className="lf-stat-label">Deliverable Email</div><div className="lf-stat-value green lf-mono">{summary.validEmails}</div></div>
                   <div className="lf-stat"><div className="lf-stat-label">Valid Phone</div><div className="lf-stat-value green lf-mono">{summary.validPhones}</div></div>
-                  <div className="lf-stat"><div className="lf-stat-label">AI Drafts Ready</div><div className="lf-stat-value gold lf-mono">{currentResults.filter(l => l.coldMailDraft).length}</div></div>
+                  <div className="lf-stat"><div className="lf-stat-label">Live drafts ready</div><div className="lf-stat-value gold lf-mono">{currentResults.filter(l => isLiveLead(l) && l.coldMailDraft?.status === "pending_review").length}</div></div>
                 </div>
 
                 <div className="lf-toolbar">
@@ -1025,7 +725,7 @@ export default function LeadFinderApp() {
             {filteredResults.length === 0 ? (
               <div className="lf-card lf-empty">
                 <Search size={32} />
-                <p>{currentResults.length === 0 ? "No results yet. Go to Search to harvest your first batch of leads." : "No leads match the selected filter."}</p>
+                <p>{currentResults.length === 0 ? "No results yet. Run a discovery search to build your first lead list." : "No leads match the selected filter."}</p>
               </div>
             ) : (
               <div className="lf-table-wrap">
@@ -1039,16 +739,16 @@ export default function LeadFinderApp() {
                   return (
                     <div className="lf-row" key={lead.id}>
                       <div>
-                        <div className="lf-company-name">{lead.name}</div>
+                        <div className="lf-company-name">{lead.name} {lead.source === "simulated" && <span className="lf-badge gold">Simulation</span>}</div>
                         <div className="lf-company-addr"><MapPin size={11} /> {lead.address}</div>
                       </div>
                       <div>
-                        <PhoneBadge status={lead.phoneStatus} />
+                        <PhoneBadge status={lead.phoneStatus} simulated={!isLiveLead(lead)} />
                         <span className="lf-badge-sub">{lead.phone}</span>
                       </div>
                       <div>
                         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                          <EmailBadge status={lead.emailStatus} />
+                          <EmailBadge status={lead.emailStatus} simulated={!isLiveLead(lead)} />
                           {hasEmail && (
                             <button
                               className={`lf-action-btn ${isSent ? "green" : "gold"}`}
@@ -1087,11 +787,11 @@ export default function LeadFinderApp() {
         )}
 
         {/* AI MAILBOX VIEW */}
-        {view === "mailbox" && (
+        {(view === "mailbox" || view === "outreach") && (
           <>
             <div className="lf-hero">
-              <h1 className="lf-display">Inbound Webhooks & AI Mailbox</h1>
-              <p>Real-time incoming inquiries captured from Hostinger webhooks, with sender/receiver details, structured lead data extraction, and AI drafted replies.</p>
+              <h1 className="lf-display">{view === "outreach" ? "Outreach drafts" : "Mailbox"}</h1>
+              <p>{view === "outreach" ? "Review personalized cold email drafts and approve sending when the contact and copy are ready." : "Review inbound inquiries, extracted details, and drafted replies. Test the inbound flow from the simulator."}</p>
             </div>
 
             {/* Mailbox Status & Webhook Info Card */}
@@ -1124,7 +824,7 @@ export default function LeadFinderApp() {
                 <button
                   className="lf-action-btn"
                   style={{ fontSize: "12px", padding: "4px 10px" }}
-                  onClick={() => copyToClipboard(typeof window !== "undefined" && window.location.host.includes("trycloudflare.com") ? `${window.location.origin}/webhook` : "https://surgeon-rome-dangerous-metabolism.trycloudflare.com/webhook", "webhook-url")}
+                  onClick={() => copyToClipboard(`${window.location.origin}/webhook`, "webhook-url")}
                 >
                   {copiedId === "webhook-url" ? <Check size={12} color="var(--cardamom)" /> : <Copy size={12} />}
                   <span>Copy Webhook URL</span>
@@ -1133,7 +833,7 @@ export default function LeadFinderApp() {
             </div>
 
             {/* Subtab Navigation for Mailbox */}
-            <div className="lf-subtab-bar">
+            {view === "mailbox" && <div className="lf-subtab-bar">
               <button
                 className={`lf-subtab-btn ${mailboxSubTab === "inbound" ? "active" : ""}`}
                 onClick={() => setMailboxSubTab("inbound")}
@@ -1141,21 +841,15 @@ export default function LeadFinderApp() {
                 <Inbox size={14} /> Inbound Webhook Inquiries ({mailboxMessages.length})
               </button>
               <button
-                className={`lf-subtab-btn ${mailboxSubTab === "outreach" ? "active" : ""}`}
-                onClick={() => setMailboxSubTab("outreach")}
-              >
-                <Send size={14} /> Outbound Cold Drafts ({outreachList.filter(o => o.status === "pending_review").length} Pending)
-              </button>
-              <button
                 className={`lf-subtab-btn ${mailboxSubTab === "simulate" ? "active" : ""}`}
                 onClick={() => setMailboxSubTab("simulate")}
               >
                 <Sparkles size={14} /> Test Webhook Simulator
               </button>
-            </div>
+            </div>}
 
             {/* SUBTAB 1: INBOUND INQUIRIES & REPLIES (WITH SENDER, RECEIVER & MAIN DATA) */}
-            {mailboxSubTab === "inbound" && (
+            {view === "mailbox" && mailboxSubTab === "inbound" && (
               <div>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -1312,7 +1006,7 @@ export default function LeadFinderApp() {
             )}
 
             {/* SUBTAB 2: OUTBOUND COLD DRAFTS */}
-            {mailboxSubTab === "outreach" && (
+            {view === "outreach" && (
               <div>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
                   <h3 style={{ margin: 0, fontSize: "15px", fontWeight: 600, color: "var(--text)" }}>
@@ -1335,6 +1029,7 @@ export default function LeadFinderApp() {
                         <div className="lf-msg-top">
                           <div>
                             <div className="lf-msg-sender">{item.leadName || item.company} &lt;{item.recipient}&gt;</div>
+                            {!isLiveOutreach(item, allLeads) && <span className="lf-badge gold">Simulation · sending unavailable</span>}
                             <div className="lf-msg-subject">{item.subject}</div>
                           </div>
                           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -1371,6 +1066,7 @@ export default function LeadFinderApp() {
                                 subject: item.subject,
                                 body: item.body,
                                 status: item.status,
+                                source: isLiveOutreach(item, allLeads) ? "live" : "simulated",
                               });
                               setEditingSubject(item.subject);
                               setEditingBody(item.body);
@@ -1381,7 +1077,7 @@ export default function LeadFinderApp() {
                             <span>Edit & Review</span>
                           </button>
 
-                          {item.status !== "sent" && (
+                          {item.status !== "sent" && isLiveOutreach(item, allLeads) && (
                             <button
                               className="lf-action-btn gold"
                               style={{ fontSize: "12px" }}
@@ -1393,6 +1089,7 @@ export default function LeadFinderApp() {
                                   subject: item.subject,
                                   body: item.body,
                                   status: item.status,
+                                  source: "live",
                                 });
                                 setEditingSubject(item.subject);
                                 setEditingBody(item.body);
@@ -1412,13 +1109,13 @@ export default function LeadFinderApp() {
             )}
 
             {/* SUBTAB 3: INBOUND TEST SIMULATOR */}
-            {mailboxSubTab === "simulate" && (
+            {view === "mailbox" && mailboxSubTab === "simulate" && (
               <div className="lf-card">
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
                   <h3 style={{ margin: 0, fontSize: "15px", fontWeight: 600, color: "var(--text)", display: "flex", alignItems: "center", gap: 8 }}>
                     <Sparkles size={16} color="var(--turmeric)" /> Simulate Inbound Inquiry / Reply
                   </h3>
-                  <span style={{ fontSize: "12px", color: "var(--text-faint)" }}>Tests live DeepSeek metadata extraction & contextual reply drafting</span>
+                  <span style={{ fontSize: "12px", color: "var(--text-faint)" }}>Uses local draft templates; no AI or mail delivery calls</span>
                 </div>
 
                 <form onSubmit={handleSimulateInboundMail}>
@@ -1463,9 +1160,9 @@ export default function LeadFinderApp() {
             </div>
 
             <div className="lf-summary-row">
-              <div className="lf-stat"><div className="lf-stat-label">Total Leads Harvested</div><div className="lf-stat-value gold lf-mono">{allLeads.length}</div></div>
-              <div className="lf-stat"><div className="lf-stat-label">Deliverable Emails</div><div className="lf-stat-value green lf-mono">{allLeads.filter(l => l.emailStatus === "deliverable" || l.emailStatus === "valid").length}</div></div>
-              <div className="lf-stat"><div className="lf-stat-label">Outbound Drafts</div><div className="lf-stat-value gold lf-mono">{outreachList.length}</div></div>
+              <div className="lf-stat"><div className="lf-stat-label">Live leads</div><div className="lf-stat-value gold lf-mono">{allLeads.filter(isLiveLead).length}</div></div>
+              <div className="lf-stat"><div className="lf-stat-label">Deliverable Emails</div><div className="lf-stat-value green lf-mono">{allLeads.filter(l => isLiveLead(l) && (l.emailStatus === "deliverable" || l.emailStatus === "valid")).length}</div></div>
+              <div className="lf-stat"><div className="lf-stat-label">Live outreach drafts</div><div className="lf-stat-value gold lf-mono">{outreachList.filter(o => isLiveOutreach(o, allLeads)).length}</div></div>
               <div className="lf-stat"><div className="lf-stat-label">Inbound Inquiries</div><div className="lf-stat-value green lf-mono">{mailboxMessages.length}</div></div>
             </div>
 
@@ -1475,19 +1172,9 @@ export default function LeadFinderApp() {
                 {allLeads.length === 0 ? (
                   <div className="lf-empty" style={{ padding: "30px 0" }}><p>No data yet — run a search first.</p></div>
                 ) : (
-                  <div style={{ width: "100%", height: 220 }}>
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#3c3324" vertical={false} />
-                        <XAxis dataKey="name" tick={{ fill: "#b3a892", fontSize: 12 }} axisLine={{ stroke: "#3c3324" }} tickLine={false} />
-                        <YAxis tick={{ fill: "#b3a892", fontSize: 12 }} axisLine={false} tickLine={false} allowDecimals={false} />
-                        <Tooltip contentStyle={{ background: "#211c15", border: "1px solid #3c3324", borderRadius: 8, fontSize: 12.5 }} labelStyle={{ color: "#f3ecdd" }} />
-                        <Bar dataKey="value" radius={[6, 6, 0, 0]}>
-                          {chartData.map((entry, idx) => <Cell key={idx} fill={entry.color} />)}
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
+                  <Suspense fallback={<div className="lf-loading" style={{ height: 220 }}>Loading chart…</div>}>
+                    <AnalyticsChart data={chartData} />
+                  </Suspense>
                 )}
               </div>
 
@@ -1498,10 +1185,11 @@ export default function LeadFinderApp() {
                 ) : (
                   <div>
                     {searchHistory.slice(0, 8).map((h) => (
-                      <div
+                      <button
+                        type="button"
                         className="lf-search-history-item"
                         key={h.id}
-                        style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 0", borderBottom: "1px solid var(--border-soft)", fontSize: "13px", cursor: "pointer" }}
+                        style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", padding: "12px 0", border: 0, borderBottom: "1px solid var(--border-soft)", background: "transparent", textAlign: "left", fontSize: "13px", cursor: "pointer" }}
                         onClick={() => {
                           const parts = h.query.split(" · ");
                           if (parts[0]) setBusinessType(parts[0]);
@@ -1515,7 +1203,7 @@ export default function LeadFinderApp() {
                       >
                         <span style={{ color: "var(--text)", fontWeight: 500, display: "flex", alignItems: "center", gap: 6 }}><Search size={12} color="var(--turmeric)" /> {h.query}</span>
                         <span style={{ color: "var(--text-faint)", fontSize: 12, fontFamily: "IBM Plex Mono, monospace" }}>{h.count} leads · {new Date(h.date).toLocaleDateString()}</span>
-                      </div>
+                      </button>
                     ))}
                   </div>
                 )}
@@ -1528,10 +1216,10 @@ export default function LeadFinderApp() {
       {/* COLD EMAIL REVIEW & CONFIRMATION MODAL */}
       {activeColdMailModal && (
         <div className="lf-modal-backdrop" onClick={() => setActiveColdMailModal(null)}>
-          <div className="lf-modal-card" onClick={(e) => e.stopPropagation()}>
+          <div ref={modalRef} className="lf-modal-card" role="dialog" aria-modal="true" aria-labelledby="cold-mail-title" onClick={(e) => e.stopPropagation()}>
             <div className="lf-modal-header">
               <div>
-                <div className="lf-modal-title" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <div id="cold-mail-title" className="lf-modal-title" style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <Sparkles size={18} color="var(--turmeric)" />
                   Review Cold Email Draft
                 </div>
@@ -1539,14 +1227,15 @@ export default function LeadFinderApp() {
                   To: <strong>{activeColdMailModal.company}</strong> &lt;{activeColdMailModal.recipient}&gt;
                 </div>
               </div>
-              <button className="lf-modal-close" onClick={() => setActiveColdMailModal(null)}>✕</button>
+              <button className="lf-modal-close" aria-label="Close email review" onClick={() => setActiveColdMailModal(null)}>✕</button>
             </div>
 
             <div style={{ marginBottom: 16 }}>
-              <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-faint)", textTransform: "uppercase", display: "block", marginBottom: 6 }}>
+              <label htmlFor="cold-mail-subject" style={{ fontSize: 11, fontWeight: 600, color: "var(--text-faint)", textTransform: "uppercase", display: "block", marginBottom: 6 }}>
                 Subject Line
               </label>
               <input
+                id="cold-mail-subject"
                 className="lf-input"
                 value={editingSubject}
                 onChange={(e) => setEditingSubject(e.target.value)}
@@ -1554,10 +1243,11 @@ export default function LeadFinderApp() {
             </div>
 
             <div style={{ marginBottom: 20 }}>
-              <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-faint)", textTransform: "uppercase", display: "block", marginBottom: 6 }}>
+              <label htmlFor="cold-mail-body" style={{ fontSize: 11, fontWeight: 600, color: "var(--text-faint)", textTransform: "uppercase", display: "block", marginBottom: 6 }}>
                 Personalized Email Body (Editable)
               </label>
               <textarea
+                id="cold-mail-body"
                 className="lf-textarea"
                 style={{ minHeight: 220 }}
                 value={editingBody}
@@ -1609,7 +1299,7 @@ export default function LeadFinderApp() {
                   <span>{copiedId === "modal-copy" ? "Copied" : "Copy to Clipboard"}</span>
                 </button>
 
-                {activeColdMailModal.status !== "sent" && !confirmSendId && (
+                {activeColdMailModal.status !== "sent" && activeColdMailModal.source !== "simulated" && !confirmSendId && (
                   <button
                     className="lf-action-btn gold"
                     onClick={() => setConfirmSendId(activeColdMailModal.leadId)}
@@ -1618,6 +1308,8 @@ export default function LeadFinderApp() {
                     <span>Send Email (Requires Confirmation)</span>
                   </button>
                 )}
+
+                {activeColdMailModal.source === "simulated" && <span className="lf-badge gold">Simulation — sending unavailable</span>}
 
                 {activeColdMailModal.status === "sent" && (
                   <span className="lf-badge green" style={{ padding: "6px 12px" }}>

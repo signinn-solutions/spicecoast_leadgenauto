@@ -32,7 +32,7 @@ router.get('/webhook', (req, res) => {
       <body>
         <div class="card">
           <div class="header">
-            <span class="badge">● Online & Listening</span>
+            <span class="badge">● ${config.HOSTINGER_WEBHOOK_BEARER_TOKEN ? 'Ready' : 'Needs configuration'}</span>
             <h1>Hostinger Webhook</h1>
           </div>
           <p>This endpoint receives <strong>POST</strong> webhook events from Hostinger Agentic Mail. When incoming emails arrive, DeepSeek automatically processes them and generates contextual drafts.</p>
@@ -40,7 +40,7 @@ router.get('/webhook', (req, res) => {
             Method: <strong>POST</strong><br />
             Mailbox: <strong>${config.SENDER_MAILBOX}</strong><br />
             AI Model: <strong>${config.DEEPSEEK_MODEL}</strong><br />
-            Auth: <strong>${config.HOSTINGER_WEBHOOK_BEARER_TOKEN ? 'Bearer Token Active' : 'Public/Open'}</strong><br />
+            Auth: <strong>${config.HOSTINGER_WEBHOOK_BEARER_TOKEN ? 'Bearer Token Active' : 'Bearer token required'}</strong><br />
             Quota Used Today: <strong>${usedToday}/${config.DAILY_REPLY_LIMIT}</strong>
           </div>
           <a href="/" class="btn">Open SpiceCoast Dashboard →</a>
@@ -51,8 +51,8 @@ router.get('/webhook', (req, res) => {
   }
 
   return res.status(200).json({
-    status: 'online',
-    message: 'Hostinger Webhook listener is active and ready to receive POST payloads.',
+    status: config.HOSTINGER_WEBHOOK_BEARER_TOKEN ? 'online' : 'needs_configuration',
+    message: config.HOSTINGER_WEBHOOK_BEARER_TOKEN ? 'Hostinger Webhook listener is ready to receive POST payloads.' : 'Configure HOSTINGER_WEBHOOK_BEARER_TOKEN before sending POST payloads.',
     method: 'POST',
     endpoint: '/webhook',
     mailbox: config.SENDER_MAILBOX,

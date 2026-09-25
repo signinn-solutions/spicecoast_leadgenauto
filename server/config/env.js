@@ -50,7 +50,8 @@ export const config = {
   DAILY_LEAD_LIMIT: parseInt(process.env.DAILY_LEAD_LIMIT || process.env.DAILY_LIMIT || '50', 10),
   DAILY_REPLY_LIMIT: parseInt(process.env.DAILY_REPLY_LIMIT || '30', 10),
 
-  // File Paths for local JSON persistence
+  // SQLite storage and preserved legacy JSON import sources
+  DB_PATH: process.env.SPICECOAST_DB_PATH || path.join(rootDir, 'spicecoast.sqlite'),
   DAILY_USAGE_FILE: path.join(rootDir, 'daily_usage.json'),
   REPLY_USAGE_FILE: path.join(rootDir, 'reply_usage.json'),
   LEADS_HISTORY_FILE: path.join(rootDir, 'leads_history.json'),

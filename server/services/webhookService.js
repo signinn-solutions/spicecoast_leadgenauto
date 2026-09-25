@@ -5,6 +5,8 @@ import {
   saveReplyUsage,
   loadMailboxHistory,
   saveMailboxHistory,
+  loadAutoSendSetting,
+  withStorageOperationLock,
 } from './storageService.js';
 import { extractMetadataAndDraftReply } from './deepseekService.js';
 import { sendEmail } from './mailService.js';
@@ -44,13 +46,17 @@ export function looksLikeALeadReply(subject = '', body = '') {
 
 export function verifyWebhookAuth(authHeader = '') {
   if (!config.HOSTINGER_WEBHOOK_BEARER_TOKEN) {
-    return true;
+    return false;
   }
   const expected = `Bearer ${config.HOSTINGER_WEBHOOK_BEARER_TOKEN}`;
   return authHeader === expected || authHeader === config.HOSTINGER_WEBHOOK_BEARER_TOKEN;
 }
 
 export async function processIncomingEmail(payload = {}, authHeader = '', forceBypassAuth = false, manualAutoSend = null) {
+  return withStorageOperationLock('inbound-reply', () => runIncomingEmail(payload, authHeader, forceBypassAuth, manualAutoSend));
+}
+
+async function runIncomingEmail(payload, authHeader, forceBypassAuth, manualAutoSend) {
   if (!forceBypassAuth && !verifyWebhookAuth(authHeader)) {
     return {
       statusCode: 401,
@@ -100,16 +106,20 @@ export async function processIncomingEmail(payload = {}, authHeader = '', forceB
     senderEmail,
     senderName,
     receiverEmail,
-    receiverName
+    receiverName,
+    { useAI: !forceBypassAuth }
   );
 
-  const autoSendEffective = manualAutoSend !== null ? manualAutoSend : config.AUTO_SEND;
+  const autoSendEffective = manualAutoSend !== null ? manualAutoSend : loadAutoSendSetting();
   let deliveryStatus = 'drafted';
   let deliveryError = null;
 
   if (autoSendEffective) {
     try {
-      await sendEmail(senderEmail, subject, replyText);
+      const sendResult = await sendEmail(senderEmail, subject, replyText, { reply: true });
+      if (sendResult?.status === 'simulated') {
+        throw new Error('Email transport is not configured. Message was not sent.');
+      }
       deliveryStatus = 'sent';
       usedToday += 1;
       saveReplyUsage(today, usedToday);

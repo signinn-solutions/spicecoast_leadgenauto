@@ -56,6 +56,10 @@ export async function searchLeads(req, res, next) {
 export async function generateLeadColdMail(req, res, next) {
   try {
     const { leadId, name, email, city, country, businessType, address } = req.body || {};
+    const savedLead = loadLeadsHistory().leads?.find((lead) => lead.id === leadId);
+    if (!savedLead || !email || savedLead.email !== email || !['deliverable', 'valid'].includes(savedLead.emailStatus)) {
+      return res.status(400).json({ error: 'A saved lead with a matching email is required.' });
+    }
     const leadObj = {
       id: leadId || `lead-${Date.now()}`,
       name: name || 'Valued Partner',
@@ -66,14 +70,18 @@ export async function generateLeadColdMail(req, res, next) {
       address: address || '',
     };
 
-    const draft = await generateColdEmail(leadObj);
+    const draft = await generateColdEmail(leadObj, { useAI: savedLead.source !== 'simulated' });
 
     // Persist to outreach history
     const outreachHistory = loadOutreachHistory();
     const existingIdx = outreachHistory.findIndex((o) => o.leadId === leadId || (o.recipient && o.recipient === email));
+    if (existingIdx >= 0 && outreachHistory[existingIdx].status === 'sent') {
+      return res.status(409).json({ error: 'Outreach to this lead has already been sent.' });
+    }
     const outreachRecord = {
       id: `outreach-${leadObj.id}`,
       leadId: leadObj.id,
+      source: savedLead?.source || 'unknown',
       leadName: leadObj.name,
       recipient: leadObj.email,
       company: leadObj.name,

@@ -23,15 +23,15 @@ export function getDeepseekClient() {
  * Generates a highly customized B2B cold email draft for a discovered deliverable lead.
  * Does NOT send the email — saves it as a draft for human confirmation.
  */
-export async function generateColdEmail(lead = {}) {
+export async function generateColdEmail(lead = {}, { useAI = true } = {}) {
   const companyName = lead.name || 'Valued Partner';
   const city = lead.city || (lead.address ? lead.address.split(',')[1]?.trim() : '') || 'your region';
   const country = lead.country || (lead.address ? lead.address.split(',').pop()?.trim() : '') || '';
   const businessType = lead.businessType || 'Spice Import & Distribution';
 
-  const client = getDeepseekClient();
+  const client = useAI ? getDeepseekClient() : null;
 
-  if (client && config.DEEPSEEK_API_KEY) {
+  if (useAI && client && config.DEEPSEEK_API_KEY) {
     try {
       const prompt = `You are the International Export Sales Director for The Spice Coast (SpiceCoast), a premier origin exporter of premium spices based in Kerala, India.
 
@@ -126,12 +126,13 @@ export async function extractMetadataAndDraftReply(
   senderEmail = '',
   senderName = '',
   receiverEmail = '',
-  receiverName = ''
+  receiverName = '',
+  { useAI = true } = {}
 ) {
-  const client = getDeepseekClient();
+  const client = useAI ? getDeepseekClient() : null;
   const receiverEffective = receiverEmail || config.SENDER_MAILBOX;
 
-  if (client && config.DEEPSEEK_API_KEY) {
+  if (useAI && client && config.DEEPSEEK_API_KEY) {
     try {
       const prompt = `You are the Senior B2B Export Director for The Spice Coast (SpiceCoast), a premier Indian spice exporting and trading company based in Kerala, India.
 

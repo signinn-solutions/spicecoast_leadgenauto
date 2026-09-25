@@ -11,9 +11,11 @@
     "dev:ui": "vite",
     "dev": "concurrently \"node server/server.js\" \"vite\"",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "node --test server/test/workflows.test.js"
   },
   "dependencies": {
+    "better-sqlite3": "^12.2.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",

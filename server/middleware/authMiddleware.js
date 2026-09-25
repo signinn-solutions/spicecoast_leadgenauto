@@ -2,7 +2,7 @@ import config from '../config/env.js';
 
 export function verifyWebhookBearer(req, res, next) {
   if (!config.HOSTINGER_WEBHOOK_BEARER_TOKEN) {
-    return next();
+    return res.status(503).json({ status: 'rejected', reason: 'Webhook bearer token is not configured' });
   }
 
   const authHeader = req.headers.authorization || '';

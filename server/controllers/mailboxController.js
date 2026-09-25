@@ -5,6 +5,10 @@ import {
   saveMailboxHistory,
   loadOutreachHistory,
   saveOutreachHistory,
+  loadLeadsHistory,
+  loadAutoSendSetting,
+  saveAutoSendSetting,
+  withStorageOperationLock,
 } from '../services/storageService.js';
 import { processIncomingEmail } from '../services/webhookService.js';
 import { sendEmail } from '../services/mailService.js';
@@ -29,7 +33,7 @@ export async function getMailboxStatus(req, res, next) {
 
     return res.status(200).json({
       mailbox: config.SENDER_MAILBOX,
-      auto_send: config.AUTO_SEND,
+      auto_send: loadAutoSendSetting(),
       daily_limit: config.DAILY_REPLY_LIMIT,
       used_today: usedToday,
       remaining_today: Math.max(0, config.DAILY_REPLY_LIMIT - usedToday),
@@ -86,6 +90,9 @@ export async function updateColdMailDraft(req, res, next) {
 
     for (const item of outreach) {
       if (item.id === id) {
+        if (item.status !== 'pending_review') {
+          return res.status(409).json({ error: 'Only pending drafts can be edited.' });
+        }
         if (typeof subject === 'string') item.subject = subject;
         if (typeof body === 'string') item.body = body;
         updatedRecord = item;
@@ -105,14 +112,30 @@ export async function updateColdMailDraft(req, res, next) {
 }
 
 export async function sendColdMail(req, res, next) {
+  return withStorageOperationLock(`send-coldmail:${req.body?.id || 'missing'}`, () => sendColdMailUnlocked(req, res, next));
+}
+
+async function sendColdMailUnlocked(req, res, next) {
   try {
     const { id, to, subject, body } = req.body || {};
-    if (!to || !body) {
-      return res.status(400).json({ error: 'Missing recipient email or email body.' });
+    if (!id || !to || !body) {
+      return res.status(400).json({ error: 'Missing outreach draft ID, recipient email or email body.' });
+    }
+
+    const draft = loadOutreachHistory().find((item) => item.id === id);
+    if (!draft) return res.status(404).json({ error: 'Outreach draft not found.' });
+    if (draft.status !== 'pending_review') return res.status(409).json({ error: 'Outreach draft was already sent.' });
+    if (draft.recipient !== to) return res.status(400).json({ error: 'Recipient does not match outreach draft.' });
+    const savedLead = loadLeadsHistory().leads?.find((lead) => lead.id === draft.leadId);
+    if (draft.source === 'simulated' || savedLead?.source === 'simulated') {
+      return res.status(400).json({ error: 'Simulated leads cannot receive outreach email.' });
     }
 
     // Explicit confirmation dispatch
     const sendResult = await sendEmail(to, subject || 'Partnership with The Spice Coast', body);
+    if (sendResult?.status === 'simulated') {
+      return res.status(503).json({ error: 'Email transport is not configured. Message was not sent.' });
+    }
 
     const d = new Date();
     const sentDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
@@ -121,7 +144,7 @@ export async function sendColdMail(req, res, next) {
     const outreach = loadOutreachHistory();
     let found = false;
     for (const item of outreach) {
-      if (item.id === id || item.recipient === to) {
+      if ((id && item.id === id) || (!id && item.recipient === to)) {
         item.status = 'sent';
         item.sentAt = sentDate;
         if (subject) item.subject = subject;
@@ -164,7 +187,8 @@ export async function testIncomingEmail(req, res, next) {
     const message =
       body.message ||
       'Hello SpiceCoast Team,\n\nWe are looking to import 2 FCL containers of TGSEB Black Pepper and Alleppey Green Cardamom (8mm). Please share your current specification sheet and FOB price quotation.\n\nBest regards,\nMarkus Weber';
-    const autoSend = Boolean(body.auto_send);
+    // Simulation must only create a draft, even when auto-send is enabled.
+    const autoSend = false;
 
     const payload = {
       from: senderEmail,
@@ -181,14 +205,28 @@ export async function testIncomingEmail(req, res, next) {
 }
 
 export async function sendReviewedDraft(req, res, next) {
+  return withStorageOperationLock(`send-draft:${req.body?.id || 'missing'}`, () => sendReviewedDraftUnlocked(req, res, next));
+}
+
+async function sendReviewedDraftUnlocked(req, res, next) {
   try {
     const { id: messageId, to: toAddress, subject, reply: replyText } = req.body || {};
 
-    if (!toAddress || !replyText) {
-      return res.status(400).json({ error: 'Missing recipient address or reply body.' });
+    if (!messageId || !toAddress || !replyText) {
+      return res.status(400).json({ error: 'Missing mailbox draft ID, recipient address or reply body.' });
     }
 
-    const sendRes = await sendEmail(toAddress, subject || 'Spice Inquiry', replyText);
+    if (messageId) {
+      const message = loadMailboxHistory().find((item) => item.id === messageId);
+      if (!message) return res.status(404).json({ error: 'Mailbox draft not found.' });
+      if (message.status !== 'drafted') return res.status(409).json({ error: 'Mailbox draft was already handled.' });
+      if (message.sender !== toAddress) return res.status(400).json({ error: 'Recipient does not match mailbox draft.' });
+    }
+
+    const sendRes = await sendEmail(toAddress, subject || 'Spice Inquiry', replyText, { reply: true });
+    if (sendRes?.status === 'simulated') {
+      return res.status(503).json({ error: 'Email transport is not configured. Message was not sent.' });
+    }
 
     // Update message status in history
     const history = loadMailboxHistory();
@@ -196,7 +234,7 @@ export async function sendReviewedDraft(req, res, next) {
     const sentDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
 
     for (const msg of history) {
-      if (msg.id === messageId || (msg.sender === toAddress && msg.status === 'drafted')) {
+      if ((messageId && msg.id === messageId) || (!messageId && msg.sender === toAddress && msg.status === 'drafted')) {
         msg.status = 'sent';
         msg.sentAt = sentDate;
         break;
@@ -213,10 +251,11 @@ export async function sendReviewedDraft(req, res, next) {
 export async function toggleAutosend(req, res, next) {
   try {
     const { auto_send: nextState } = req.body || {};
-    if (typeof nextState !== 'undefined') {
-      config.AUTO_SEND = Boolean(nextState);
+    if (typeof nextState !== 'boolean') {
+      return res.status(400).json({ error: 'auto_send must be a boolean.' });
     }
-    return res.status(200).json({ auto_send: config.AUTO_SEND });
+    saveAutoSendSetting(nextState);
+    return res.status(200).json({ auto_send: loadAutoSendSetting() });
   } catch (err) {
     next(err);
   }

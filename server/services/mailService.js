@@ -21,7 +21,7 @@ export function getSmtpTransporter() {
   return smtpTransporter;
 }
 
-export async function sendEmailViaHostinger(toAddress, subject, body) {
+export async function sendEmailViaHostinger(toAddress, subject, body, { reply = false } = {}) {
   if (!config.HOSTINGER_API_TOKEN) {
     console.log('[Hostinger API] No HOSTINGER_API_TOKEN configured. Logged as simulated dispatch.');
     return {
@@ -30,7 +30,7 @@ export async function sendEmailViaHostinger(toAddress, subject, body) {
     };
   }
 
-  const cleanSubject = subject.toLowerCase().startsWith('re:') ? subject : `Re: ${subject}`;
+  const cleanSubject = reply && !subject.toLowerCase().startsWith('re:') ? `Re: ${subject}` : subject;
   const headers = {
     Authorization: `Bearer ${config.HOSTINGER_API_TOKEN}`,
     'Content-Type': 'application/json',
@@ -62,13 +62,13 @@ export async function sendEmailViaHostinger(toAddress, subject, body) {
   }
 }
 
-export async function sendEmailViaSmtp(toAddress, subject, body) {
+export async function sendEmailViaSmtp(toAddress, subject, body, { reply = false } = {}) {
   const transporter = getSmtpTransporter();
   if (!transporter) {
     throw new Error('SMTP transporter is not configured.');
   }
 
-  const cleanSubject = subject.toLowerCase().startsWith('re:') ? subject : `Re: ${subject}`;
+  const cleanSubject = reply && !subject.toLowerCase().startsWith('re:') ? `Re: ${subject}` : subject;
   const mailOptions = {
     from: config.SENDER_MAILBOX,
     to: toAddress,
@@ -79,15 +79,15 @@ export async function sendEmailViaSmtp(toAddress, subject, body) {
   return await transporter.sendMail(mailOptions);
 }
 
-export async function sendEmail(toAddress, subject, body) {
+export async function sendEmail(toAddress, subject, body, options = {}) {
   // If Hostinger API Token is present, prefer Hostinger Agentic Mail API
   if (config.HOSTINGER_API_TOKEN) {
-    return await sendEmailViaHostinger(toAddress, subject, body);
+    return await sendEmailViaHostinger(toAddress, subject, body, options);
   }
   // If SMTP is configured, send via SMTP transporter
   if (config.SMTP_HOST && config.SMTP_USER) {
-    return await sendEmailViaSmtp(toAddress, subject, body);
+    return await sendEmailViaSmtp(toAddress, subject, body, options);
   }
   // Otherwise simulate
-  return await sendEmailViaHostinger(toAddress, subject, body);
+  return await sendEmailViaHostinger(toAddress, subject, body, options);
 }
