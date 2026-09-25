@@ -1,0 +1,41 @@
+services:
+  - type: web
+    name: spicecoast-leadgen
+    env: docker
+    dockerfilePath: ./Dockerfile
+    plan: starter
+    region: oregon
+    healthCheckPath: /health
+    disk:
+      name: spicecoast-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: HOST
+        value: 0.0.0.0
+      - key: PORT
+        value: 10000
+      - key: SPICECOAST_DB_PATH
+        value: /var/data/spicecoast.sqlite
+      - key: SENDER_MAILBOX
+        value: sales@thespicecoast.com
+      - key: AUTO_SEND
+        value: "false"
+      - key: DAILY_LEAD_LIMIT
+        value: "50"
+      - key: DAILY_REPLY_LIMIT
+        value: "30"
+      - key: GOOGLE_API_KEY
+        sync: false
+      - key: HUNTER_API_KEY
+        sync: false
+      - key: DEEPSEEK_API_KEY
+        sync: false
+      - key: DEEPSEEK_MODEL
+        value: deepseek-chat
+      - key: HOSTINGER_API_TOKEN
+        sync: false
+      - key: HOSTINGER_WEBHOOK_BEARER_TOKEN
+        sync: false

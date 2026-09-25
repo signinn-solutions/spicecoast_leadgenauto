@@ -12,7 +12,9 @@
     "dev": "concurrently \"node server/server.js\" \"vite\"",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "node --test server/test/workflows.test.js"
+    "test": "node --test server/test/workflows.test.js",
+    "docker:build": "docker build -t spicecoast-leadgen .",
+    "docker:run": "docker run -p 5000:10000 --env-file .env spicecoast-leadgen"
   },
   "dependencies": {
     "better-sqlite3": "^12.2.0",

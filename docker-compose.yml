@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  leadgen-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: spicecoast-leadgen
+    ports:
+      - "5000:10000"
+    environment:
+      - NODE_ENV=production
+      - HOST=0.0.0.0
+      - PORT=10000
+      - SPICECOAST_DB_PATH=/var/data/spicecoast.sqlite
+      - SENDER_MAILBOX=sales@thespicecoast.com
+      - AUTO_SEND=false
+      - DAILY_LEAD_LIMIT=50
+      - DAILY_REPLY_LIMIT=30
+      # API Keys (Can be loaded from .env)
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      - HUNTER_API_KEY=${HUNTER_API_KEY:-}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - DEEPSEEK_MODEL=${DEEPSEEK_MODEL:-deepseek-chat}
+      - HOSTINGER_API_TOKEN=${HOSTINGER_API_TOKEN:-}
+      - HOSTINGER_WEBHOOK_BEARER_TOKEN=${HOSTINGER_WEBHOOK_BEARER_TOKEN:-}
+    volumes:
+      - leadgen-data:/var/data
+    restart: unless-stopped
+
+volumes:
+  leadgen-data:
