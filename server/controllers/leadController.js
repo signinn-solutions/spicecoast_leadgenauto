@@ -55,22 +55,22 @@ export async function searchLeads(req, res, next) {
 
 export async function generateLeadColdMail(req, res, next) {
   try {
-    const { leadId, name, email, city, country, businessType, address } = req.body || {};
+    const { leadId, email } = req.body || {};
     const savedLead = loadLeadsHistory().leads?.find((lead) => lead.id === leadId);
     if (!savedLead || !email || savedLead.email !== email || !['deliverable', 'valid'].includes(savedLead.emailStatus)) {
       return res.status(400).json({ error: 'A saved lead with a matching email is required.' });
     }
     const leadObj = {
-      id: leadId || `lead-${Date.now()}`,
-      name: name || 'Valued Partner',
-      email: email || '',
-      city: city || '',
-      country: country || '',
-      businessType: businessType || 'Spice Importer',
-      address: address || '',
+      id: savedLead.id,
+      name: savedLead.name || 'Valued Partner',
+      email: savedLead.email,
+      city: savedLead.city || '',
+      country: savedLead.country || '',
+      businessType: savedLead.businessType || 'Spice Importer',
+      address: savedLead.address || '',
     };
 
-    const draft = await generateColdEmail(leadObj, { useAI: savedLead.source !== 'simulated' });
+    const draft = await generateColdEmail(leadObj, { useAI: savedLead.source === 'live' });
 
     // Persist to outreach history
     const outreachHistory = loadOutreachHistory();
