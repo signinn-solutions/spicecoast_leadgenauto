@@ -11,7 +11,7 @@ const rootDir = path.resolve(__dirname, '../..');
 
 export const config = {
   PORT: parseInt(process.env.PORT || '5000', 10),
-  HOST: process.env.HOST || '127.0.0.1',
+  HOST: process.env.HOST || '0.0.0.0',
   CORS_ORIGIN: process.env.CORS_ORIGIN || '*',
   NODE_ENV: process.env.NODE_ENV || 'development',
   ADMIN_EMAIL: process.env.ADMIN_EMAIL || '',

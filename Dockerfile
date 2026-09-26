@@ -1,7 +1,7 @@
 # ==========================================================
 # Stage 1: Build & Dependencies
 # ==========================================================
-FROM node:24-bookworm-slim AS builder
+FROM node:22-bookworm-slim AS builder
 
 WORKDIR /app
 
@@ -30,7 +30,7 @@ RUN npm prune --omit=dev
 # ==========================================================
 # Stage 2: Production Runtime
 # ==========================================================
-FROM node:24-bookworm-slim AS runner
+FROM node:22-bookworm-slim AS runner
 
 WORKDIR /app
 
@@ -39,8 +39,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Create directory for persistent SQLite data if mounted
-RUN mkdir -p /var/data && chown -R node:node /var/data
+# Create directories for persistent data and ensure permissions for node user
+RUN mkdir -p /var/data /app/data && chown -R node:node /var/data /app
 
 # Copy production node_modules from builder
 COPY --from=builder --chown=node:node /app/node_modules ./node_modules
@@ -66,4 +66,4 @@ EXPOSE 10000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
   CMD node -e "fetch('http://127.0.0.1:' + (process.env.PORT || 10000) + '/health').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))"
 
-CMD ["npm", "start"]
+CMD ["node", "server/server.js"]

@@ -264,7 +264,6 @@ export default function OutreachView({
           </p>
         </div>
       ) : viewMode === "grid" ? (
-        {/* PREMIUM CARD GRID VIEW */}
         <div className="lf-outreach-grid">
           {filteredList.map((item) => {
             const isLive = isLiveOutreach(item);
