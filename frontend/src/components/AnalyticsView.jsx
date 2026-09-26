@@ -21,7 +21,7 @@ export default function AnalyticsView({
   searchHistory = [],
   onRerunSearch,
 }) {
-  const isLiveLead = (lead) => lead.source !== "simulated";
+  const isLiveLead = (lead) => lead.source === "live";
   const liveLeads = allLeads.filter(isLiveLead);
 
   const deliverable = liveLeads.filter(
@@ -33,13 +33,15 @@ export default function AnalyticsView({
   const notFound = liveLeads.filter(
     (l) => l.emailStatus === "not_found" || l.emailStatus === "invalid"
   ).length;
-  const simulatedCount = allLeads.length - liveLeads.length;
+  const simulatedCount = allLeads.filter((lead) => lead.source === "simulated").length;
+  const unconfirmedCount = allLeads.length - liveLeads.length - simulatedCount;
 
   const chartData = [
     { name: "Deliverable", value: deliverable, color: "#10b981" },
     { name: "Risky / Accept All", value: risky, color: "#f59e0b" },
     { name: "Not Found", value: notFound, color: "#ef4444" },
     { name: "Simulation", value: simulatedCount, color: "#71717a" },
+    { name: "Unconfirmed", value: unconfirmedCount, color: "#64748b" },
   ];
 
   // Group leads by country
@@ -87,7 +89,7 @@ export default function AnalyticsView({
         <div className="lf-stat-card">
           <span className="lf-stat-title">Proposals Synthesized</span>
           <div className="lf-stat-number lf-mono text-amber">{outreachList.length}</div>
-          <span className="lf-stat-subtext">DeepSeek Cold Email Drafts</span>
+          <span className="lf-stat-subtext">Saved outreach drafts</span>
         </div>
 
         <div className="lf-stat-card">
@@ -104,7 +106,7 @@ export default function AnalyticsView({
           <div className="lf-panel-header">
             <div>
               <h3 className="lf-panel-title">Email Deliverability Breakdown</h3>
-              <p className="lf-panel-desc">Hunter.io verification status across discovered contacts</p>
+              <p className="lf-panel-desc">Verification status for live contacts, plus example and unconfirmed records</p>
             </div>
           </div>
 

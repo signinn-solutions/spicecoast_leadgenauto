@@ -10,6 +10,7 @@ import {
   loadOutreachHistory,
   saveOutreachHistory,
   withStorageOperationLock,
+  withOutreachHistoryLock,
 } from './storageService.js';
 import { generateColdEmail } from './deepseekService.js';
 
@@ -157,6 +158,7 @@ export async function searchPlaces(query, neededCount = 20, seenMap = {}, existi
 
   const newUniquePlaces = [];
   let duplicatesSkipped = 0;
+  let providerError = null;
   let pageToken = null;
   const MAX_PAGES = 3;
 
@@ -176,22 +178,25 @@ export async function searchPlaces(query, neededCount = 20, seenMap = {}, existi
         method: 'POST',
         headers,
         body: JSON.stringify(body),
+        signal: AbortSignal.timeout(10000),
       });
 
       if (response.status === 403) {
         const errJson = await response.json().catch(() => ({}));
         const msg = errJson.error?.message || 'Permission Denied';
         console.warn(`[Google Places API Error 403]: ${msg}`);
+        providerError = `Google Places denied the request: ${msg}`;
         break;
       }
 
       if (!response.ok) {
         console.warn(`[Google Places API Error ${response.status}]`);
+        providerError = `Google Places returned HTTP ${response.status}`;
         break;
       }
 
       const data = await response.json();
-      const places = data.places || [];
+      const places = Array.isArray(data.places) ? data.places : [];
       if (places.length === 0) break;
 
       for (const place of places) {
@@ -209,6 +214,7 @@ export async function searchPlaces(query, neededCount = 20, seenMap = {}, existi
       await new Promise((r) => setTimeout(r, 1000));
     } catch (e) {
       console.warn(`[Google Places API Request Error]: ${e.message}`);
+      providerError = `Google Places request failed: ${e.message}`;
       break;
     }
   }
@@ -216,6 +222,7 @@ export async function searchPlaces(query, neededCount = 20, seenMap = {}, existi
   return {
     places: newUniquePlaces.slice(0, neededCount),
     duplicatesSkipped,
+    providerError,
   };
 }
 
@@ -223,13 +230,13 @@ export async function findEmails(domain) {
   if (!domain || !config.HUNTER_API_KEY) return [];
   const url = `https://api.hunter.io/v2/domain-search?domain=${encodeURIComponent(domain)}&api_key=${encodeURIComponent(config.HUNTER_API_KEY)}&limit=3`;
   try {
-    const response = await fetch(url);
+    const response = await fetch(url, { signal: AbortSignal.timeout(10000) });
     if (!response.ok) {
       console.warn(`[Hunter.io domain-search status ${response.status}]`);
       return [];
     }
     const data = await response.json();
-    return data.data?.emails || [];
+    return Array.isArray(data.data?.emails) ? data.data.emails : [];
   } catch (e) {
     console.warn(`[Hunter.io findEmails error]: ${e.message}`);
     return [];
@@ -240,10 +247,10 @@ export async function verifyEmail(email) {
   if (!email || !config.HUNTER_API_KEY) return 'unknown';
   const url = `https://api.hunter.io/v2/email-verifier?email=${encodeURIComponent(email)}&api_key=${encodeURIComponent(config.HUNTER_API_KEY)}`;
   try {
-    const response = await fetch(url);
+    const response = await fetch(url, { signal: AbortSignal.timeout(10000) });
     if (!response.ok) return 'unknown';
     const data = await response.json();
-    return data.data?.status || 'unknown';
+    return typeof data.data?.status === 'string' ? data.data.status : 'unknown';
   } catch (e) {
     return 'unknown';
   }
@@ -308,6 +315,11 @@ async function runLeadSearch({ businessType, city, country, requestedCount = 20,
   if ((mode === 'live' || mode === 'auto') && config.GOOGLE_API_KEY && config.HUNTER_API_KEY) {
     try {
       const searchRes = await searchPlaces(query, fetchCount, seenMap, existingLeads);
+      if (mode === 'live' && searchRes.providerError && searchRes.places.length === 0) {
+        const err = new Error(searchRes.providerError);
+        err.statusCode = 502;
+        throw err;
+      }
       const places = searchRes.places || [];
       duplicatesSkipped = searchRes.duplicatesSkipped || 0;
 
@@ -333,8 +345,8 @@ async function runLeadSearch({ businessType, city, country, requestedCount = 20,
           if (domain) {
             const emails = await findEmails(domain);
             await new Promise((r) => setTimeout(r, 400));
-            if (emails && emails.length > 0) {
-              const bestEmail = emails[0].value;
+            const bestEmail = emails.find((item) => typeof item?.value === 'string' && item.value.includes('@'))?.value;
+            if (bestEmail) {
               const status = await verifyEmail(bestEmail);
               await new Promise((r) => setTimeout(r, 400));
               email = bestEmail;
@@ -343,7 +355,7 @@ async function runLeadSearch({ businessType, city, country, requestedCount = 20,
                   ? 'deliverable'
                   : status === 'accept_all' || status === 'webmail'
                   ? 'risky'
-                  : 'invalid';
+                  : status === 'invalid' ? 'invalid' : 'unknown';
             }
           }
 
@@ -396,7 +408,7 @@ async function runLeadSearch({ businessType, city, country, requestedCount = 20,
       console.warn(`[Lead Finder Live API Error]: ${e.message}`);
       if (mode === 'live') {
         const err = new Error(`Live API search error: ${e.message}`);
-        err.statusCode = 500;
+        err.statusCode = e.statusCode || 502;
         throw err;
       }
       isLiveMode = false;
@@ -463,31 +475,34 @@ async function runLeadSearch({ businessType, city, country, requestedCount = 20,
   saveLeadsHistory(history);
 
   // Sync any drafted cold emails to outreach history
-  const outreachHistory = loadOutreachHistory();
-  for (const lead of processedLeads) {
-    if (lead.coldMailDraft) {
-      const existingIdx = outreachHistory.findIndex((o) => o.leadId === lead.id || o.recipient === lead.email);
-      const outreachRecord = {
-        id: `outreach-${lead.id}`,
-        leadId: lead.id,
-        source: lead.source,
-        leadName: lead.name,
-        recipient: lead.email,
-        company: lead.name,
-        location: `${lead.city || cleanCity}, ${lead.country || cleanCountry}`,
-        subject: lead.coldMailDraft.subject,
-        body: lead.coldMailDraft.body,
-        status: 'pending_review',
-        createdAt: today,
-      };
-      if (existingIdx >= 0) {
-        outreachHistory[existingIdx] = outreachRecord;
-      } else {
-        outreachHistory.unshift(outreachRecord);
+  await withOutreachHistoryLock(() => {
+    const outreachHistory = loadOutreachHistory();
+    for (const lead of processedLeads) {
+      if (lead.coldMailDraft) {
+        const existingIdx = outreachHistory.findIndex((o) => o.leadId === lead.id || o.recipient === lead.email);
+        const outreachRecord = {
+          id: `outreach-${lead.id}`,
+          leadId: lead.id,
+          source: lead.source,
+          leadName: lead.name,
+          recipient: lead.email,
+          company: lead.name,
+          location: `${lead.city || cleanCity}, ${lead.country || cleanCountry}`,
+          subject: lead.coldMailDraft.subject,
+          body: lead.coldMailDraft.body,
+          status: 'pending_review',
+          createdAt: today,
+        };
+        if (existingIdx >= 0) {
+          // A concurrent review or send must never be reset to pending.
+          if (outreachHistory[existingIdx].status === 'pending_review') outreachHistory[existingIdx] = outreachRecord;
+        } else {
+          outreachHistory.unshift(outreachRecord);
+        }
       }
     }
-  }
-  saveOutreachHistory(outreachHistory);
+    saveOutreachHistory(outreachHistory);
+  });
 
   return {
     leads: processedLeads,

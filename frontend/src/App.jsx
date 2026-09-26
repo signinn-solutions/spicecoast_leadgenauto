@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import Sidebar from "./components/Sidebar.jsx";
 import Header from "./components/Header.jsx";
 import DashboardView from "./components/DashboardView.jsx";
@@ -12,8 +12,9 @@ import AnalyticsView from "./components/AnalyticsView.jsx";
 import SystemHealthView from "./components/SystemHealthView.jsx";
 import Toast from "./components/Toast.jsx";
 import { Loader2 } from "lucide-react";
+import { apiFetch as fetch } from './api.js';
 
-export default function LeadFinderApp() {
+export default function LeadFinderApp({ onLogout }) {
   // Navigation & Shell State
   const [activeView, setActiveView] = useState("dashboard"); // dashboard, search, results, outreach, mailbox, analytics, health
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
@@ -67,71 +68,48 @@ export default function LeadFinderApp() {
   const [isSendingReplyId, setIsSendingReplyId] = useState(null);
   const [isSimulatingInbound, setIsSimulatingInbound] = useState(false);
   const [isTogglingAutoSend, setIsTogglingAutoSend] = useState(false);
+  const refreshPromiseRef = useRef(null);
+  const lastFetchErrorRef = useRef(false);
 
-  // Today Date & Remaining calculation
-  const todayStr = new Date().toISOString().slice(0, 10);
-  const remainingLeads =
-    leadUsage.date === todayStr
-      ? Math.max(0, (leadUsage.limit || 50) - leadUsage.count)
-      : leadUsage.limit || 50;
+  // The server returns today's usage in its own local date; avoid a UTC day rollover.
+  const localNow = new Date();
+  const todayStr = leadUsage.date || `${localNow.getFullYear()}-${String(localNow.getMonth() + 1).padStart(2, "0")}-${String(localNow.getDate()).padStart(2, "0")}`;
+  const remainingLeads = Math.max(0, (leadUsage.limit ?? 50) - (leadUsage.count ?? 0));
 
   // Primary Data Fetch
-  const fetchAllData = useCallback(async (isSilent = false) => {
+  const fetchAllData = useCallback((isSilent = false) => {
+    if (refreshPromiseRef.current) return refreshPromiseRef.current;
     if (!isSilent) setIsRefreshing(true);
-    try {
-      const [statusRes, leadsRes] = await Promise.all([
-        fetch("/api/status"),
-        fetch("/api/leads"),
-      ]);
-
-      if (statusRes.ok && leadsRes.ok) {
-        const [statusData, leadsData] = await Promise.all([
-          statusRes.json(),
-          leadsRes.json(),
-        ]);
+    const request = (async () => {
+      try {
+        const urls = ["/api/status", "/api/leads", "/api/mailbox/status", "/api/mailbox/messages", "/api/mailbox/outreach"];
+        const responses = await Promise.all(urls.map((url) => fetch(url, { signal: AbortSignal.timeout(10000) })));
+        const failed = responses.find((response) => !response.ok);
+        if (failed) throw new Error(`API returned HTTP ${failed.status}.`);
+        const [statusData, leadsData, mailboxData, messagesData, outreachData] = await Promise.all(responses.map((response) => response.json()));
         setServerOnline(true);
+        lastFetchErrorRef.current = false;
         setServerStatus(statusData);
-        setLeadUsage({
-          date: statusData.date,
-          count: statusData.count,
-          limit: statusData.limit,
-        });
+        setLeadUsage({ date: statusData.date, count: statusData.count, limit: statusData.limit });
         setAllLeads(leadsData.all_leads || []);
         setSearchHistory(leadsData.search_history || []);
-      }
-
-      // Fetch mailbox & outreach
-      try {
-        const [mStatusRes, mMsgsRes, outreachRes] = await Promise.all([
-          fetch("/api/mailbox/status"),
-          fetch("/api/mailbox/messages"),
-          fetch("/api/mailbox/outreach"),
-        ]);
-        if (mStatusRes.ok) setMailboxStatus(await mStatusRes.json());
-        if (mMsgsRes.ok) {
-          const msgs = await mMsgsRes.json();
-          setMailboxMessages(msgs.messages || []);
+        setMailboxStatus(mailboxData);
+        setMailboxMessages(messagesData.messages || []);
+        setOutreachList(outreachData.outreach || []);
+      } catch (error) {
+        setServerOnline(false);
+        if (!isSilent || !lastFetchErrorRef.current) {
+          setNotice({ type: "error", title: "Connection Error", text: `Unable to refresh SpiceCoast data: ${error.message}` });
         }
-        if (outreachRes.ok) {
-          const oData = await outreachRes.json();
-          setOutreachList(oData.outreach || []);
-        }
-      } catch (err) {
-        console.warn("Mailbox fetch error:", err);
+        lastFetchErrorRef.current = true;
+      } finally {
+        setLoading(false);
+        if (!isSilent) setIsRefreshing(false);
       }
-    } catch (e) {
-      setServerOnline(false);
-      if (!isSilent) {
-        setNotice({
-          type: "error",
-          title: "Connection Error",
-          text: "Unable to communicate with the SpiceCoast automation API.",
-        });
-      }
-    } finally {
-      setLoading(false);
-      if (!isSilent) setIsRefreshing(false);
-    }
+    })();
+    refreshPromiseRef.current = request;
+    request.finally(() => { if (refreshPromiseRef.current === request) refreshPromiseRef.current = null; });
+    return request;
   }, []);
 
   // Mount effect
@@ -139,24 +117,17 @@ export default function LeadFinderApp() {
     fetchAllData();
   }, [fetchAllData]);
 
-  // Real-time silent polling every 4 seconds for webhook updates
+  // Poll after each request settles, so slow requests cannot stack up.
   useEffect(() => {
-    const timer = setInterval(() => {
-      Promise.all([
-        fetch("/api/mailbox/messages").then((r) => (r.ok ? r.json() : null)),
-        fetch("/api/mailbox/outreach").then((r) => (r.ok ? r.json() : null)),
-        fetch("/api/mailbox/status").then((r) => (r.ok ? r.json() : null)),
-      ])
-        .then(([msgsData, outreachData, statusData]) => {
-          if (msgsData?.messages) setMailboxMessages(msgsData.messages);
-          if (outreachData?.outreach) setOutreachList(outreachData.outreach);
-          if (statusData) setMailboxStatus(statusData);
-        })
-        .catch(() => {});
-    }, 4000);
-
-    return () => clearInterval(timer);
-  }, []);
+    let active = true;
+    let timer;
+    const poll = async () => {
+      await fetchAllData(true);
+      if (active) timer = setTimeout(poll, 4000);
+    };
+    timer = setTimeout(poll, 4000);
+    return () => { active = false; clearTimeout(timer); };
+  }, [fetchAllData]);
 
   // Lead Discovery Search Handler
   const handleSearch = async (e) => {
@@ -169,7 +140,7 @@ export default function LeadFinderApp() {
       });
       return;
     }
-    if (count > remainingLeads && searchMode !== "simulated") {
+    if (count > remainingLeads) {
       setNotice({
         type: "warning",
         title: "Daily Quota Exceeded",
@@ -296,8 +267,7 @@ export default function LeadFinderApp() {
         const data = await res.json();
         const draft = data.draft;
 
-        // Update lead in memory
-        lead.coldMailDraft = draft;
+        // Update lead in memory without mutating a React state object.
         setAllLeads((prev) =>
           prev.map((l) => (l.id === lead.id ? { ...l, coldMailDraft: draft } : l))
         );
@@ -306,13 +276,13 @@ export default function LeadFinderApp() {
         );
 
         if (selectedLead && selectedLead.id === lead.id) {
-          setSelectedLead({ ...lead, coldMailDraft: draft });
+          setSelectedLead((prev) => ({ ...prev, coldMailDraft: draft }));
         }
 
         setNotice({
           type: "success",
-          title: "Pitch Synthesized",
-          text: `DeepSeek synthesized proposal for ${lead.name}.`,
+          title: "Draft Prepared",
+          text: `Outreach draft prepared for ${lead.name}. Review it before sending.`,
         });
 
         fetchAllData(true);
@@ -383,6 +353,7 @@ export default function LeadFinderApp() {
           text: "Cold outreach draft changes preserved in database.",
         });
         fetchAllData(true);
+        return true;
       } else {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.error || "Could not update outreach draft.");
@@ -393,6 +364,7 @@ export default function LeadFinderApp() {
         title: "Save Failed",
         text: err.message,
       });
+      return false;
     } finally {
       setIsSavingDraft(false);
     }
@@ -530,7 +502,7 @@ export default function LeadFinderApp() {
         setNotice({
           type: "success",
           title: "Inbound Processed",
-          text: `Inquiry from ${payload.from_name} analyzed by DeepSeek.`,
+          text: `Test inquiry from ${payload.from_name || payload.from || "the sample sender"} was drafted.`,
         });
         fetchAllData(true);
       } else {
@@ -589,7 +561,11 @@ export default function LeadFinderApp() {
         title: "URL Copied",
         text: "Inbound webhook endpoint copied to clipboard.",
       });
-    } catch {}
+      return true;
+    } catch {
+      setNotice({ type: "error", title: "Copy Failed", text: "Could not copy the webhook URL. Copy it manually from this page." });
+      return false;
+    }
   };
 
   // Export CSV Handler
@@ -617,7 +593,11 @@ export default function LeadFinderApp() {
       l.website || "",
       l.foundAt || "",
     ]);
-    const quote = (val) => `"${String(val ?? "").replaceAll('"', '""')}"`;
+    const quote = (val) => {
+      const value = String(val ?? "");
+      const safe = /^[\s\u0000-\u001f]*[=+\-@]/u.test(value) || /^[\u0000-\u001f]/u.test(value) ? `'${value}` : value;
+      return `"${safe.replaceAll('"', '""')}"`;
+    };
     const csv = [headers, ...rows].map((row) => row.map(quote).join(",")).join("\r\n");
     const blob = new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
@@ -651,9 +631,9 @@ export default function LeadFinderApp() {
   }
 
   const isLiveOutreach = (item) => {
-    if (item.source === "simulated") return false;
+    if (item.source !== "live") return false;
     const found = allLeads.find((l) => l.id === item.leadId);
-    return found ? found.source !== "simulated" : true;
+    return found?.source === "live";
   };
 
   const pendingOutreachCount = outreachList.filter(
@@ -688,6 +668,7 @@ export default function LeadFinderApp() {
       <div className={`lf-layout-wrap ${isSidebarCollapsed ? "sidebar-collapsed" : ""}`}>
         {/* Header */}
         <Header
+          onLogout={onLogout}
           activeView={activeView}
           onOpenMobileSidebar={() => setIsMobileSidebarOpen(true)}
           onRefresh={() => fetchAllData(false)}

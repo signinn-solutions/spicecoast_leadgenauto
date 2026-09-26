@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from "react";
+import { safeUrl } from "../safeUrl.js";
 import {
   Users,
   Search,
@@ -39,7 +40,7 @@ export default function LeadsView({
   const [selectedLeadIds, setSelectedLeadIds] = useState(new Set());
   const [copiedId, setCopiedId] = useState(null);
 
-  const isLiveLead = (lead) => lead.source !== "simulated";
+  const isLiveLead = (lead) => lead.source === "live";
 
   // Base list depending on scope
   const baseList = leadScope === "current" && currentResults.length > 0 ? currentResults : allLeads;
@@ -61,13 +62,13 @@ export default function LeadsView({
       }
 
       // Status pill match
-      const hasEmail = lead.emailStatus === "deliverable" || lead.emailStatus === "valid";
-      const hasPhone = lead.phoneStatus === "valid";
+      const hasEmail = isLiveLead(lead) && (lead.emailStatus === "deliverable" || lead.emailStatus === "valid");
+      const hasPhone = isLiveLead(lead) && lead.phoneStatus === "valid";
 
       if (filterStatus === "deliverable") return hasEmail;
       if (filterStatus === "validPhone") return hasPhone;
       if (filterStatus === "both") return hasEmail && hasPhone;
-      if (filterStatus === "hasWebsite") return Boolean(lead.website && lead.website !== "#");
+      if (filterStatus === "hasWebsite") return Boolean(safeUrl(lead.website));
       if (filterStatus === "liveOnly") return isLiveLead(lead);
 
       return true;
@@ -83,8 +84,8 @@ export default function LeadsView({
       list.sort((a, b) => (a.foundAt || "").localeCompare(b.foundAt || ""));
     } else if (sortBy === "deliverable") {
       list.sort((a, b) => {
-        const aDeliv = a.emailStatus === "deliverable" || a.emailStatus === "valid" ? 1 : 0;
-        const bDeliv = b.emailStatus === "deliverable" || b.emailStatus === "valid" ? 1 : 0;
+        const aDeliv = isLiveLead(a) && (a.emailStatus === "deliverable" || a.emailStatus === "valid") ? 1 : 0;
+        const bDeliv = isLiveLead(b) && (b.emailStatus === "deliverable" || b.emailStatus === "valid") ? 1 : 0;
         return bDeliv - aDeliv;
       });
     } else {
@@ -98,13 +99,13 @@ export default function LeadsView({
   const counts = useMemo(() => {
     const total = baseList.length;
     const deliverable = baseList.filter(
-      (l) => l.emailStatus === "deliverable" || l.emailStatus === "valid"
+      (l) => isLiveLead(l) && (l.emailStatus === "deliverable" || l.emailStatus === "valid")
     ).length;
-    const validPhone = baseList.filter((l) => l.phoneStatus === "valid").length;
+    const validPhone = baseList.filter((l) => isLiveLead(l) && l.phoneStatus === "valid").length;
     const fullyVerified = baseList.filter(
-      (l) => (l.emailStatus === "deliverable" || l.emailStatus === "valid") && l.phoneStatus === "valid"
+      (l) => isLiveLead(l) && (l.emailStatus === "deliverable" || l.emailStatus === "valid") && l.phoneStatus === "valid"
     ).length;
-    const withWebsite = baseList.filter((l) => l.website && l.website !== "#").length;
+    const withWebsite = baseList.filter((l) => safeUrl(l.website)).length;
     const liveOnly = baseList.filter(isLiveLead).length;
     return { total, deliverable, validPhone, fullyVerified, withWebsite, liveOnly };
   }, [baseList]);
@@ -338,8 +339,10 @@ export default function LeadsView({
             <tbody>
               {sortedLeads.map((lead) => {
                 const isSelected = selectedLeadIds.has(lead.id);
-                const hasDeliverable =
-                  lead.emailStatus === "deliverable" || lead.emailStatus === "valid";
+                const hasDeliverable = isLiveLead(lead) &&
+                  (lead.emailStatus === "deliverable" || lead.emailStatus === "valid");
+                const hasValidPhone = isLiveLead(lead) && lead.phoneStatus === "valid";
+                const websiteUrl = safeUrl(lead.website);
                 const isSent = lead.coldMailDraft?.status === "sent";
 
                 return (
@@ -364,13 +367,19 @@ export default function LeadsView({
                           <span
                             className="clickable-name"
                             onClick={() => onSelectLead(lead)}
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter" || event.key === " ") {
+                                event.preventDefault();
+                                onSelectLead(lead);
+                              }
+                            }}
                             role="button"
                             tabIndex={0}
                           >
                             {lead.name}
                           </span>
-                          {lead.source === "simulated" && (
-                            <span className="lf-badge-pill gold sm">Demo</span>
+                          {!isLiveLead(lead) && (
+                            <span className="lf-badge-pill gold sm">{lead.source === "simulated" ? "Demo" : "Source unconfirmed"}</span>
                           )}
                         </div>
                         <div className="lf-table-company-addr">
@@ -386,15 +395,15 @@ export default function LeadsView({
                         <div className="lf-contact-status-row">
                           <span
                             className={`lf-badge-pill sm ${
-                              lead.phoneStatus === "valid" ? "green" : "muted"
+                              hasValidPhone ? "green" : "muted"
                             }`}
                           >
-                            {lead.phoneStatus === "valid" ? (
+                            {hasValidPhone ? (
                               <CheckCircle2 size={10} />
                             ) : (
                               <XCircle size={10} />
                             )}
-                            <span>{lead.phoneStatus || "Unknown"}</span>
+                            <span>{isLiveLead(lead) ? lead.phoneStatus || "Unknown" : "Unverified"}</span>
                           </span>
                         </div>
                         <div className="lf-contact-val lf-mono">
@@ -437,7 +446,7 @@ export default function LeadsView({
                             ) : (
                               <XCircle size={10} />
                             )}
-                            <span>{lead.emailStatus || "Not found"}</span>
+                            <span>{isLiveLead(lead) ? lead.emailStatus || "Not found" : "Unverified"}</span>
                           </span>
                         </div>
                         <div className="lf-contact-val lf-mono">
@@ -502,9 +511,9 @@ export default function LeadsView({
                     {/* Actions */}
                     <td style={{ textAlign: "right" }}>
                       <div className="lf-table-actions">
-                        {lead.website && lead.website !== "#" && (
+                        {websiteUrl && (
                           <a
-                            href={lead.website}
+                            href={websiteUrl}
                             target="_blank"
                             rel="noreferrer"
                             className="lf-btn-icon-sm"

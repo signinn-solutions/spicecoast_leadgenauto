@@ -11,9 +11,12 @@ const rootDir = path.resolve(__dirname, '../..');
 
 export const config = {
   PORT: parseInt(process.env.PORT || '5000', 10),
-  HOST: process.env.HOST || '0.0.0.0',
+  HOST: process.env.HOST || '127.0.0.1',
   CORS_ORIGIN: process.env.CORS_ORIGIN || '*',
   NODE_ENV: process.env.NODE_ENV || 'development',
+  ADMIN_EMAIL: process.env.ADMIN_EMAIL || '',
+  ADMIN_PASSWORD_HASH: process.env.ADMIN_PASSWORD_HASH || '',
+  TRUST_PROXY: process.env.TRUST_PROXY === '1' ? 1 : false,
 
   // Google Places API
   GOOGLE_API_KEY: process.env.GOOGLE_API_KEY || '',

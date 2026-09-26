@@ -7,6 +7,8 @@ import { fileURLToPath } from 'url';
 import config from './config/env.js';
 import apiRoutes from './routes/apiRoutes.js';
 import webhookRoutes from './routes/webhookRoutes.js';
+import { authRoutes, requireDashboardAuth } from './middleware/dashboardAuth.js';
+import { handleWebhook } from './controllers/mailboxController.js';
 import { notFoundHandler, globalErrorHandler } from './middleware/errorHandler.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -17,7 +19,14 @@ const distPath = path.join(rootDir, 'dist');
 const app = express();
 
 // Trust proxy for reverse proxy / hosting setups (Hostinger / Nginx / Cloudflare)
-app.set('trust proxy', 1);
+app.set('trust proxy', config.TRUST_PROXY);
+app.disable('x-powered-by');
+app.use((req, res, next) => {
+  res.set('X-Content-Type-Options', 'nosniff');
+  res.set('X-Frame-Options', 'DENY');
+  res.set('Referrer-Policy', 'same-origin');
+  next();
+});
 
 // CORS Configuration
 if (config.CORS_ORIGIN === '*') {
@@ -39,8 +48,8 @@ if (config.CORS_ORIGIN === '*') {
 }
 
 // Request body parsing
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(express.json({ limit: '256kb' }));
+app.use(express.urlencoded({ extended: false, limit: '256kb' }));
 
 // Health check endpoint
 app.get('/health', (req, res) => {
@@ -55,7 +64,9 @@ app.get('/health', (req, res) => {
 
 // Mount Routes
 app.use('/', webhookRoutes); // /webhook
-app.use('/api', apiRoutes);  // /api/*
+app.post('/api/webhook', handleWebhook); // Both webhook paths use their own bearer authentication.
+app.use('/api/auth', authRoutes);
+app.use('/api', requireDashboardAuth, apiRoutes);  // /api/*
 
 // Serve React production build (dist/) if present
 if (fs.existsSync(distPath)) {

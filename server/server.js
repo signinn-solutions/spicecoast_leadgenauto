@@ -1,7 +1,10 @@
 import app from './app.js';
 import config from './config/env.js';
+import { closeStorage, loadDailyUsage } from './services/storageService.js';
 
 function startServer(port) {
+  // Detect inaccessible/corrupt storage before advertising a healthy server.
+  loadDailyUsage();
   const server = app.listen(port, config.HOST, () => {
     console.log(`\n🌶️  SpiceCoast Express API Server running on http://${config.HOST}:${port}`);
     console.log(`📡  Health Check: http://${config.HOST}:${port}/health`);
@@ -23,21 +26,22 @@ function startServer(port) {
   });
 
   // Graceful shutdown handling
-  process.on('SIGTERM', () => {
-    console.log('SIGTERM signal received: closing HTTP server...');
+  let stopping = false;
+  const shutdown = () => {
+    if (stopping) return;
+    stopping = true;
+    console.log('Closing HTTP server...');
+    const deadline = setTimeout(() => process.exit(1), 30000);
+    deadline.unref();
     server.close(() => {
+      closeStorage();
+      clearTimeout(deadline);
       console.log('HTTP server closed.');
       process.exit(0);
     });
-  });
-
-  process.on('SIGINT', () => {
-    console.log('SIGINT signal received: closing HTTP server...');
-    server.close(() => {
-      console.log('HTTP server closed.');
-      process.exit(0);
-    });
-  });
+  };
+  process.on('SIGTERM', shutdown);
+  process.on('SIGINT', shutdown);
 
   return server;
 }

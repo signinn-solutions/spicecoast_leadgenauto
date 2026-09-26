@@ -1,14 +1,16 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useRef } from "react";
 import { CheckCircle2, AlertCircle, XCircle, Info, X } from "lucide-react";
 
 export default function Toast({ notice, onClose }) {
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
   useEffect(() => {
-    if (!notice) return;
+    if (!notice || notice.type === 'error') return;
     const timer = setTimeout(() => {
-      onClose();
+      closeRef.current();
     }, 5000);
     return () => clearTimeout(timer);
-  }, [notice, onClose]);
+  }, [notice]);
 
   if (!notice) return null;
 

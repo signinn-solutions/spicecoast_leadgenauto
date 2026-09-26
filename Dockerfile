@@ -1,7 +1,7 @@
 # ==========================================================
 # Stage 1: Build & Dependencies
 # ==========================================================
-FROM node:20-bookworm-slim AS builder
+FROM node:24-bookworm-slim AS builder
 
 WORKDIR /app
 
@@ -30,11 +30,11 @@ RUN npm prune --omit=dev
 # ==========================================================
 # Stage 2: Production Runtime
 # ==========================================================
-FROM node:20-bookworm-slim AS runner
+FROM node:24-bookworm-slim AS runner
 
 WORKDIR /app
 
-# Install python3/libsqlite3 if required by better-sqlite3 runtime
+# Runtime certificate bundle for HTTPS providers
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
@@ -52,9 +52,6 @@ COPY --from=builder --chown=node:node /app/dist ./dist
 COPY --from=builder --chown=node:node /app/server ./server
 COPY --from=builder --chown=node:node /app/package.json ./package.json
 
-# Copy baseline seed data files (optional fallback for SQLite initial import)
-COPY --chown=node:node daily_usage.json* reply_usage.json* leads_history.json* seen_places.json* mailbox_history.json* outreach_history.json* ./
-
 # Set environment defaults for Render / Docker
 ENV NODE_ENV=production
 ENV HOST=0.0.0.0
@@ -65,7 +62,7 @@ USER node
 
 EXPOSE 10000
 
-# Health check using built-in Node 20 fetch
+# Health check using built-in Node fetch
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
   CMD node -e "fetch('http://127.0.0.1:' + (process.env.PORT || 10000) + '/health').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))"
 

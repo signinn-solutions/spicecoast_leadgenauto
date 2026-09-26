@@ -15,8 +15,8 @@ export default defineConfig(({ mode }) => {
     server: {
       port: 3000,
       proxy: {
-        '/api': { target: apiTarget, changeOrigin: true },
-        '/webhook': { target: apiTarget, changeOrigin: true },
+        '/api': { target: apiTarget, changeOrigin: false },
+        '/webhook': { target: apiTarget, changeOrigin: false },
       },
     },
   };

@@ -1,51 +1,66 @@
 # SpiceCoast lead operations
 
-SpiceCoast is a single-organization app for finding business leads, enriching contact emails, reviewing outreach drafts, and handling inbound mailbox inquiries. The frontend is React/Vite; the API is Express. See [AUDIT_AND_PLAN.md](AUDIT_AND_PLAN.md) for the verified issues, remediation status, and deployment limits.
+A **single-business, single-tenant** application for finding business leads, enriching email addresses, reviewing outreach, and handling inbound inquiries. Your dashboard, sidebar, and existing lead workflow are preserved. React/Vite and Express are separated into frontend/ and server/; SQLite owns operational data.
 
-## What exists
+## Run locally
 
-- Search businesses with Google Places, enrich emails with Hunter.io, and track daily search usage.
-- Use simulated search when testing without Places credentials. Simulated records are examples, not real prospects.
-- Generate, edit, review, and send outreach drafts.
-- Receive mailbox webhooks, draft replies with DeepSeek or a local fallback, review and send replies, and view outreach/mailbox history.
-- Inspect lead analytics and export the current result set as CSV.
+1. Use a current Node.js 22 or 24 release. Run `npm ci` (PowerShell: `npm.cmd ci`).
+2. Copy `.env.example` to `.env` and configure only the providers you use. Keep `HOST=127.0.0.1` and `NODE_ENV=development` for local development.
+3. Run `npm run dev` and open http://localhost:3000. The API defaults to port 5000. Set `VITE_API_TARGET` if the backend uses another port.
+4. Restart the API after changing server code or environment settings. Vite updates frontend changes automatically.
 
-External provider behavior depends on valid credentials. A successful build or isolated test does not verify those providers.
+Simulated leads and test inquiries are clearly marked and cannot be sent. Simulated searches still consume the application's daily discovery quota; they do not call discovery/enrichment providers. Drafting falls back to local templates when AI is unavailable.
 
-## Layout
+## Dashboard access
+
+Production requires `ADMIN_EMAIL` and `ADMIN_PASSWORD_HASH`. There is one administrator for this business, with no public registration or tenant system.
+
+1. Run `npm run auth:hash`. Enter a unique password of at least 14 characters at the hidden prompt.
+2. Put the generated hash and your administrator email in the server's environment or secret manager. Keep the plaintext password in your password manager.
+3. Use HTTPS and `NODE_ENV=production`. The dashboard presents the sign-in form. Production cookies are Secure, HttpOnly, and SameSite=Strict; write actions require the session's CSRF token.
+
+If neither admin variable is set, development access is allowed only over a loopback connection with a localhost/loopback Host. Production fails closed if credentials are missing or malformed. Sessions expire after eight hours, are revoked on logout or credential changes, and end on server restart. Session and login throttling state are held in memory: run **one API process**. Set `TRUST_PROXY=1` only behind exactly one trusted reverse proxy that preserves the public Host header and controls forwarded IP headers. Otherwise leave it at 0.
+
+## Existing workflow
+
+- **Overview:** lead counts, deliverability, saved drafts, and mailbox activity.
+- **Prospector:** search using Google Places and Hunter, or explicit simulation.
+- **Leads:** search/filter saved contacts, inspect details, export CSV, generate and edit drafts.
+- **Outreach:** review drafts and send only to saved, verified, live contacts.
+- **Mailbox:** review webhook inquiries and replies; the simulator never sends mail.
+- **Analytics / System Health:** inspect actual records and configured integrations. A configured key is not proof that the provider is reachable.
+
+Auto-send is off by default. Enable it only after validating your provider configuration and reviewing generated reply content. Generated drafts still require business accuracy review; the app cannot verify commercial promises.
+
+## Structure
 
 | Path | Purpose |
 | --- | --- |
-| `frontend/` | React application and Vite entry point |
-| `server/` | Express API, provider integrations, storage, and tests |
-| `dist/` | Generated frontend build, served by Express in production |
-| `server.js` | Hosting-compatible root entry point |
-| `spicecoast.sqlite` | SQLite operational storage, created on first API use and ignored by Git |
-| Root JSON files | Preserved source files for first-run import and rollback |
-| Root Python files | Older standalone utilities, outside the Node app runtime |
+| `frontend/src/components/` | Dashboard and workflow screens |
+| `frontend/src/hooks/` | Shared dialog keyboard/focus behavior |
+| `frontend/src/api.js` | Session-aware API requests |
+| `server/controllers/` | Request validation and workflow responses |
+| `server/services/` | Provider integration, quotas, SQLite storage |
+| `server/middleware/` | Dashboard sessions and safe error responses |
+| `server/test/` | Isolated workflow, auth, mail, and AI regressions |
+| `server/scripts/` | Administrator password hash helper |
+| `dist/` | Generated frontend served by Express |
+| `docs/` | Deployment, cleanup, and UI review reports |
 
-## Local setup
+JavaScript remains the active language. Unreferenced TypeScript declarations and tooling were removed; renaming JSX files would not provide meaningful type safety. A future conversion should introduce validated API contracts and a real type-check gate together.
 
-1. Use Node.js 20 or newer and install packages with `npm install` (on PowerShell with script execution disabled, use `npm.cmd install`).
-2. Copy `.env.example` to `.env`. Leave unused provider keys blank. Set `HOST=127.0.0.1` for local use and configure secrets only in `.env` or the host's secret manager.
-3. Run `npm run dev` to start the API on port 5000 and Vite on port 3000. PowerShell users can use `npm.cmd run dev`.
-4. Open `http://localhost:3000`.
+## Data and deployment
 
-On first API use, SQLite imports the six existing JSON datasets in one transaction. It keeps the JSON files unchanged and does not import them again after the database has values. Set `SPICECOAST_DB_PATH` to place the database outside the repository. Back up the SQLite database and its WAL state before deployment changes; stopping the API before copying is the simplest safe backup method. To roll back to the old JSON-based version, stop the API and redeploy the prior code with the preserved JSON files. Changes made after the SQLite migration will not appear in those old files.
+SQLite is created at `SPICECOAST_DB_PATH` (default `./spicecoast.sqlite`). On initialization, missing dataset rows import the six legacy JSON files transactionally. Originals are preserved and never updated by the application. Existing database rows are not overwritten. Corrupt import JSON stops initialization.
 
-To build and serve through Express, run `npm run build` and then `npm start`. `PORT` selects the API port. `VITE_API_TARGET` can point the development proxy to another API URL, for example `http://127.0.0.1:5100`.
+The current database uses dataset rows containing JSON, plus settings, with WAL and shared process-level workflow locks. This is appropriate for one modest-volume business instance; it is not a horizontally scaled database architecture. Mailbox history retains 150 messages and outreach history 200 records, matching existing behavior. These views are not an unlimited archive.
 
-## Checks
+Run `npm run build` then `npm start` to serve the app through Express. Docker uses Node 24 and a persistent `/var/data` volume. Images exclude operational JSON, databases, and environment secrets. See [deployment and migration](docs/DEPLOYMENT.md) for importing existing history and backing up/restoring data. Do not run multiple replicas against this database.
 
-```text
-npm run build
-npm test
-```
+Webhook POSTs at `/webhook` and `/api/webhook` require `HOSTINGER_WEBHOOK_BEARER_TOKEN`, independently of dashboard sessions. Preserve the provider's event/message ID for retry deduplication. Mail transport requires Hostinger or SMTP credentials. SMTP requires encrypted transport.
 
-The isolated Node tests redirect JSON storage to a temporary directory and block network calls. The older `server/test/test_endpoints.js` script remains for reference but is unsafe against real configuration: it mutates operational JSON files and may call external providers. Do not use it as the normal test command.
+## Verification
 
-## Deployment boundaries
+`npm test` runs temporary-database tests with provider stubs; it does not send real mail or consume provider quotas. `npm run build` verifies the production frontend bundle. `npm audit` checks current registry advisories. The compatibility command `node server/test/test_endpoints.js` also uses isolated workflow tests.
 
-This is **not yet a public multi-tenant SaaS**. API routes for lead data, mailbox data, and sending are currently unprotected. SQLite persists records, but the current read-modify-write workflows require a single API process and still need concurrency hardening. Keep the app behind trusted access until identity, organization isolation, backup/restore operations, and deployment-specific secret handling are designed and implemented. Those are product capabilities outside this cleanup.
-
-Set a nonempty `HOSTINGER_WEBHOOK_BEARER_TOKEN` for inbound webhook calls. Mail delivery needs a configured Hostinger API token or SMTP credentials. `AUTO_SEND=false` is the safer default for review-based operation. Confirm the provider endpoint, sender mailbox, and allowed CORS origin for your host before exposing the app.
+See [audit and remaining checks](AUDIT_AND_PLAN.md). Browser visual/mobile QA, an actual Docker build, live provider validation, and a deployment backup/restore exercise remain deployment checks; passing local tests does not prove those outcomes.

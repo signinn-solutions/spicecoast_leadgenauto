@@ -64,13 +64,13 @@ export default function SystemHealthView({
       active: mailboxStatus.has_webhook_token,
       details: mailboxStatus.has_webhook_token
         ? "Bearer token auth active"
-        : "Unauthenticated (testing mode)",
+        : "Blocked until a bearer token is configured",
     },
   ];
 
   const handleCopy = async () => {
     const url = `${window.location.origin}/webhook`;
-    await onCopyWebhook(url);
+    if (!(await onCopyWebhook(url))) return;
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -103,11 +103,11 @@ export default function SystemHealthView({
               >
                 {item.active ? (
                   <>
-                    <CheckCircle2 size={11} /> Connected
+                    <CheckCircle2 size={11} /> Configured
                   </>
                 ) : (
                   <>
-                    <AlertCircle size={11} /> Offline / Fallback
+                    <AlertCircle size={11} /> Not configured
                   </>
                 )}
               </span>

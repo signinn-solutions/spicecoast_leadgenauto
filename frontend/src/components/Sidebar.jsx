@@ -1,4 +1,5 @@
-import React from "react";
+import React, { useEffect, useRef, useState } from "react";
+import useDialogFocus from "../hooks/useDialogFocus.js";
 import {
   Compass,
   Search,
@@ -14,6 +15,7 @@ import {
   Sprout,
   Activity,
   Zap,
+  X,
 } from "lucide-react";
 
 export default function Sidebar({
@@ -30,6 +32,24 @@ export default function Sidebar({
   leadUsage = { count: 0, limit: 50 },
   replyUsage = { count: 0, limit: 30 },
 }) {
+  const sidebarRef = useRef(null);
+  const [isMobileViewport, setIsMobileViewport] = useState(() =>
+    window.matchMedia("(max-width: 768px)").matches
+  );
+
+  useEffect(() => {
+    const media = window.matchMedia("(max-width: 768px)");
+    const syncViewport = () => setIsMobileViewport(media.matches);
+    media.addEventListener("change", syncViewport);
+    return () => media.removeEventListener("change", syncViewport);
+  }, []);
+
+  useEffect(() => {
+    if (sidebarRef.current) sidebarRef.current.inert = isMobileViewport && !isMobileOpen;
+  }, [isMobileViewport, isMobileOpen]);
+
+  useDialogFocus(isMobileViewport && isMobileOpen, sidebarRef, onCloseMobile, ".lf-collapse-btn");
+
   const leadPercent = Math.min(
     100,
     Math.round(((leadUsage.count || 0) / (leadUsage.limit || 50)) * 100)
@@ -96,19 +116,26 @@ export default function Sidebar({
 
   return (
     <>
-      {isMobileOpen && (
+      {isMobileViewport && isMobileOpen && (
         <div
           className="lf-sidebar-backdrop"
-          onClick={onCloseMobile}
+          onPointerDown={(event) => {
+            if (event.target === event.currentTarget) onCloseMobile?.();
+          }}
           aria-hidden="true"
         />
       )}
 
       <aside
+        ref={sidebarRef}
         className={`lf-sidebar ${isCollapsed ? "collapsed" : ""} ${
           isMobileOpen ? "mobile-open" : ""
         }`}
         aria-label="Application sidebar"
+        aria-hidden={isMobileViewport && !isMobileOpen ? true : undefined}
+        aria-modal={isMobileViewport && isMobileOpen ? true : undefined}
+        role={isMobileViewport && isMobileOpen ? "dialog" : undefined}
+        tabIndex={-1}
       >
         {/* Brand Header */}
         <div className="lf-sidebar-header">
@@ -120,6 +147,14 @@ export default function Sidebar({
             }}
             role="button"
             tabIndex={0}
+            aria-label="Go to overview"
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                onSelectView("dashboard");
+                onCloseMobile?.();
+              }
+            }}
           >
             <div className="lf-brand-icon">
               <Sprout size={20} />
@@ -135,11 +170,11 @@ export default function Sidebar({
           <button
             type="button"
             className="lf-collapse-btn"
-            onClick={onToggleCollapse}
-            aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-            title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            onClick={isMobileViewport ? onCloseMobile : onToggleCollapse}
+            aria-label={isMobileViewport ? "Close menu" : isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            title={isMobileViewport ? "Close menu" : isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
           >
-            {isCollapsed ? <ChevronRight size={15} /> : <ChevronLeft size={15} />}
+            {isMobileViewport ? <X size={15} /> : isCollapsed ? <ChevronRight size={15} /> : <ChevronLeft size={15} />}
           </button>
         </div>
 
@@ -153,6 +188,7 @@ export default function Sidebar({
               if (onCloseMobile) onCloseMobile();
             }}
             title="Start new prospect discovery"
+            aria-label="New Discovery"
           >
             <PlusCircle size={16} />
             {!isCollapsed && <span>New Discovery</span>}
@@ -175,6 +211,7 @@ export default function Sidebar({
                   if (onCloseMobile) onCloseMobile();
                 }}
                 aria-current={isActive ? "page" : undefined}
+                aria-label={item.label}
                 title={isCollapsed ? item.label : undefined}
               >
                 <span className="lf-nav-item-icon">

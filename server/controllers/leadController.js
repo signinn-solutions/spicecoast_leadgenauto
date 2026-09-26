@@ -1,5 +1,5 @@
 import config from '../config/env.js';
-import { loadDailyUsage, loadLeadsHistory, saveLeadsHistory, loadOutreachHistory, saveOutreachHistory } from '../services/storageService.js';
+import { loadDailyUsage, loadLeadsHistory, loadOutreachHistory, saveOutreachHistory, withOutreachHistoryLock } from '../services/storageService.js';
 import { executeLeadSearch } from '../services/leadFinderService.js';
 import { generateColdEmail } from '../services/deepseekService.js';
 
@@ -23,9 +23,29 @@ export async function getStatus(req, res, next) {
 export async function getLeads(req, res, next) {
   try {
     const history = loadLeadsHistory();
+    const outreachByLeadId = new Map();
+    for (const record of loadOutreachHistory()) {
+      if (record.leadId && !outreachByLeadId.has(record.leadId)) outreachByLeadId.set(record.leadId, record);
+    }
+    const leads = (history.leads || []).map((lead) => {
+      const { coldMailDraft: _staleDraft, ...currentLead } = lead;
+      const record = outreachByLeadId.get(lead.id);
+      if (!record) return currentLead;
+      return {
+        ...currentLead,
+        coldMailDraft: {
+          id: record.id,
+          subject: record.subject,
+          body: record.body,
+          status: record.status,
+          generatedAt: record.createdAt,
+          ...(record.sentAt ? { sentAt: record.sentAt } : {}),
+        },
+      };
+    });
     const { date: today, count: usedToday } = loadDailyUsage();
     return res.status(200).json({
-      all_leads: history.leads || [],
+      all_leads: leads,
       search_history: history.searches || [],
       usage: { date: today, count: usedToday },
     });
@@ -54,11 +74,23 @@ export async function searchLeads(req, res, next) {
 }
 
 export async function generateLeadColdMail(req, res, next) {
+  return withOutreachHistoryLock(() => generateLeadColdMailUnlocked(req, res, next));
+}
+
+async function generateLeadColdMailUnlocked(req, res, next) {
   try {
     const { leadId, email } = req.body || {};
     const savedLead = loadLeadsHistory().leads?.find((lead) => lead.id === leadId);
     if (!savedLead || !email || savedLead.email !== email || !['deliverable', 'valid'].includes(savedLead.emailStatus)) {
       return res.status(400).json({ error: 'A saved lead with a matching email is required.' });
+    }
+    const outreachHistory = loadOutreachHistory();
+    const existingIdx = outreachHistory.findIndex((o) => o.leadId === leadId || (o.recipient && o.recipient === email));
+    if (existingIdx >= 0 && outreachHistory[existingIdx].status === 'sent') {
+      return res.status(409).json({ error: 'Outreach to this lead has already been sent.' });
+    }
+    if (existingIdx >= 0 && outreachHistory[existingIdx].leadId && outreachHistory[existingIdx].leadId !== leadId) {
+      return res.status(409).json({ error: 'This email already belongs to another outreach draft.' });
     }
     const leadObj = {
       id: savedLead.id,
@@ -73,11 +105,6 @@ export async function generateLeadColdMail(req, res, next) {
     const draft = await generateColdEmail(leadObj, { useAI: savedLead.source === 'live' });
 
     // Persist to outreach history
-    const outreachHistory = loadOutreachHistory();
-    const existingIdx = outreachHistory.findIndex((o) => o.leadId === leadId || (o.recipient && o.recipient === email));
-    if (existingIdx >= 0 && outreachHistory[existingIdx].status === 'sent') {
-      return res.status(409).json({ error: 'Outreach to this lead has already been sent.' });
-    }
     const outreachRecord = {
       id: `outreach-${leadObj.id}`,
       leadId: leadObj.id,

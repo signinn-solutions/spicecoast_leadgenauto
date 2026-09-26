@@ -32,10 +32,17 @@ export default function DashboardView({
   onSelectLead,
   onQuickSearch,
 }) {
-  const isLiveLead = (lead) => lead.source !== "simulated";
+  const isLiveLead = (lead) => lead.source === "live";
   const isLiveOutreach = (item) =>
-    item.source !== "simulated" &&
-    allLeads.find((lead) => lead.id === item.leadId)?.source !== "simulated";
+    item.source === "live" &&
+    allLeads.find((lead) => lead.id === item.leadId)?.source === "live";
+
+  const activateOnKeyDown = (event, action) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      action();
+    }
+  };
 
   const liveLeads = allLeads.filter(isLiveLead);
   const totalLeads = allLeads.length;
@@ -107,6 +114,7 @@ export default function DashboardView({
         <div
           className="lf-stat-card"
           onClick={() => onNavigate("results")}
+          onKeyDown={(event) => activateOnKeyDown(event, () => onNavigate("results"))}
           role="button"
           tabIndex={0}
         >
@@ -122,7 +130,7 @@ export default function DashboardView({
               {liveLeads.length} live Places
             </span>
             <span className="lf-stat-subtext">
-              {totalLeads - liveLeads.length} simulated contacts
+              {totalLeads - liveLeads.length} demo / unconfirmed
             </span>
           </div>
         </div>
@@ -131,6 +139,7 @@ export default function DashboardView({
         <div
           className="lf-stat-card"
           onClick={() => onNavigate("results")}
+          onKeyDown={(event) => activateOnKeyDown(event, () => onNavigate("results"))}
           role="button"
           tabIndex={0}
         >
@@ -155,6 +164,7 @@ export default function DashboardView({
         <div
           className="lf-stat-card"
           onClick={() => onNavigate("outreach")}
+          onKeyDown={(event) => activateOnKeyDown(event, () => onNavigate("outreach"))}
           role="button"
           tabIndex={0}
         >
@@ -177,6 +187,7 @@ export default function DashboardView({
         <div
           className="lf-stat-card"
           onClick={() => onNavigate("mailbox")}
+          onKeyDown={(event) => activateOnKeyDown(event, () => onNavigate("mailbox"))}
           role="button"
           tabIndex={0}
         >
@@ -219,11 +230,12 @@ export default function DashboardView({
           <div
             className="lf-pipeline-step active"
             onClick={() => onNavigate("search")}
+            onKeyDown={(event) => activateOnKeyDown(event, () => onNavigate("search"))}
             role="button"
             tabIndex={0}
           >
             <div className="lf-step-badge">1. Discovery</div>
-            <div className="lf-step-count lf-mono">{totalLeads}</div>
+            <div className="lf-step-count lf-mono">{liveLeads.length}</div>
             <div className="lf-step-name">Businesses Identified</div>
             <div className="lf-step-sub">Google Places Geocoding</div>
           </div>
@@ -233,6 +245,7 @@ export default function DashboardView({
           <div
             className="lf-pipeline-step active"
             onClick={() => onNavigate("results")}
+            onKeyDown={(event) => activateOnKeyDown(event, () => onNavigate("results"))}
             role="button"
             tabIndex={0}
           >
@@ -249,12 +262,13 @@ export default function DashboardView({
           <div
             className="lf-pipeline-step active"
             onClick={() => onNavigate("outreach")}
+            onKeyDown={(event) => activateOnKeyDown(event, () => onNavigate("outreach"))}
             role="button"
             tabIndex={0}
           >
             <div className="lf-step-badge">3. Pitch Studio</div>
             <div className="lf-step-count lf-mono text-amber">
-              {outreachList.length}
+              {outreachList.filter(isLiveOutreach).length}
             </div>
             <div className="lf-step-name">AI Drafts Synthesized</div>
             <div className="lf-step-sub">DeepSeek Personalized Specs</div>
@@ -265,6 +279,7 @@ export default function DashboardView({
           <div
             className="lf-pipeline-step active"
             onClick={() => onNavigate("outreach")}
+            onKeyDown={(event) => activateOnKeyDown(event, () => onNavigate("outreach"))}
             role="button"
             tabIndex={0}
           >
@@ -279,6 +294,7 @@ export default function DashboardView({
           <div
             className="lf-pipeline-step active"
             onClick={() => onNavigate("mailbox")}
+            onKeyDown={(event) => activateOnKeyDown(event, () => onNavigate("mailbox"))}
             role="button"
             tabIndex={0}
           >
@@ -312,6 +328,7 @@ export default function DashboardView({
                 key={idx}
                 className="lf-quick-pick-card"
                 onClick={() => onQuickSearch(pick.niche, pick.city, pick.country)}
+                onKeyDown={(event) => activateOnKeyDown(event, () => onQuickSearch(pick.niche, pick.city, pick.country))}
                 role="button"
                 tabIndex={0}
               >
@@ -367,14 +384,15 @@ export default function DashboardView({
                     key={lead.id}
                     className="lf-recent-lead-item"
                     onClick={() => onSelectLead(lead)}
+                    onKeyDown={(event) => activateOnKeyDown(event, () => onSelectLead(lead))}
                     role="button"
                     tabIndex={0}
                   >
                     <div className="lf-recent-lead-info">
                       <div className="lf-recent-lead-name">
                         <span>{lead.name}</span>
-                        {lead.source === "simulated" && (
-                          <span className="lf-badge-demo">Demo</span>
+                        {!isLiveLead(lead) && (
+                          <span className="lf-badge-demo">{lead.source === "simulated" ? "Demo" : "Unconfirmed"}</span>
                         )}
                       </div>
                       <div className="lf-recent-lead-meta">
@@ -384,7 +402,7 @@ export default function DashboardView({
                     </div>
 
                     <div className="lf-recent-lead-badges">
-                      {hasDeliverable ? (
+                      {isLiveLead(lead) && hasDeliverable ? (
                         <span className="lf-badge-pill green">
                           <CheckCircle2 size={11} /> Deliverable
                         </span>

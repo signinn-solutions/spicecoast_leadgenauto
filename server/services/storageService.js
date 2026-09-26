@@ -17,6 +17,7 @@ let openPath;
 const operationQueues = new Map();
 
 export async function withStorageOperationLock(name, operation) {
+  if (typeof operation !== 'function') throw new TypeError('A storage operation is required.');
   const key = `${path.resolve(config.DB_PATH)}:${name}`;
   const previous = operationQueues.get(key) || Promise.resolve();
   let release;
@@ -29,6 +30,18 @@ export async function withStorageOperationLock(name, operation) {
     if (operationQueues.get(key) === current) operationQueues.delete(key);
     release();
   }
+}
+
+// Lead discovery and manual outreach both update outreach_history. Keep those
+// read/modify/write cycles under the same lock, including across async work.
+export function withOutreachHistoryLock(operation) {
+  return withStorageOperationLock('outreach-history', operation);
+}
+
+// Inbound processing and reviewed sends both read, await, then write the
+// mailbox list. They must share one process-level lock to preserve each edit.
+export function withMailboxHistoryLock(operation) {
+  return withStorageOperationLock('mailbox-history', operation);
 }
 
 export function closeStorage() {

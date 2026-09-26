@@ -1,4 +1,5 @@
 import config from '../config/env.js';
+import { randomUUID } from 'node:crypto';
 import {
   getTodayDateString,
   loadReplyUsage,
@@ -6,7 +7,7 @@ import {
   loadMailboxHistory,
   saveMailboxHistory,
   loadAutoSendSetting,
-  withStorageOperationLock,
+  withMailboxHistoryLock,
 } from './storageService.js';
 import { extractMetadataAndDraftReply } from './deepseekService.js';
 import { sendEmail } from './mailService.js';
@@ -52,27 +53,55 @@ export function verifyWebhookAuth(authHeader = '') {
   return authHeader === expected || authHeader === config.HOSTINGER_WEBHOOK_BEARER_TOKEN;
 }
 
-export async function processIncomingEmail(payload = {}, authHeader = '', forceBypassAuth = false, manualAutoSend = null) {
-  return withStorageOperationLock('inbound-reply', () => runIncomingEmail(payload, authHeader, forceBypassAuth, manualAutoSend));
+const stringFields = [
+  'from', 'sender', 'from_address', 'from_email', 'email',
+  'from_name', 'sender_name', 'name',
+  'to', 'receiver', 'to_address', 'recipient', 'mailbox',
+  'to_name', 'receiver_name', 'subject', 'message', 'text', 'body', 'content',
+  'messageId', 'message_id', 'message_id_header', 'eventId', 'event_id',
+];
+const mailboxPattern = /^[^\s\u0000-\u001f@,;<>]+@[^\s\u0000-\u001f@,;<>]+\.[^\s\u0000-\u001f@,;<>]+$/u;
+const invalid = (reason) => ({ statusCode: 400, response: { status: 'rejected', reason } });
+
+function validatePayload(payload) {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return invalid('Expected an email payload object.');
+  for (const field of stringFields) {
+    if (Object.hasOwn(payload, field) && typeof payload[field] !== 'string') return invalid(`Field ${field} must be a string.`);
+  }
+  const sender = (payload.from || payload.sender || payload.from_address || payload.from_email || payload.email || '').trim();
+  const receiver = (payload.to || payload.receiver || payload.to_address || payload.recipient || payload.mailbox || config.SENDER_MAILBOX).trim();
+  if (sender && (sender.length > 254 || !mailboxPattern.test(sender))) return invalid('Sender must be one plain email address.');
+  if (!receiver || receiver.length > 254 || !mailboxPattern.test(receiver)) return invalid('Receiver must be one plain email address.');
+  if ((payload.subject || '').length > 500) return invalid('Subject is too long.');
+  if (/[\r\n\u0000]/u.test(payload.subject || '')) return invalid('Subject contains an invalid character.');
+  if ((payload.message || payload.text || payload.body || payload.content || '').length > 100000) return invalid('Message is too long.');
+  if ((payload.from_name || payload.sender_name || payload.name || '').length > 200 ||
+      (payload.to_name || payload.receiver_name || '').length > 200) return invalid('Contact name is too long.');
+  const sourceMessageId = payload.messageId || payload.message_id || payload.message_id_header || payload.eventId || payload.event_id || '';
+  if (sourceMessageId.length > 500) return invalid('Message identifier is too long.');
+  return null;
 }
 
-async function runIncomingEmail(payload, authHeader, forceBypassAuth, manualAutoSend) {
+export async function processIncomingEmail(payload = {}, authHeader = '', forceBypassAuth = false, manualAutoSend = null) {
   if (!forceBypassAuth && !verifyWebhookAuth(authHeader)) {
-    return {
-      statusCode: 401,
-      response: { status: 'rejected', reason: 'Invalid or missing webhook bearer token' },
-    };
+    return { statusCode: 401, response: { status: 'rejected', reason: 'Invalid or missing webhook bearer token' } };
   }
+  const validation = validatePayload(payload);
+  if (validation) return validation;
+  return withMailboxHistoryLock(() => runIncomingEmail(payload, forceBypassAuth, manualAutoSend));
+}
 
+async function runIncomingEmail(payload, forceBypassAuth, manualAutoSend) {
   // Parse all possible field names from Hostinger / standard mail webhook shapes
   const senderEmail =
-    payload.from || payload.sender || payload.from_address || payload.from_email || payload.email || '';
+    (payload.from || payload.sender || payload.from_address || payload.from_email || payload.email || '').trim();
   const senderName = payload.from_name || payload.sender_name || payload.name || '';
   const receiverEmail =
-    payload.to || payload.receiver || payload.to_address || payload.recipient || payload.mailbox || config.SENDER_MAILBOX;
+    (payload.to || payload.receiver || payload.to_address || payload.recipient || payload.mailbox || config.SENDER_MAILBOX).trim();
   const receiverName = payload.to_name || payload.receiver_name || 'The Spice Coast (Sales Desk)';
   const subject = payload.subject || 'Spice Inquiry';
   const body = payload.message || payload.text || payload.body || payload.content || '';
+  const sourceMessageId = (payload.messageId || payload.message_id || payload.message_id_header || payload.eventId || payload.event_id || '').trim();
 
   if (!senderEmail) {
     return {
@@ -89,6 +118,16 @@ async function runIncomingEmail(payload, authHeader, forceBypassAuth, manualAuto
     };
   }
 
+  // Providers may retry a delivery after a timeout. Deduplicate only when an
+  // explicit event/message identifier is present; identical email text can be
+  // a legitimate second inquiry.
+  if (sourceMessageId) {
+    const existing = loadMailboxHistory().find((message) => message.sourceMessageId === sourceMessageId);
+    if (existing) {
+      return { statusCode: 200, response: { status: 'duplicate', message: existing } };
+    }
+  }
+
   const { date: today, count: usedTodayInit } = loadReplyUsage();
   let usedToday = usedTodayInit;
 
@@ -100,7 +139,7 @@ async function runIncomingEmail(payload, authHeader, forceBypassAuth, manualAuto
   }
 
   // Extract rich AI metadata & draft contextual reply using DeepSeek
-  const { reply: replyText, metadata } = await extractMetadataAndDraftReply(
+  const { reply: replyText, metadata, model } = await extractMetadataAndDraftReply(
     subject,
     body,
     senderEmail,
@@ -110,7 +149,7 @@ async function runIncomingEmail(payload, authHeader, forceBypassAuth, manualAuto
     { useAI: !forceBypassAuth }
   );
 
-  const autoSendEffective = manualAutoSend !== null ? manualAutoSend : loadAutoSendSetting();
+  const autoSendEffective = forceBypassAuth ? false : manualAutoSend !== null ? manualAutoSend : loadAutoSendSetting();
   let deliveryStatus = 'drafted';
   let deliveryError = null;
 
@@ -138,7 +177,9 @@ async function runIncomingEmail(payload, authHeader, forceBypassAuth, manualAuto
   const formattedDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
 
   const messageRecord = {
-    id: `msg-${Date.now()}`,
+    id: `msg-${randomUUID()}`,
+    source: forceBypassAuth ? 'simulated' : 'webhook',
+    sourceMessageId: sourceMessageId || null,
     sender: senderEmail,
     senderName: metadata.buyerName || senderName || senderEmail.split('@')[0],
     receiver: receiverEmail,
@@ -162,7 +203,7 @@ async function runIncomingEmail(payload, authHeader, forceBypassAuth, manualAuto
     status: deliveryStatus,
     error: deliveryError,
     autoSend: autoSendEffective,
-    model: config.DEEPSEEK_API_KEY ? config.DEEPSEEK_MODEL : 'DeepSeek Simulated',
+    model,
     mailbox: receiverEmail,
     receivedAt: formattedDate,
   };

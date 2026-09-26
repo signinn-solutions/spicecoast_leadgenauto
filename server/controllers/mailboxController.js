@@ -8,7 +8,8 @@ import {
   loadLeadsHistory,
   loadAutoSendSetting,
   saveAutoSendSetting,
-  withStorageOperationLock,
+  withOutreachHistoryLock,
+  withMailboxHistoryLock,
 } from '../services/storageService.js';
 import { processIncomingEmail } from '../services/webhookService.js';
 import { sendEmail } from '../services/mailService.js';
@@ -79,6 +80,10 @@ export async function getOutreachList(req, res, next) {
 }
 
 export async function updateColdMailDraft(req, res, next) {
+  return withOutreachHistoryLock(() => updateColdMailDraftUnlocked(req, res, next));
+}
+
+async function updateColdMailDraftUnlocked(req, res, next) {
   try {
     const { id, subject, body } = req.body || {};
     if (!id) {
@@ -89,7 +94,7 @@ export async function updateColdMailDraft(req, res, next) {
     let updatedRecord = null;
 
     for (const item of outreach) {
-      if (item.id === id) {
+      if (item.id === id || (item.leadId && `outreach-${item.leadId}` === id)) {
         if (item.status !== 'pending_review') {
           return res.status(409).json({ error: 'Only pending drafts can be edited.' });
         }
@@ -112,23 +117,28 @@ export async function updateColdMailDraft(req, res, next) {
 }
 
 export async function sendColdMail(req, res, next) {
-  return withStorageOperationLock(`send-coldmail:${req.body?.id || 'missing'}`, () => sendColdMailUnlocked(req, res, next));
+  return withOutreachHistoryLock(() => sendColdMailUnlocked(req, res, next));
 }
 
 async function sendColdMailUnlocked(req, res, next) {
   try {
     const { id, to, subject, body } = req.body || {};
-    if (!id || !to || !body) {
+    if (typeof id !== 'string' || !id.trim() || typeof to !== 'string' || !to.trim() ||
+        typeof body !== 'string' || !body.trim() || (subject !== undefined && typeof subject !== 'string')) {
       return res.status(400).json({ error: 'Missing outreach draft ID, recipient email or email body.' });
     }
 
-    const draft = loadOutreachHistory().find((item) => item.id === id);
+    const draft = loadOutreachHistory().find((item) => item.id === id || (item.leadId && `outreach-${item.leadId}` === id));
     if (!draft) return res.status(404).json({ error: 'Outreach draft not found.' });
     if (draft.status !== 'pending_review') return res.status(409).json({ error: 'Outreach draft was already sent.' });
     if (draft.recipient !== to) return res.status(400).json({ error: 'Recipient does not match outreach draft.' });
     const savedLead = loadLeadsHistory().leads?.find((lead) => lead.id === draft.leadId);
     if (draft.source === 'simulated' || savedLead?.source === 'simulated') {
       return res.status(400).json({ error: 'Simulated leads cannot receive outreach email.' });
+    }
+    if (!savedLead || savedLead.source !== 'live' || savedLead.email !== to ||
+        !['deliverable', 'valid'].includes(savedLead.emailStatus)) {
+      return res.status(400).json({ error: 'A saved, verified live lead is required for outreach.' });
     }
 
     // Explicit confirmation dispatch
@@ -144,7 +154,7 @@ async function sendColdMailUnlocked(req, res, next) {
     const outreach = loadOutreachHistory();
     let found = false;
     for (const item of outreach) {
-      if ((id && item.id === id) || (!id && item.recipient === to)) {
+      if (item.id === id || (item.leadId && `outreach-${item.leadId}` === id)) {
         item.status = 'sent';
         item.sentAt = sentDate;
         if (subject) item.subject = subject;
@@ -205,14 +215,15 @@ export async function testIncomingEmail(req, res, next) {
 }
 
 export async function sendReviewedDraft(req, res, next) {
-  return withStorageOperationLock(`send-draft:${req.body?.id || 'missing'}`, () => sendReviewedDraftUnlocked(req, res, next));
+  return withMailboxHistoryLock(() => sendReviewedDraftUnlocked(req, res, next));
 }
 
 async function sendReviewedDraftUnlocked(req, res, next) {
   try {
     const { id: messageId, to: toAddress, subject, reply: replyText } = req.body || {};
 
-    if (!messageId || !toAddress || !replyText) {
+    if (typeof messageId !== 'string' || !messageId.trim() || typeof toAddress !== 'string' || !toAddress.trim() ||
+        typeof replyText !== 'string' || !replyText.trim() || (subject !== undefined && typeof subject !== 'string')) {
       return res.status(400).json({ error: 'Missing mailbox draft ID, recipient address or reply body.' });
     }
 
@@ -220,6 +231,7 @@ async function sendReviewedDraftUnlocked(req, res, next) {
       const message = loadMailboxHistory().find((item) => item.id === messageId);
       if (!message) return res.status(404).json({ error: 'Mailbox draft not found.' });
       if (message.status !== 'drafted') return res.status(409).json({ error: 'Mailbox draft was already handled.' });
+      if (message.source === 'simulated') return res.status(400).json({ error: 'Simulated inquiries cannot receive email.' });
       if (message.sender !== toAddress) return res.status(400).json({ error: 'Recipient does not match mailbox draft.' });
     }
 

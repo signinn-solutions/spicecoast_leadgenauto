@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 
 export default function Header({
+  onLogout,
   activeView,
   onOpenMobileSidebar,
   onRefresh,
@@ -40,7 +41,7 @@ export default function Header({
 
   const handleCopyWebhook = async () => {
     const url = `${window.location.origin}/webhook`;
-    await onCopyWebhook(url);
+    if (!(await onCopyWebhook(url))) return;
     setCopiedWebhook(true);
     setTimeout(() => setCopiedWebhook(false), 2200);
   };
@@ -64,6 +65,7 @@ export default function Header({
       </div>
 
       <div className="lf-header-right">
+        {onLogout && <button type="button" className="lf-header-pill btn-pill" onClick={onLogout}>Sign out</button>}
         {/* Mailbox Badge */}
         <div className="lf-header-pill mailbox-pill" title="Primary Dispatch Mailbox">
           <Mail size={13} className="text-amber" />

@@ -12,6 +12,14 @@ export function getSmtpTransporter() {
       host: config.SMTP_HOST,
       port: config.SMTP_PORT,
       secure: config.SMTP_SECURE,
+      requireTLS: !config.SMTP_SECURE,
+      connectionTimeout: 15000,
+      greetingTimeout: 15000,
+      socketTimeout: 15000,
+      dnsTimeout: 10000,
+      maxRecipients: 1,
+      disableFileAccess: true,
+      disableUrlAccess: true,
       auth: {
         user: config.SMTP_USER,
         pass: config.SMTP_PASS,
@@ -42,24 +50,30 @@ export async function sendEmailViaHostinger(toAddress, subject, body, { reply = 
     text: body,
   };
 
+  let response;
   try {
-    const response = await fetch(config.HOSTINGER_SEND_ENDPOINT, {
+    response = await fetch(config.HOSTINGER_SEND_ENDPOINT, {
       method: 'POST',
       headers,
       body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(15000),
     });
 
-    if (!response.ok) {
-      const errText = await response.text().catch(() => '');
-      throw new Error(`Hostinger API responded with ${response.status}: ${errText}`);
-    }
-
-    const data = await response.json().catch(() => ({ status: 'success' }));
-    return data;
-  } catch (e) {
-    console.error(`[Hostinger API Error]: ${e.message}`);
-    throw e;
+  } catch {
+    throw new Error('Email provider request failed.');
   }
+
+  if (!response.ok) {
+    throw new Error(`Email provider rejected message (HTTP ${response.status}).`);
+  }
+
+  // A successful HTTP status is the transport acknowledgement; APIs may
+  // return an empty body. Do not expose a provider's raw error response.
+  const data = await response.json().catch(() => ({}));
+  if (['failed', 'failure', 'error', 'rejected'].includes(String(data?.status).toLowerCase()) || data?.error) {
+    throw new Error('Email provider rejected message.');
+  }
+  return { ...data, status: 'sent' };
 }
 
 export async function sendEmailViaSmtp(toAddress, subject, body, { reply = false } = {}) {
@@ -76,7 +90,20 @@ export async function sendEmailViaSmtp(toAddress, subject, body, { reply = false
     text: body,
   };
 
-  return await transporter.sendMail(mailOptions);
+  let result;
+  try {
+    result = await transporter.sendMail(mailOptions);
+  } catch {
+    throw new Error('SMTP delivery failed.');
+  }
+  const accepted = Array.isArray(result?.accepted) ? result.accepted : [];
+  const rejected = Array.isArray(result?.rejected) ? result.rejected : [];
+  const recipient = toAddress.trim().toLowerCase();
+  if (!accepted.some((address) => typeof address === 'string' && address.toLowerCase() === recipient) ||
+      rejected.some((address) => typeof address === 'string' && address.toLowerCase() === recipient)) {
+    throw new Error('SMTP server did not accept recipient.');
+  }
+  return { status: 'sent', messageId: result.messageId };
 }
 
 export async function sendEmail(toAddress, subject, body, options = {}) {

@@ -359,9 +359,9 @@ Director of Imports, NY Flavour Imports`,
                     <div className="lf-reply-box-header">
                       <div className="lf-reply-box-title">
                         <Bot size={15} className="text-emerald" />
-                        <span>DeepSeek Contextual Response</span>
+                        <span>Suggested response</span>
                         <span className="lf-badge-pill blue sm">
-                          {activeMessage.model || "deepseek-chat"}
+                          {activeMessage.model || "Saved draft"}
                         </span>
                       </div>
                       <div className="lf-reply-header-actions">
@@ -392,14 +392,14 @@ Director of Imports, NY Flavour Imports`,
                           type="button"
                           className="lf-btn-primary gold sm"
                           onClick={() => onSendReply(activeMessage)}
-                          disabled={isSendingReplyId === activeMessage.id}
+                          disabled={isSendingReplyId === activeMessage.id || activeMessage.source === 'simulated'}
                         >
                           {isSendingReplyId === activeMessage.id ? (
                             <Loader2 size={13} className="spin" />
                           ) : (
                             <Send size={13} />
                           )}
-                          <span>Dispatch Reply via Hostinger</span>
+                          <span>{activeMessage.source === 'simulated' ? 'Simulation — sending disabled' : 'Send reply'}</span>
                         </button>
                       ) : (
                         <span className="lf-badge-pill green">

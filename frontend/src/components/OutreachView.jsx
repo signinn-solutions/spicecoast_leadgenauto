@@ -41,9 +41,9 @@ export default function OutreachView({
   const [isBulkSending, setIsBulkSending] = useState(false);
 
   const isLiveOutreach = (item) => {
-    if (item.source === "simulated") return false;
+    if (item.source !== "live") return false;
     const found = allLeads.find((l) => l.id === item.leadId);
-    return found ? found.source !== "simulated" : true;
+    return found?.source === "live";
   };
 
   const pendingList = useMemo(
@@ -120,7 +120,7 @@ export default function OutreachView({
           <div className="lf-metric-label">Pending Operator Approval</div>
           <div className="lf-metric-num lf-mono text-amber">{pendingList.length}</div>
           <div className="lf-metric-sub">
-            {pendingList.filter(isLiveOutreach).length} live &bull; {pendingList.filter((o) => !isLiveOutreach(o)).length} demo
+            {pendingList.filter(isLiveOutreach).length} live &bull; {pendingList.filter((o) => !isLiveOutreach(o)).length} review only
           </div>
         </div>
 
@@ -264,7 +264,7 @@ export default function OutreachView({
           </p>
         </div>
       ) : viewMode === "grid" ? (
-        /* PREMIUM CARD GRID VIEW */
+        {/* PREMIUM CARD GRID VIEW */}
         <div className="lf-outreach-grid">
           {filteredList.map((item) => {
             const isLive = isLiveOutreach(item);
@@ -281,12 +281,14 @@ export default function OutreachView({
                     </div>
                     <div className="lf-outreach-company-info">
                       <div className="lf-outreach-company-title">
-                        <span>{item.company || item.leadName}</span>
+                        <span className="lf-company-name-text" title={item.company || item.leadName}>
+                          {item.company || item.leadName}
+                        </span>
                         {!isLive && (
-                          <span className="lf-badge-demo">Demo</span>
+                          <span className="lf-badge-demo">Review only</span>
                         )}
                       </div>
-                      <div className="lf-outreach-recipient-email lf-mono">
+                      <div className="lf-outreach-recipient-email lf-mono" title={item.recipient}>
                         &lt;{item.recipient}&gt;
                       </div>
                     </div>
@@ -316,7 +318,7 @@ export default function OutreachView({
                 {/* Subject Line Pill */}
                 <div className="lf-outreach-subject-banner">
                   <span className="lf-subject-tag">SUBJECT</span>
-                  <span className="lf-subject-line">{item.subject}</span>
+                  <span className="lf-subject-line" title={item.subject}>{item.subject}</span>
                 </div>
 
                 {/* Clean Preview Content Box */}
@@ -398,7 +400,7 @@ export default function OutreachView({
                     <td>
                       <div className="lf-table-company-name">
                         <span>{item.company || item.leadName}</span>
-                        {!isLive && <span className="lf-badge-demo">Demo</span>}
+                        {!isLive && <span className="lf-badge-demo">Review only</span>}
                       </div>
                       {item.location && (
                         <div className="lf-table-company-addr">

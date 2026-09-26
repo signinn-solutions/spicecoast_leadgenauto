@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import useDialogFocus from "../hooks/useDialogFocus.js";
 import {
   X,
   Sparkles,
@@ -38,41 +39,7 @@ export default function ColdMailModal({
     }
   }, [modalData]);
 
-  // Trap focus & Escape key handling
-  useEffect(() => {
-    if (!modalData) return;
-    const prevActive = document.activeElement;
-    modalRef.current?.querySelector("input")?.focus();
-
-    const handleKeyDown = (e) => {
-      if (e.key === "Escape") {
-        onClose();
-        return;
-      }
-      if (e.key !== "Tab") return;
-      const focusables = [
-        ...(modalRef.current?.querySelectorAll(
-          'button:not([disabled]), input:not([disabled]), textarea:not([disabled]), [tabindex="0"]'
-        ) || []),
-      ];
-      if (!focusables.length) return;
-      const first = focusables[0];
-      const last = focusables[focusables.length - 1];
-      if (e.shiftKey && document.activeElement === first) {
-        e.preventDefault();
-        last.focus();
-      } else if (!e.shiftKey && document.activeElement === last) {
-        e.preventDefault();
-        first.focus();
-      }
-    };
-
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("keydown", handleKeyDown);
-      prevActive?.focus?.();
-    };
-  }, [modalData, onClose]);
+  useDialogFocus(Boolean(modalData), modalRef, onClose, "#outreach-subject:not([disabled])");
 
   if (!modalData) return null;
 
@@ -96,14 +63,19 @@ export default function ColdMailModal({
   };
 
   return (
-    <div className="lf-modal-backdrop" onClick={onClose}>
+    <div
+      className="lf-modal-backdrop"
+      onPointerDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
       <div
         ref={modalRef}
         className="lf-modal-card lf-animate-scale"
         role="dialog"
         aria-modal="true"
         aria-labelledby="modal-outreach-title"
-        onClick={(e) => e.stopPropagation()}
+        tabIndex={-1}
       >
         {/* Modal Header */}
         <div className="lf-modal-header">

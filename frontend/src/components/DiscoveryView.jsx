@@ -61,7 +61,7 @@ export default function DiscoveryView({
         <div>
           <h2 className="lf-section-title">Lead Discovery & Prospecting Engine</h2>
           <p className="lf-section-subtitle">
-            Query global business registries, extract executive contact inboxes via Hunter.io, and synthesize verified B2B leads.
+            Search business listings with Google Places and enrich available contact details with Hunter.io. Simulation creates example records.
           </p>
         </div>
         <div className="lf-quota-badge-top">
@@ -80,7 +80,7 @@ export default function DiscoveryView({
                 Search Complete &bull; {lastSearchInfo.mode === "live" ? "Live Places API" : "Autonomous Simulation Mode"}
               </div>
               <div className="lf-banner-text">
-                Successfully identified and verified <strong>{lastSearchInfo.count}</strong> new unique B2B lead(s).
+                {lastSearchInfo.mode === "live" ? "Saved" : "Created"} <strong>{lastSearchInfo.count}</strong> new {lastSearchInfo.mode === "live" ? "business" : "example"} record(s).
                 {lastSearchInfo.duplicatesSkipped > 0 ? (
                   <> Automatically skipped <strong>{lastSearchInfo.duplicatesSkipped}</strong> existing database duplicate(s).</>
                 ) : (
@@ -233,58 +233,66 @@ export default function DiscoveryView({
 
             {/* Search Mode Selector */}
             <div className="lf-form-field span-2">
-              <label>
+              <div
+                style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--text-muted)" }}
+              >
                 <Sparkles size={13} className="text-amber" />
                 <span>Enrichment & Discovery Mode</span>
-              </label>
-              <div className="lf-mode-cards-grid">
-                <div
+              </div>
+              <div className="lf-mode-cards-grid" role="group" aria-label="Enrichment and discovery mode">
+                <button
+                  type="button"
                   className={`lf-mode-card ${searchMode === "auto" ? "active" : ""}`}
-                  onClick={() => !searching && setSearchMode("auto")}
-                  role="button"
-                  tabIndex={0}
+                  onClick={() => setSearchMode("auto")}
+                  aria-pressed={searchMode === "auto"}
+                  disabled={searching}
+                  style={{ textAlign: "left", font: "inherit" }}
                 >
-                  <div className="lf-mode-card-header">
+                  <span className="lf-mode-card-header">
                     <Database size={16} className="text-amber" />
                     <span className="lf-mode-card-title">Auto (Live + Fallback)</span>
                     <span className="lf-badge-pill gold">Recommended</span>
-                  </div>
-                  <p className="lf-mode-card-desc">
-                    Prioritizes live Places API & Hunter.io domain enrichment. Seamlessly falls back to local data if credentials are not configured.
-                  </p>
-                </div>
+                  </span>
+                  <span className="lf-mode-card-desc">
+                    Uses Google Places and Hunter.io when configured. If live search is unavailable or returns no results, creates clearly marked examples.
+                  </span>
+                </button>
 
-                <div
+                <button
+                  type="button"
                   className={`lf-mode-card ${searchMode === "live" ? "active" : ""}`}
-                  onClick={() => !searching && setSearchMode("live")}
-                  role="button"
-                  tabIndex={0}
+                  onClick={() => setSearchMode("live")}
+                  aria-pressed={searchMode === "live"}
+                  disabled={searching}
+                  style={{ textAlign: "left", font: "inherit" }}
                 >
-                  <div className="lf-mode-card-header">
+                  <span className="lf-mode-card-header">
                     <Globe size={16} className="text-emerald" />
                     <span className="lf-mode-card-title">Live Places & Hunter.io</span>
                     <span className="lf-badge-pill green">Production</span>
-                  </div>
-                  <p className="lf-mode-card-desc">
-                    Requires live Google Places and Hunter.io API tokens. Verifies real domain mailboxes and phone numbers.
-                  </p>
-                </div>
+                  </span>
+                  <span className="lf-mode-card-desc">
+                    Requires Google Places and Hunter.io API keys. Returns real business listings and available enriched contact details.
+                  </span>
+                </button>
 
-                <div
+                <button
+                  type="button"
                   className={`lf-mode-card ${searchMode === "simulated" ? "active" : ""}`}
-                  onClick={() => !searching && setSearchMode("simulated")}
-                  role="button"
-                  tabIndex={0}
+                  onClick={() => setSearchMode("simulated")}
+                  aria-pressed={searchMode === "simulated"}
+                  disabled={searching}
+                  style={{ textAlign: "left", font: "inherit" }}
                 >
-                  <div className="lf-mode-card-header">
+                  <span className="lf-mode-card-header">
                     <Zap size={16} className="text-blue" />
-                    <span className="lf-mode-card-title">Zero-Credit Simulation</span>
+                    <span className="lf-mode-card-title">Simulation</span>
                     <span className="lf-badge-pill blue">Sandbox</span>
-                  </div>
-                  <p className="lf-mode-card-desc">
-                    Generates authentic European and global trade entity records with simulated deliverability. Zero quota burn.
-                  </p>
-                </div>
+                  </span>
+                  <span className="lf-mode-card-desc">
+                    Creates example contacts without provider API calls. Examples cannot be sent email and count toward the daily app quota.
+                  </span>
+                </button>
               </div>
             </div>
           </div>
@@ -294,7 +302,7 @@ export default function DiscoveryView({
             <button
               type="submit"
               className="lf-btn-submit"
-              disabled={searching || (remainingLeads <= 0 && searchMode !== "simulated")}
+              disabled={searching || remainingLeads <= 0}
             >
               {searching ? (
                 <>
@@ -316,24 +324,24 @@ export default function DiscoveryView({
           <div className="lf-search-radar-box">
             <div className="lf-radar-header">
               <Loader2 size={16} className="spin text-amber" />
-              <span>Autonomous Prospecting Radar in Progress</span>
+              <span>Search in progress ({searchMode} mode)</span>
             </div>
             <div className="lf-radar-steps">
               <div className="lf-radar-step active">
                 <span className="lf-radar-dot pulse" />
-                <span>Targeting {city}, {country} business entities</span>
+                <span>Searching for {businessType} in {city}, {country}</span>
               </div>
               <div className="lf-radar-step active">
                 <span className="lf-radar-dot pulse" />
-                <span>Hunter.io root domain email verification</span>
+                <span>{searchMode === "simulated" ? "Creating example contact records" : "Checking available provider data"}</span>
               </div>
               <div className="lf-radar-step active">
                 <span className="lf-radar-dot pulse" />
-                <span>SQLite deduplication & validation check</span>
+                <span>Checking for existing records</span>
               </div>
               <div className="lf-radar-step active">
                 <span className="lf-radar-dot pulse" />
-                <span>DeepSeek AI synthesizing personalized export pitches</span>
+                <span>Preparing outreach drafts where eligible</span>
               </div>
             </div>
           </div>

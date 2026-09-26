@@ -2082,26 +2082,29 @@ body {
 /* Card Grid */
 .lf-outreach-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
   gap: 20px;
+  align-items: stretch;
 }
 
 .lf-outreach-card-elevated {
   background: var(--bg-surface-1);
   border: 1px solid var(--border-card);
   border-radius: var(--radius-lg);
-  padding: 22px;
+  padding: 20px;
   display: flex;
   flex-direction: column;
   gap: 14px;
   box-shadow: var(--shadow-sm);
-  transition: all 0.2s ease;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
   position: relative;
+  min-width: 0;
+  height: 100%;
 }
 
 .lf-outreach-card-elevated:hover {
-  border-color: var(--border-active);
-  box-shadow: var(--shadow-md);
+  border-color: rgba(245, 158, 11, 0.4);
+  box-shadow: 0 10px 28px -6px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(245, 158, 11, 0.15);
   transform: translateY(-2px);
 }
 
@@ -2110,17 +2113,20 @@ body {
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
+  min-width: 0;
 }
 
 .lf-outreach-avatar-group {
   display: flex;
   align-items: center;
   gap: 12px;
+  min-width: 0;
+  flex: 1;
 }
 
 .lf-company-avatar {
-  width: 40px;
-  height: 40px;
+  width: 42px;
+  height: 42px;
   border-radius: var(--radius-md);
   display: flex;
   align-items: center;
@@ -2147,25 +2153,40 @@ body {
 .lf-outreach-company-info {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
+  min-width: 0;
+  flex: 1;
 }
 
 .lf-outreach-company-title {
-  font-size: 15.5px;
+  font-size: 15px;
   font-weight: 700;
   color: var(--text-main);
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
+}
+
+.lf-company-name-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
 }
 
 .lf-outreach-recipient-email {
   font-size: 12px;
   color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
 }
 
 .lf-outreach-status-wrapper {
   flex-shrink: 0;
+  align-self: flex-start;
 }
 
 .lf-outreach-meta-pill {
@@ -2175,9 +2196,17 @@ body {
   font-size: 11.5px;
   color: var(--text-muted);
   background: var(--bg-surface-2);
-  padding: 3px 8px;
+  border: 1px solid var(--border-subtle);
+  padding: 4px 9px;
   border-radius: var(--radius-sm);
   width: fit-content;
+  max-width: 100%;
+}
+
+.lf-outreach-meta-pill span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .lf-outreach-subject-banner {
@@ -2188,10 +2217,11 @@ body {
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-sm);
   padding: 8px 12px;
+  min-width: 0;
 }
 
 .lf-subject-tag {
-  font-size: 10px;
+  font-size: 9.5px;
   font-weight: 700;
   font-family: 'IBM Plex Mono', monospace;
   color: var(--amber);
@@ -2199,6 +2229,7 @@ body {
   padding: 2px 5px;
   border-radius: var(--radius-sm);
   flex-shrink: 0;
+  letter-spacing: 0.03em;
 }
 
 .lf-subject-line {
@@ -2208,40 +2239,63 @@ body {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  min-width: 0;
+  flex: 1;
 }
 
 .lf-outreach-body-preview {
+  flex: 1;
   background: var(--bg-surface-2);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
-  padding: 14px;
+  padding: 13px 14px;
   font-size: 12.5px;
   color: var(--text-muted);
-  line-height: 1.6;
-  max-height: 140px;
+  line-height: 1.55;
+  max-height: 135px;
+  min-height: 80px;
   overflow-y: auto;
   white-space: pre-wrap;
   position: relative;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+}
+
+.lf-outreach-body-preview::-webkit-scrollbar {
+  width: 4px;
+}
+
+.lf-outreach-body-preview::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.lf-outreach-body-preview::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
 }
 
 .lf-outreach-card-footer {
+  margin-top: auto;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding-top: 10px;
+  padding-top: 12px;
   border-top: 1px solid var(--border-subtle);
   gap: 10px;
+  flex-wrap: wrap;
 }
 
 .lf-footer-timestamp {
   font-size: 11px;
   color: var(--text-faint);
+  white-space: nowrap;
 }
 
 .lf-footer-btn-group {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
 }
 
 /* ==========================================================
@@ -3197,5 +3251,24 @@ body {
   }
   .lf-header-pill.mailbox-pill {
     display: none;
+  }
+}
+
+/* Dashboard access uses the existing application theme. */
+.lf-auth-card { width: min(420px, calc(100vw - 32px)); padding: 32px; }
+.lf-auth-form { display: grid; gap: 12px; margin-top: 24px; }
+.lf-auth-form input { width: 100%; padding: 12px; border-radius: 8px; border: 1px solid var(--border-color, #3f3f46); color: inherit; background: var(--bg-base, #18181b); }
+.lf-auth-error { color: var(--color-error, #f87171); margin-top: 16px; }
+
+:where(button, a, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--amber);
+  outline-offset: 3px;
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

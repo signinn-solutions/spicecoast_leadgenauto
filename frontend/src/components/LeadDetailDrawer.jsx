@@ -1,4 +1,6 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
+import useDialogFocus from "../hooks/useDialogFocus.js";
+import { safeUrl } from "../safeUrl.js";
 import {
   X,
   Building2,
@@ -31,6 +33,7 @@ export default function LeadDetailDrawer({
   isSendingPitch,
   mailboxAddress = "sales@thespicecoast.com",
 }) {
+  const panelRef = useRef(null);
   const [copiedKey, setCopiedKey] = useState(null);
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
@@ -49,9 +52,11 @@ export default function LeadDetailDrawer({
     setIsEditing(false);
   }, [lead]);
 
+  useDialogFocus(Boolean(lead), panelRef, onClose, ".lf-drawer-close");
+
   if (!lead) return null;
 
-  const isLive = lead.source !== "simulated";
+  const isLive = lead.source === "live";
   const hasDeliverableEmail =
     lead.emailStatus === "deliverable" || lead.emailStatus === "valid";
   const isSent = lead.coldMailDraft?.status === "sent";
@@ -65,8 +70,7 @@ export default function LeadDetailDrawer({
   };
 
   const handleSave = async () => {
-    await onSaveDraft(lead.id, subject, body);
-    setIsEditing(false);
+    if (await onSaveDraft(lead.id, subject, body)) setIsEditing(false);
   };
 
   const handleSend = async () => {
@@ -75,10 +79,16 @@ export default function LeadDetailDrawer({
   };
 
   return (
-    <div className="lf-drawer-backdrop" onClick={onClose}>
+    <div
+      className="lf-drawer-backdrop"
+      onPointerDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
       <div
+        ref={panelRef}
         className="lf-drawer-panel lf-animate-slide-left"
-        onClick={(e) => e.stopPropagation()}
+        tabIndex={-1}
         role="dialog"
         aria-modal="true"
         aria-labelledby="drawer-company-title"
@@ -88,7 +98,7 @@ export default function LeadDetailDrawer({
           <div>
             <div className="lf-drawer-tag-row">
               <span className={`lf-badge-pill ${isLive ? "green" : "gold"}`}>
-                {isLive ? "Live Verified Lead" : "Simulation Contact"}
+                {isLive ? "Live Lead" : lead.source === "simulated" ? "Simulation Contact" : "Source Unconfirmed"}
               </span>
               <span className="lf-drawer-date">Added {lead.foundAt || "Recently"}</span>
             </div>
@@ -211,9 +221,9 @@ export default function LeadDetailDrawer({
                 <span>Domain & Web Presence</span>
               </div>
               <div className="lf-dossier-val">
-                {lead.website && lead.website !== "#" ? (
+                {safeUrl(lead.website) ? (
                   <a
-                    href={lead.website}
+                    href={safeUrl(lead.website)}
                     target="_blank"
                     rel="noreferrer"
                     className="lf-web-link"
@@ -407,7 +417,7 @@ export default function LeadDetailDrawer({
 
                   {!isLive && (
                     <span className="lf-badge-pill gold">
-                      Simulation Mode &bull; Real dispatch blocked
+                      {lead.source === "simulated" ? "Simulation Mode" : "Source Unconfirmed"} &bull; Real dispatch blocked
                     </span>
                   )}
 

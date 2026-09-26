@@ -8,7 +8,7 @@ import app from '../app.js';
 import { sendEmailViaHostinger } from '../services/mailService.js';
 import { processIncomingEmail } from '../services/webhookService.js';
 import { extractDomain, isPlaceDuplicate, executeLeadSearch } from '../services/leadFinderService.js';
-import { extractMetadataAndDraftReply } from '../services/deepseekService.js';
+import { extractMetadataAndDraftReply, getDeepseekClient } from '../services/deepseekService.js';
 import {
   getTodayDateString, loadLeadsHistory, saveLeadsHistory, loadOutreachHistory,
   saveOutreachHistory, loadDailyUsage, saveDailyUsage, loadReplyUsage, loadMailboxHistory, saveMailboxHistory,
@@ -99,6 +99,9 @@ test('POST send-coldmail rejects a simulated lead before configured transport', 
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'spicecoast-send-test-'));
   const original = {
     DB_PATH: config.DB_PATH,
+    NODE_ENV: config.NODE_ENV,
+    ADMIN_EMAIL: config.ADMIN_EMAIL,
+    ADMIN_PASSWORD_HASH: config.ADMIN_PASSWORD_HASH,
     DAILY_USAGE_FILE: config.DAILY_USAGE_FILE,
     REPLY_USAGE_FILE: config.REPLY_USAGE_FILE,
     LEADS_HISTORY_FILE: config.LEADS_HISTORY_FILE,
@@ -112,6 +115,9 @@ test('POST send-coldmail rejects a simulated lead before configured transport', 
   let server;
   try {
     config.DB_PATH = path.join(dir, 'test.sqlite');
+    config.NODE_ENV = 'development';
+    config.ADMIN_EMAIL = '';
+    config.ADMIN_PASSWORD_HASH = '';
     config.DAILY_USAGE_FILE = path.join(dir, 'daily.json');
     config.REPLY_USAGE_FILE = path.join(dir, 'reply.json');
     config.LEADS_HISTORY_FILE = path.join(dir, 'leads.json');
@@ -284,15 +290,19 @@ test('concurrent inbound drafts consume one reply slot and preserve mailbox hist
     config.DAILY_REPLY_LIMIT = 1;
     config.AUTO_SEND = false;
     globalThis.fetch = async () => { throw new Error('Unexpected network call'); };
-    const payload = { from: 'buyer@example.test', subject: 'Black pepper price quote', message: 'Please quote 5 MT CIF Rotterdam.' };
+    const payload = { from: 'buyer@example.test', subject: 'Black pepper price quote', message: 'Please quote 5 MT CIF Rotterdam.', messageId: 'provider-event-1' };
     const results = await Promise.all([
       processIncomingEmail(payload, '', true, false),
-      processIncomingEmail({ ...payload, from: 'second@example.test' }, '', true, false),
+      processIncomingEmail({ ...payload, from: 'second@example.test', messageId: 'provider-event-2' }, '', true, false),
     ]);
     assert.deepEqual(results.map((r) => r.response.status).sort(), ['blocked', 'drafted']);
     assert.equal(loadReplyUsage().count, 1);
     assert.equal(loadMailboxHistory().length, 1);
     assert.equal(loadMailboxHistory()[0].status, 'drafted');
+    const retry = await processIncomingEmail(payload, '', true, false);
+    assert.equal(retry.response.status, 'duplicate');
+    assert.equal(loadReplyUsage().count, 1);
+    assert.equal(loadMailboxHistory().length, 1);
   } finally {
     closeStorage();
     Object.assign(config, original);
@@ -305,7 +315,8 @@ test('concurrent sends dispatch each saved draft once', async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'spicecoast-concurrent-send-'));
   const keys = [
     'DB_PATH', 'DAILY_USAGE_FILE', 'REPLY_USAGE_FILE', 'LEADS_HISTORY_FILE',
-    'SEEN_PLACES_FILE', 'MAILBOX_HISTORY_FILE', 'OUTREACH_HISTORY_FILE', 'HOSTINGER_API_TOKEN',
+    'SEEN_PLACES_FILE', 'MAILBOX_HISTORY_FILE', 'OUTREACH_HISTORY_FILE', 'HOSTINGER_API_TOKEN', 'DEEPSEEK_API_KEY',
+    'NODE_ENV', 'ADMIN_EMAIL', 'ADMIN_PASSWORD_HASH',
   ];
   const original = Object.fromEntries(keys.map((key) => [key, config[key]]));
   const originalFetch = globalThis.fetch;
@@ -316,11 +327,24 @@ test('concurrent sends dispatch each saved draft once', async () => {
       config[key] = path.join(dir, `${key}.db`);
     }
     config.HOSTINGER_API_TOKEN = 'configured-test-token';
-    saveLeadsHistory({ leads: [{ id: 'live-1', source: 'live', email: 'buyer@example.test' }], searches: [] });
-    saveOutreachHistory([{
-      id: 'outreach-live-1', leadId: 'live-1', source: 'live', recipient: 'buyer@example.test',
-      subject: 'Spice partnership', body: 'Hello buyer', status: 'pending_review',
-    }]);
+    config.DEEPSEEK_API_KEY = '';
+    config.NODE_ENV = 'development';
+    config.ADMIN_EMAIL = '';
+    config.ADMIN_PASSWORD_HASH = '';
+    saveLeadsHistory({ leads: [{
+      id: 'live-1', source: 'live', email: 'buyer@example.test', emailStatus: 'deliverable',
+      coldMailDraft: { subject: 'Stale saved subject', body: 'Stale saved body', status: 'pending_review' },
+    }], searches: [] });
+    saveOutreachHistory([
+      {
+        id: 'legacy-outreach-live-1', leadId: 'live-1', source: 'live', recipient: 'buyer@example.test',
+        subject: 'Spice partnership', body: 'Hello buyer', status: 'pending_review',
+      },
+      {
+        id: 'outreach-unknown', leadId: 'missing', recipient: 'unknown@example.test',
+        subject: 'Unknown lead', body: 'Hello', status: 'pending_review',
+      },
+    ]);
     saveMailboxHistory([{
       id: 'message-1', sender: 'inquiry@example.test', subject: 'Price inquiry',
       draftReply: 'Thank you', status: 'drafted',
@@ -337,12 +361,78 @@ test('concurrent sends dispatch each saved draft once', async () => {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
     })));
 
+    const malformedJson = await originalFetch(`${baseUrl}/api/mailbox/send-coldmail`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{bad-json',
+    });
+    assert.equal(malformedJson.status, 400);
+    assert.deepEqual(await malformedJson.json(), { error: 'Request body must be valid JSON.' });
+    assert.equal(providerCalls, 0);
+
+    const invalidSend = await originalFetch(`${baseUrl}/api/mailbox/send-coldmail`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: 'outreach-live-1', to: 'buyer@example.test', body: { text: 'not a string' } }),
+    });
+    assert.equal(invalidSend.status, 400);
+    assert.equal(providerCalls, 0);
+    const unknownLeadSend = await originalFetch(`${baseUrl}/api/mailbox/send-coldmail`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: 'outreach-unknown', to: 'unknown@example.test', body: 'Hello' }),
+    });
+    assert.equal(unknownLeadSend.status, 400);
+    assert.equal(providerCalls, 0);
+
+    const editDraft = await originalFetch(`${baseUrl}/api/mailbox/update-draft`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: 'outreach-live-1', subject: 'Edited partnership', body: 'Edited body' }),
+    });
+    assert.equal(editDraft.status, 200);
+    const beforeSendLeads = await (await originalFetch(`${baseUrl}/api/leads`)).json();
+    assert.deepEqual({
+      subject: beforeSendLeads.all_leads[0].coldMailDraft.subject,
+      body: beforeSendLeads.all_leads[0].coldMailDraft.body,
+      status: beforeSendLeads.all_leads[0].coldMailDraft.status,
+    }, { subject: 'Edited partnership', body: 'Edited body', status: 'pending_review' });
+
     const outreachResponses = await postTwice('/api/mailbox/send-coldmail', {
       id: 'outreach-live-1', to: 'buyer@example.test', subject: 'Spice partnership', body: 'Hello buyer',
     });
     assert.deepEqual(outreachResponses.map((res) => res.status).sort(), [200, 409]);
     assert.equal(providerCalls, 1);
     assert.equal(loadOutreachHistory()[0].status, 'sent');
+    assert.equal(loadOutreachHistory()[0].id, 'legacy-outreach-live-1');
+    const afterSendLeads = await (await originalFetch(`${baseUrl}/api/leads`)).json();
+    assert.equal(afterSendLeads.all_leads[0].coldMailDraft.status, 'sent');
+    assert.equal(afterSendLeads.all_leads[0].coldMailDraft.subject, 'Spice partnership');
+    assert.ok(afterSendLeads.all_leads[0].coldMailDraft.sentAt);
+    config.DEEPSEEK_API_KEY = 'test-only-no-network';
+    const aiClient = getDeepseekClient();
+    const originalCreate = aiClient.chat.completions.create;
+    let aiCalls = 0;
+    aiClient.chat.completions.create = async () => { aiCalls++; throw new Error('AI must not be called for sent outreach'); };
+    try {
+      const regenerate = await originalFetch(`${baseUrl}/api/leads/generate-coldmail`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ leadId: 'live-1', email: 'buyer@example.test' }),
+      });
+      assert.equal(regenerate.status, 409);
+      assert.equal(aiCalls, 0);
+    } finally {
+      aiClient.chat.completions.create = originalCreate;
+      config.DEEPSEEK_API_KEY = '';
+    }
+    const editSent = await originalFetch(`${baseUrl}/api/mailbox/update-draft`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: 'outreach-live-1', subject: 'Changed after send' }),
+    });
+    assert.equal(editSent.status, 409);
+    assert.equal(loadOutreachHistory()[0].status, 'sent');
+
+    const invalidReply = await originalFetch(`${baseUrl}/api/mailbox/send-draft`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: 'message-1', to: 'inquiry@example.test', subject: { bad: true }, reply: 'Thank you' }),
+    });
+    assert.equal(invalidReply.status, 400);
+    assert.equal(providerCalls, 1);
 
     const replyResponses = await postTwice('/api/mailbox/send-draft', {
       id: 'message-1', to: 'inquiry@example.test', subject: 'Price inquiry', reply: 'Thank you',
@@ -350,6 +440,21 @@ test('concurrent sends dispatch each saved draft once', async () => {
     assert.deepEqual(replyResponses.map((res) => res.status).sort(), [200, 409]);
     assert.equal(providerCalls, 2);
     assert.equal(loadMailboxHistory()[0].status, 'sent');
+
+    const simulatedInquiry = await originalFetch(`${baseUrl}/api/mailbox/test-incoming`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ from: 'demo@example.test', subject: 'Black pepper quote', message: 'Please quote 5 MT.' }),
+    });
+    assert.equal(simulatedInquiry.status, 200);
+    const simulatedMessage = (await simulatedInquiry.json()).message;
+    assert.equal(simulatedMessage.source, 'simulated');
+    const blockedSimulatedReply = await originalFetch(`${baseUrl}/api/mailbox/send-draft`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: simulatedMessage.id, to: 'demo@example.test', subject: 'Black pepper quote', reply: 'Thanks' }),
+    });
+    assert.equal(blockedSimulatedReply.status, 400);
+    assert.equal(providerCalls, 2);
+    assert.equal(loadMailboxHistory().find((message) => message.id === simulatedMessage.id).status, 'drafted');
   } finally {
     if (server) await new Promise((resolve) => server.close(resolve));
     closeStorage();
