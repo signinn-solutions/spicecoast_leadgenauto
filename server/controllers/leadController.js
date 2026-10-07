@@ -62,7 +62,7 @@ export async function searchLeads(req, res, next) {
       city,
       country,
       requestedCount: count,
-      mode: mode || 'auto',
+      mode: mode || 'live',
     });
     return res.status(200).json(result);
   } catch (err) {

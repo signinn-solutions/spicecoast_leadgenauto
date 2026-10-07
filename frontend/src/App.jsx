@@ -38,7 +38,6 @@ export default function LeadFinderApp({ onLogout }) {
   const [city, setCity] = useState("Hamburg");
   const [country, setCountry] = useState("Germany");
   const [count, setCount] = useState(15);
-  const [searchMode, setSearchMode] = useState("auto"); // auto, live, simulated
   const [searching, setSearching] = useState(false);
   const [lastSearchInfo, setLastSearchInfo] = useState(null);
 
@@ -60,6 +59,13 @@ export default function LeadFinderApp({ onLogout }) {
   // Active Modals & Drawers
   const [selectedLead, setSelectedLead] = useState(null);
   const [activeReviewDraft, setActiveReviewDraft] = useState(null);
+  const [outreachQueueLeads, setOutreachQueueLeads] = useState([]);
+
+  // Navigate selected leads to Outreach Studio
+  const handleSendToOutreach = (selectedLeads) => {
+    setOutreachQueueLeads(selectedLeads);
+    setActiveView("outreach");
+  };
 
   // Action Pending Spinners
   const [generatingDraftId, setGeneratingDraftId] = useState(null);
@@ -159,7 +165,7 @@ export default function LeadFinderApp({ onLogout }) {
           city: city.trim(),
           country: country.trim(),
           count,
-          mode: searchMode,
+          mode: "live",
         }),
       });
 
@@ -704,8 +710,6 @@ export default function LeadFinderApp({ onLogout }) {
               setCountry={setCountry}
               count={count}
               setCount={setCount}
-              searchMode={searchMode}
-              setSearchMode={setSearchMode}
               searching={searching}
               onSearch={handleSearch}
               leadLimit={leadUsage.limit || 50}
@@ -723,6 +727,7 @@ export default function LeadFinderApp({ onLogout }) {
               onGeneratePitch={handleGeneratePitch}
               generatingDraftId={generatingDraftId}
               onExportCSV={handleExportCSV}
+              onSendToOutreach={handleSendToOutreach}
             />
           )}
 
@@ -746,6 +751,10 @@ export default function LeadFinderApp({ onLogout }) {
               }
               isSendingId={isSendingPitchId}
               onRefresh={() => fetchAllData(false)}
+              queueLeads={outreachQueueLeads}
+              onClearQueue={() => setOutreachQueueLeads([])}
+              onGeneratePitch={handleGeneratePitch}
+              onSaveDraft={handleSaveDraft}
             />
           )}
 

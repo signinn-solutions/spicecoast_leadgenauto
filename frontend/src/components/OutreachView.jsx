@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import {
   Send,
   Search,
@@ -23,6 +23,8 @@ import {
   MapPin,
   ChevronRight,
   SlidersHorizontal,
+  X,
+  Save,
 } from "lucide-react";
 
 export default function OutreachView({
@@ -32,19 +34,74 @@ export default function OutreachView({
   onQuickSend,
   isSendingId,
   onRefresh,
+  queueLeads = [],
+  onClearQueue,
+  onGeneratePitch,
+  onSaveDraft,
 }) {
-  const [filterTab, setFilterTab] = useState("pending"); // pending, sent, all
+  const [filterTab, setFilterTab] = useState(queueLeads.length > 0 ? "queue" : "pending"); // queue, pending, sent, all
   const [viewMode, setViewMode] = useState("grid"); // grid, table
   const [searchQuery, setSearchQuery] = useState("");
   const [copiedId, setCopiedId] = useState(null);
-  const [selectedDraftIds, setSelectedDraftIds] = useState(new Set());
-  const [isBulkSending, setIsBulkSending] = useState(false);
+
+  // Inline editing state
+  const [editingDraftId, setEditingDraftId] = useState(null);
+  const [editSubject, setEditSubject] = useState("");
+  const [editBody, setEditBody] = useState("");
+  const [isSavingInline, setIsSavingInline] = useState(false);
+  const [autoGenerating, setAutoGenerating] = useState(false);
+
+  // When queueLeads changes or arrives, default filterTab to 'queue' if non-empty
+  useEffect(() => {
+    if (queueLeads && queueLeads.length > 0) {
+      setFilterTab("queue");
+    }
+  }, [queueLeads]);
+
+  // Auto-generate missing drafts for queued leads on arrival
+  useEffect(() => {
+    if (!queueLeads || queueLeads.length === 0) return;
+    let active = true;
+
+    const generateMissing = async () => {
+      const missingLeads = queueLeads.filter((lead) => {
+        const hasExisting = outreachList.some(
+          (o) => o.leadId === lead.id || (o.recipient && o.recipient === lead.email)
+        ) || Boolean(lead.coldMailDraft);
+        return !hasExisting && lead.email && (lead.emailStatus === "deliverable" || lead.emailStatus === "valid");
+      });
+
+      if (missingLeads.length === 0) return;
+
+      setAutoGenerating(true);
+      try {
+        for (const lead of missingLeads) {
+          if (!active) break;
+          await onGeneratePitch?.(lead);
+        }
+      } finally {
+        if (active) setAutoGenerating(false);
+      }
+    };
+
+    generateMissing();
+    return () => { active = false; };
+  }, [queueLeads, outreachList]);
 
   const isLiveOutreach = (item) => {
     if (item.source !== "live") return false;
     const found = allLeads.find((l) => l.id === item.leadId);
     return found?.source === "live";
   };
+
+  const queueLeadIdSet = useMemo(() => new Set((queueLeads || []).map((l) => l.id)), [queueLeads]);
+
+  const queueList = useMemo(() => {
+    if (!queueLeads || queueLeads.length === 0) return [];
+    return outreachList.filter(
+      (o) => queueLeadIdSet.has(o.leadId) || queueLeads.some((l) => l.email === o.recipient)
+    );
+  }, [outreachList, queueLeads, queueLeadIdSet]);
 
   const pendingList = useMemo(
     () => outreachList.filter((o) => o.status === "pending_review"),
@@ -56,7 +113,9 @@ export default function OutreachView({
   );
 
   const baseList =
-    filterTab === "pending"
+    filterTab === "queue"
+      ? queueList
+      : filterTab === "pending"
       ? pendingList
       : filterTab === "sent"
       ? sentList
@@ -82,20 +141,27 @@ export default function OutreachView({
     } catch {}
   };
 
-  // Bulk Approve handler for live drafts
-  const handleBulkApprove = async () => {
-    const liveDraftsToApprove = filteredList.filter(
-      (item) => item.status === "pending_review" && isLiveOutreach(item)
-    );
-    if (!liveDraftsToApprove.length) return;
+  const startInlineEdit = (item) => {
+    setEditingDraftId(item.id);
+    setEditSubject(item.subject || "");
+    setEditBody(item.body || "");
+  };
 
-    setIsBulkSending(true);
+  const cancelInlineEdit = () => {
+    setEditingDraftId(null);
+    setEditSubject("");
+    setEditBody("");
+  };
+
+  const saveInlineEdit = async (item) => {
+    if (!onSaveDraft) return;
+    const leadId = item.leadId || item.id.replace(/^outreach-/, "");
+    setIsSavingInline(true);
     try {
-      for (const item of liveDraftsToApprove) {
-        await onQuickSend(item);
-      }
+      await onSaveDraft(leadId, editSubject, editBody);
+      setEditingDraftId(null);
     } finally {
-      setIsBulkSending(false);
+      setIsSavingInline(false);
     }
   };
 
@@ -108,6 +174,37 @@ export default function OutreachView({
 
   return (
     <div className="lf-view-container lf-animate-fade">
+      {/* Queued Leads Active Banner */}
+      {queueLeads.length > 0 && (
+        <div className="lf-search-complete-banner" style={{ background: "rgba(245, 158, 11, 0.08)", borderColor: "rgba(245, 158, 11, 0.3)" }}>
+          <div className="lf-banner-left">
+            <Sparkles size={18} className="text-amber" />
+            <div>
+              <div className="lf-banner-title" style={{ color: "var(--amber-bright)" }}>
+                Selected Review Queue &bull; {queueLeads.length} Lead(s) Loaded from CRM
+              </div>
+              <div className="lf-banner-text">
+                {autoGenerating ? (
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                    <Loader2 size={13} className="spin text-amber" />
+                    <span>Auto-generating missing cold proposals for selected leads...</span>
+                  </span>
+                ) : (
+                  <>Showing review drafts for your selected lead set. Review each pitch inline and approve individually to send.</>
+                )}
+              </div>
+            </div>
+          </div>
+          <button
+            type="button"
+            className="lf-btn-secondary sm"
+            onClick={onClearQueue}
+          >
+            <X size={14} />
+            <span>Clear Queue</span>
+          </button>
+        </div>
+      )}
       {/* Campaign Statistics KPI Banner */}
       <div className="lf-outreach-metrics-banner">
         <div className="lf-outreach-metric-box">
@@ -141,6 +238,16 @@ export default function OutreachView({
       <div className="lf-crm-toolbar">
         {/* Scope Tabs */}
         <div className="lf-scope-tabs">
+          {queueLeads.length > 0 && (
+            <button
+              type="button"
+              className={`lf-scope-tab ${filterTab === "queue" ? "active" : ""}`}
+              onClick={() => setFilterTab("queue")}
+            >
+              <Sparkles size={13} className="text-amber" />
+              <span>Selected Queue ({queueList.length})</span>
+            </button>
+          )}
           <button
             type="button"
             className={`lf-scope-tab ${filterTab === "pending" ? "active" : ""}`}
@@ -222,35 +329,7 @@ export default function OutreachView({
         </div>
       </div>
 
-      {/* Bulk Action Sub-banner for Pending Tab */}
-      {filterTab === "pending" && pendingList.filter(isLiveOutreach).length > 0 && (
-        <div className="lf-outreach-bulk-action-bar">
-          <div className="lf-bulk-left">
-            <Sparkles size={16} className="text-amber" />
-            <span>
-              <strong>{pendingList.filter(isLiveOutreach).length}</strong> live personalized proposals ready for outbound dispatch.
-            </span>
-          </div>
-          <button
-            type="button"
-            className="lf-btn-primary sm gold"
-            onClick={handleBulkApprove}
-            disabled={isBulkSending}
-          >
-            {isBulkSending ? (
-              <>
-                <Loader2 size={13} className="spin" />
-                <span>Dispatching Batch via Hostinger...</span>
-              </>
-            ) : (
-              <>
-                <CheckCheck size={14} />
-                <span>Approve All Live Proposals ({pendingList.filter(isLiveOutreach).length})</span>
-              </>
-            )}
-          </button>
-        </div>
-      )}
+
 
       {/* Content Rendering: Grid vs Table View */}
       {filteredList.length === 0 ? (
@@ -314,16 +393,46 @@ export default function OutreachView({
                   </div>
                 )}
 
-                {/* Subject Line Pill */}
-                <div className="lf-outreach-subject-banner">
-                  <span className="lf-subject-tag">SUBJECT</span>
-                  <span className="lf-subject-line" title={item.subject}>{item.subject}</span>
-                </div>
+                {/* Subject Line Pill / Inline Edit Subject */}
+                {editingDraftId === item.id ? (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8, margin: "10px 0" }}>
+                    <div>
+                      <label style={{ fontSize: 11, fontWeight: 600, color: "var(--amber-bright)", textTransform: "uppercase" }}>Subject Line:</label>
+                      <input
+                        type="text"
+                        className="lf-input"
+                        value={editSubject}
+                        onChange={(e) => setEditSubject(e.target.value)}
+                        placeholder="Subject..."
+                        disabled={isSavingInline}
+                        style={{ marginTop: 2 }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: 11, fontWeight: 600, color: "var(--amber-bright)", textTransform: "uppercase" }}>Email Body Pitch:</label>
+                      <textarea
+                        className="lf-input"
+                        rows={6}
+                        value={editBody}
+                        onChange={(e) => setEditBody(e.target.value)}
+                        placeholder="Pitch body..."
+                        disabled={isSavingInline}
+                        style={{ marginTop: 2, resize: "vertical", fontFamily: "var(--font-sans)", lineHeight: 1.5 }}
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="lf-outreach-subject-banner">
+                      <span className="lf-subject-tag">SUBJECT</span>
+                      <span className="lf-subject-line" title={item.subject}>{item.subject}</span>
+                    </div>
 
-                {/* Clean Preview Content Box */}
-                <div className="lf-outreach-body-preview">
-                  {item.body}
-                </div>
+                    <div className="lf-outreach-body-preview">
+                      {item.body}
+                    </div>
+                  </>
+                )}
 
                 {/* Card Actions Footer */}
                 <div className="lf-outreach-card-footer">
@@ -332,42 +441,66 @@ export default function OutreachView({
                   </div>
 
                   <div className="lf-footer-btn-group">
-                    <button
-                      type="button"
-                      className="lf-btn-icon-sm"
-                      onClick={() => handleCopy(`${item.subject}\n\n${item.body}`, item.id)}
-                      title="Copy pitch to clipboard"
-                    >
-                      {copiedId === item.id ? (
-                        <Check size={13} className="text-emerald" />
-                      ) : (
-                        <Copy size={13} />
-                      )}
-                    </button>
+                    {editingDraftId === item.id ? (
+                      <>
+                        <button
+                          type="button"
+                          className="lf-btn-secondary sm"
+                          onClick={cancelInlineEdit}
+                          disabled={isSavingInline}
+                        >
+                          <span>Cancel</span>
+                        </button>
+                        <button
+                          type="button"
+                          className="lf-btn-primary sm"
+                          onClick={() => saveInlineEdit(item)}
+                          disabled={isSavingInline}
+                        >
+                          {isSavingInline ? <Loader2 size={13} className="spin" /> : <Save size={13} />}
+                          <span>Save Draft</span>
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          className="lf-btn-icon-sm"
+                          onClick={() => handleCopy(`${item.subject}\n\n${item.body}`, item.id)}
+                          title="Copy pitch to clipboard"
+                        >
+                          {copiedId === item.id ? (
+                            <Check size={13} className="text-emerald" />
+                          ) : (
+                            <Copy size={13} />
+                          )}
+                        </button>
 
-                    <button
-                      type="button"
-                      className="lf-btn-secondary sm"
-                      onClick={() => onOpenReviewModal(item)}
-                    >
-                      <Edit3 size={13} />
-                      <span>Review / Edit</span>
-                    </button>
+                        <button
+                          type="button"
+                          className="lf-btn-secondary sm"
+                          onClick={() => startInlineEdit(item)}
+                        >
+                          <Edit3 size={13} />
+                          <span>Inline Edit</span>
+                        </button>
 
-                    {!isSent && isLive && (
-                      <button
-                        type="button"
-                        className="lf-btn-primary sm gold"
-                        onClick={() => onQuickSend(item)}
-                        disabled={isSendingId === item.id}
-                      >
-                        {isSendingId === item.id ? (
-                          <Loader2 size={13} className="spin" />
-                        ) : (
-                          <Send size={13} />
+                        {!isSent && isLive && (
+                          <button
+                            type="button"
+                            className="lf-btn-primary sm gold"
+                            onClick={() => onQuickSend(item)}
+                            disabled={isSendingId === item.id}
+                          >
+                            {isSendingId === item.id ? (
+                              <Loader2 size={13} className="spin" />
+                            ) : (
+                              <Send size={13} />
+                            )}
+                            <span>Approve & Send</span>
+                          </button>
                         )}
-                        <span>Approve & Send</span>
-                      </button>
+                      </>
                     )}
                   </div>
                 </div>

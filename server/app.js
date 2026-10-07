@@ -39,7 +39,9 @@ if (config.CORS_ORIGIN === '*') {
         if (!origin || allowedOrigins.includes(origin) || allowedOrigins.includes('*')) {
           callback(null, true);
         } else {
-          callback(new Error('CORS policy: Not allowed by CORS'));
+          const err = new Error('CORS policy: Not allowed by CORS');
+          err.statusCode = 403;
+          callback(err);
         }
       },
       credentials: true,

@@ -1229,12 +1229,32 @@ body {
   color: var(--amber);
 }
 
+.lf-preset-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.lf-preset-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.lf-preset-group-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--amber);
+  opacity: 0.9;
+  letter-spacing: 0.02em;
+}
+
 .lf-preset-chips {
   display: flex;
   align-items: center;
   gap: 6px;
   flex-wrap: wrap;
-  margin-top: 4px;
 }
 
 .lf-preset-label {

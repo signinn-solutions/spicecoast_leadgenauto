@@ -7,7 +7,7 @@ services:
       dockerfile: Dockerfile
     container_name: spicecoast-leadgen
     ports:
-      - "5000:10000"
+      - "5001:10000"
     environment:
       - NODE_ENV=production
       - HOST=0.0.0.0

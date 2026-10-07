@@ -260,7 +260,7 @@ export async function executeLeadSearch(options) {
   return withStorageOperationLock('lead-search', () => runLeadSearch(options));
 }
 
-async function runLeadSearch({ businessType, city, country, requestedCount = 20, mode = 'auto' }) {
+async function runLeadSearch({ businessType, city, country, requestedCount = 20, mode = 'live' }) {
   const cleanType = (businessType || '').trim();
   const cleanCity = (city || '').trim();
   const cleanCountry = (country || '').trim();
@@ -278,16 +278,35 @@ async function runLeadSearch({ businessType, city, country, requestedCount = 20,
     throw err;
   }
 
-  if (!['auto', 'live', 'simulated'].includes(mode)) {
-    const err = new Error('Search mode must be auto, live, or simulated.');
+  if (!['live', 'simulated'].includes(mode)) {
+    const err = new Error('Search mode must be live or simulated.');
     err.statusCode = 400;
     throw err;
   }
 
-  if (mode === 'live' && (!config.GOOGLE_API_KEY || !config.HUNTER_API_KEY)) {
-    const err = new Error('Live search requires Google Places and Hunter API keys.');
-    err.statusCode = 503;
-    throw err;
+  // Simulation mode is strictly gated to development/test environment or explicit SIMULATION_MODE=true
+  if (mode === 'simulated') {
+    const env = process.env.NODE_ENV || config.NODE_ENV || 'development';
+    const isAllowed = env === 'development' || env === 'test' || process.env.SIMULATION_MODE === 'true';
+    if (!isAllowed) {
+      const err = new Error('Simulation mode is disabled in production.');
+      err.statusCode = 403;
+      throw err;
+    }
+  }
+
+  // Live search requires configured Google Places & Hunter.io API keys
+  if (mode === 'live') {
+    if (!config.GOOGLE_API_KEY) {
+      const err = new Error('Google Places API key is not configured.');
+      err.statusCode = 503;
+      throw err;
+    }
+    if (!config.HUNTER_API_KEY) {
+      const err = new Error('Hunter.io API key is not configured.');
+      err.statusCode = 503;
+      throw err;
+    }
   }
 
   const { date: today, count: usedTodayInit } = loadDailyUsage();
@@ -311,118 +330,102 @@ async function runLeadSearch({ businessType, city, country, requestedCount = 20,
   let duplicatesSkipped = 0;
   let isLiveMode = false;
 
-  // Try Live APIs if configured and requested
-  if ((mode === 'live' || mode === 'auto') && config.GOOGLE_API_KEY && config.HUNTER_API_KEY) {
-    try {
-      const searchRes = await searchPlaces(query, fetchCount, seenMap, existingLeads);
-      if (mode === 'live' && searchRes.providerError && searchRes.places.length === 0) {
-        const err = new Error(searchRes.providerError);
-        err.statusCode = 502;
-        throw err;
-      }
-      const places = searchRes.places || [];
-      duplicatesSkipped = searchRes.duplicatesSkipped || 0;
+  // Execute Live APIs
+  if (mode === 'live') {
+    const searchRes = await searchPlaces(query, fetchCount, seenMap, existingLeads);
+    if (searchRes.providerError && searchRes.places.length === 0) {
+      const err = new Error(searchRes.providerError);
+      err.statusCode = 502;
+      throw err;
+    }
+    const places = searchRes.places || [];
+    duplicatesSkipped = searchRes.duplicatesSkipped || 0;
 
-      if (places && places.length > 0) {
-        isLiveMode = true;
-        for (let idx = 0; idx < places.length; idx++) {
-          if (usedToday >= config.DAILY_LEAD_LIMIT) break;
+    if (places && places.length > 0) {
+      isLiveMode = true;
+      for (let idx = 0; idx < places.length; idx++) {
+        if (usedToday >= config.DAILY_LEAD_LIMIT) break;
 
-          const place = places[idx];
-          const placeId = place.id || `live-${Date.now()}-${idx}`;
-          const name = place.displayName?.text || `${cleanCity} ${cleanType} ${idx + 1}`;
-          const address = place.formattedAddress || `${cleanCity}, ${cleanCountry}`;
-          const phone = place.nationalPhoneNumber || '—';
-          const website = place.websiteUri || '';
-          const domain = extractDomain(website);
+        const place = places[idx];
+        const placeId = place.id || `live-${Date.now()}-${idx}`;
+        const name = place.displayName?.text || `${cleanCity} ${cleanType} ${idx + 1}`;
+        const address = place.formattedAddress || `${cleanCity}, ${cleanCountry}`;
+        const phone = place.nationalPhoneNumber || '—';
+        const website = place.websiteUri || '';
+        const domain = extractDomain(website);
 
-          usedToday += 1;
-          saveDailyUsage(today, usedToday);
+        usedToday += 1;
+        saveDailyUsage(today, usedToday);
 
-          let email = '—';
-          let emailStatus = 'not_found';
+        let email = '—';
+        let emailStatus = 'not_found';
 
-          if (domain) {
-            const emails = await findEmails(domain);
+        if (domain) {
+          const emails = await findEmails(domain);
+          await new Promise((r) => setTimeout(r, 400));
+          const bestEmail = emails.find((item) => typeof item?.value === 'string' && item.value.includes('@'))?.value;
+          if (bestEmail) {
+            const status = await verifyEmail(bestEmail);
             await new Promise((r) => setTimeout(r, 400));
-            const bestEmail = emails.find((item) => typeof item?.value === 'string' && item.value.includes('@'))?.value;
-            if (bestEmail) {
-              const status = await verifyEmail(bestEmail);
-              await new Promise((r) => setTimeout(r, 400));
-              email = bestEmail;
-              emailStatus =
-                status === 'valid' || status === 'deliverable'
-                  ? 'deliverable'
-                  : status === 'accept_all' || status === 'webmail'
-                  ? 'risky'
-                  : status === 'invalid' ? 'invalid' : 'unknown';
-            }
+            email = bestEmail;
+            emailStatus =
+              status === 'valid' || status === 'deliverable'
+                ? 'deliverable'
+                : status === 'accept_all' || status === 'webmail'
+                ? 'risky'
+                : status === 'invalid' ? 'invalid' : 'unknown';
           }
-
-          const phoneStatus = phone && phone !== '—' ? 'valid' : 'invalid';
-
-          const leadObj = {
-            id: placeId,
-            name,
-            address,
-            city: cleanCity,
-            country: cleanCountry,
-            businessType: cleanType,
-            phone,
-            phoneStatus,
-            email,
-            emailStatus,
-            website: website || (domain ? `https://${domain}` : '#'),
-            foundAt: today,
-            source: 'live',
-          };
-
-          // Generate AI Cold Email draft if deliverable
-          if (emailStatus === 'deliverable' || emailStatus === 'valid') {
-            const draft = await generateColdEmail(leadObj);
-            leadObj.coldMailDraft = {
-              subject: draft.subject,
-              body: draft.body,
-              status: 'pending_review',
-              generatedAt: today,
-            };
-          }
-
-          // Save to seenMap immediately
-          seenMap[placeId] = {
-            id: placeId,
-            name,
-            address,
-            phone,
-            website: leadObj.website,
-            domain,
-            email,
-            emailStatus,
-            foundAt: today,
-          };
-
-          processedLeads.push(leadObj);
         }
+
+        const phoneStatus = phone && phone !== '—' ? 'valid' : 'invalid';
+
+        const leadObj = {
+          id: placeId,
+          name,
+          address,
+          city: cleanCity,
+          country: cleanCountry,
+          businessType: cleanType,
+          phone,
+          phoneStatus,
+          email,
+          emailStatus,
+          website: website || (domain ? `https://${domain}` : '#'),
+          foundAt: today,
+          source: 'live',
+        };
+
+        // Generate AI Cold Email draft if deliverable
+        if (emailStatus === 'deliverable' || emailStatus === 'valid') {
+          const draft = await generateColdEmail(leadObj);
+          leadObj.coldMailDraft = {
+            subject: draft.subject,
+            body: draft.body,
+            status: 'pending_review',
+            generatedAt: today,
+          };
+        }
+
+        // Save to seenMap immediately
+        seenMap[placeId] = {
+          id: placeId,
+          name,
+          address,
+          phone,
+          website: leadObj.website,
+          domain,
+          email,
+          emailStatus,
+          foundAt: today,
+        };
+
+        processedLeads.push(leadObj);
       }
-    } catch (e) {
-      console.warn(`[Lead Finder Live API Error]: ${e.message}`);
-      if (mode === 'live') {
-        const err = new Error(`Live API search error: ${e.message}`);
-        err.statusCode = e.statusCode || 502;
-        throw err;
-      }
-      isLiveMode = false;
     }
   }
 
-  if (mode === 'live' && processedLeads.length === 0) {
-    const err = new Error('Live search returned no new leads.');
-    err.statusCode = 404;
-    throw err;
-  }
-
-  // Simulation fallback if live search yielded no results or mode was simulated
-  if (processedLeads.length === 0) {
+  // Explicit dev-gated simulation execution if mode is simulated
+  if (mode === 'simulated') {
     const simLeads = generateSimulatedLeads(cleanType, cleanCity, cleanCountry, fetchCount, seenMap, existingLeads);
     for (const lead of simLeads) {
       if (usedToday >= config.DAILY_LEAD_LIMIT) break;

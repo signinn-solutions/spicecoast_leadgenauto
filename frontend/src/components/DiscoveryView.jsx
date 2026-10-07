@@ -15,6 +15,7 @@ import {
   ArrowRight,
   ShieldCheck,
 } from "lucide-react";
+import { SPICE_PRESET_CATEGORIES } from "../constants/spicePresets";
 
 export default function DiscoveryView({
   businessType,
@@ -25,8 +26,6 @@ export default function DiscoveryView({
   setCountry,
   count,
   setCount,
-  searchMode,
-  setSearchMode,
   searching,
   onSearch,
   leadLimit = 50,
@@ -34,15 +33,6 @@ export default function DiscoveryView({
   lastSearchInfo,
   onViewResults,
 }) {
-  const nichePresets = [
-    "Spice Importer & Wholesaler",
-    "Food & Commodity Broker",
-    "Gourmet Specialty Retailer",
-    "HoReCa Foodservice Distributor",
-    "Seasoning & Blending Plant",
-    "Ethnic Supermarket Chain",
-  ];
-
   const cityPresets = [
     { city: "Hamburg", country: "Germany" },
     { city: "Rotterdam", country: "Netherlands" },
@@ -61,7 +51,7 @@ export default function DiscoveryView({
         <div>
           <h2 className="lf-section-title">Lead Discovery & Prospecting Engine</h2>
           <p className="lf-section-subtitle">
-            Search business listings with Google Places and enrich available contact details with Hunter.io. Simulation creates example records.
+            Search live business listings with Google Places and enrich verified contact details with Hunter.io.
           </p>
         </div>
         <div className="lf-quota-badge-top">
@@ -77,10 +67,10 @@ export default function DiscoveryView({
             <CheckCircle2 size={18} className="text-emerald" />
             <div>
               <div className="lf-banner-title">
-                Search Complete &bull; {lastSearchInfo.mode === "live" ? "Live Places API" : "Autonomous Simulation Mode"}
+                Search Complete &bull; Live Places & Hunter.io API
               </div>
               <div className="lf-banner-text">
-                {lastSearchInfo.mode === "live" ? "Saved" : "Created"} <strong>{lastSearchInfo.count}</strong> new {lastSearchInfo.mode === "live" ? "business" : "example"} record(s).
+                Saved <strong>{lastSearchInfo.count}</strong> new business record(s).
                 {lastSearchInfo.duplicatesSkipped > 0 ? (
                   <> Automatically skipped <strong>{lastSearchInfo.duplicatesSkipped}</strong> existing database duplicate(s).</>
                 ) : (
@@ -120,18 +110,24 @@ export default function DiscoveryView({
                 disabled={searching}
                 required
               />
-              <div className="lf-preset-chips">
-                <span className="lf-preset-label">Quick Presets:</span>
-                {nichePresets.map((niche, idx) => (
-                  <button
-                    key={idx}
-                    type="button"
-                    className={`lf-preset-chip ${businessType === niche ? "active" : ""}`}
-                    onClick={() => setBusinessType(niche)}
-                    disabled={searching}
-                  >
-                    {niche}
-                  </button>
+              <div className="lf-preset-groups">
+                {SPICE_PRESET_CATEGORIES.map((category, catIdx) => (
+                  <div key={catIdx} className="lf-preset-group">
+                    <div className="lf-preset-group-title">{category.name}</div>
+                    <div className="lf-preset-chips">
+                      {category.items.map((preset, itemIdx) => (
+                        <button
+                          key={itemIdx}
+                          type="button"
+                          className={`lf-preset-chip ${businessType === preset ? "active" : ""}`}
+                          onClick={() => setBusinessType(preset)}
+                          disabled={searching}
+                        >
+                          {preset}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 ))}
               </div>
             </div>
@@ -230,71 +226,6 @@ export default function DiscoveryView({
                 </div>
               </div>
             </div>
-
-            {/* Search Mode Selector */}
-            <div className="lf-form-field span-2">
-              <div
-                style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--text-muted)" }}
-              >
-                <Sparkles size={13} className="text-amber" />
-                <span>Enrichment & Discovery Mode</span>
-              </div>
-              <div className="lf-mode-cards-grid" role="group" aria-label="Enrichment and discovery mode">
-                <button
-                  type="button"
-                  className={`lf-mode-card ${searchMode === "auto" ? "active" : ""}`}
-                  onClick={() => setSearchMode("auto")}
-                  aria-pressed={searchMode === "auto"}
-                  disabled={searching}
-                  style={{ textAlign: "left", font: "inherit" }}
-                >
-                  <span className="lf-mode-card-header">
-                    <Database size={16} className="text-amber" />
-                    <span className="lf-mode-card-title">Auto (Live + Fallback)</span>
-                    <span className="lf-badge-pill gold">Recommended</span>
-                  </span>
-                  <span className="lf-mode-card-desc">
-                    Uses Google Places and Hunter.io when configured. If live search is unavailable or returns no results, creates clearly marked examples.
-                  </span>
-                </button>
-
-                <button
-                  type="button"
-                  className={`lf-mode-card ${searchMode === "live" ? "active" : ""}`}
-                  onClick={() => setSearchMode("live")}
-                  aria-pressed={searchMode === "live"}
-                  disabled={searching}
-                  style={{ textAlign: "left", font: "inherit" }}
-                >
-                  <span className="lf-mode-card-header">
-                    <Globe size={16} className="text-emerald" />
-                    <span className="lf-mode-card-title">Live Places & Hunter.io</span>
-                    <span className="lf-badge-pill green">Production</span>
-                  </span>
-                  <span className="lf-mode-card-desc">
-                    Requires Google Places and Hunter.io API keys. Returns real business listings and available enriched contact details.
-                  </span>
-                </button>
-
-                <button
-                  type="button"
-                  className={`lf-mode-card ${searchMode === "simulated" ? "active" : ""}`}
-                  onClick={() => setSearchMode("simulated")}
-                  aria-pressed={searchMode === "simulated"}
-                  disabled={searching}
-                  style={{ textAlign: "left", font: "inherit" }}
-                >
-                  <span className="lf-mode-card-header">
-                    <Zap size={16} className="text-blue" />
-                    <span className="lf-mode-card-title">Simulation</span>
-                    <span className="lf-badge-pill blue">Sandbox</span>
-                  </span>
-                  <span className="lf-mode-card-desc">
-                    Creates example contacts without provider API calls. Examples cannot be sent email and count toward the daily app quota.
-                  </span>
-                </button>
-              </div>
-            </div>
           </div>
 
           {/* Action Row */}
@@ -324,7 +255,7 @@ export default function DiscoveryView({
           <div className="lf-search-radar-box">
             <div className="lf-radar-header">
               <Loader2 size={16} className="spin text-amber" />
-              <span>Search in progress ({searchMode} mode)</span>
+              <span>Live Search in progress</span>
             </div>
             <div className="lf-radar-steps">
               <div className="lf-radar-step active">
@@ -333,7 +264,7 @@ export default function DiscoveryView({
               </div>
               <div className="lf-radar-step active">
                 <span className="lf-radar-dot pulse" />
-                <span>{searchMode === "simulated" ? "Creating example contact records" : "Checking available provider data"}</span>
+                <span>Querying Google Places and Hunter.io APIs</span>
               </div>
               <div className="lf-radar-step active">
                 <span className="lf-radar-dot pulse" />

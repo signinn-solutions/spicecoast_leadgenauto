@@ -32,6 +32,7 @@ export default function LeadsView({
   onGeneratePitch,
   generatingDraftId,
   onExportCSV,
+  onSendToOutreach,
 }) {
   const [leadScope, setLeadScope] = useState(currentResults.length > 0 ? "current" : "all");
   const [searchQuery, setSearchQuery] = useState("");
@@ -116,6 +117,24 @@ export default function LeadsView({
       setSelectedLeadIds(new Set());
     } else {
       setSelectedLeadIds(new Set(sortedLeads.map((l) => l.id)));
+    }
+  };
+
+  const handleSelectAllValid = () => {
+    const validIds = sortedLeads
+      .filter((l) => isLiveLead(l) && (l.emailStatus === "deliverable" || l.emailStatus === "valid"))
+      .map((l) => l.id);
+    setSelectedLeadIds(new Set(validIds));
+  };
+
+  const handleSelectAllOnPage = () => {
+    setSelectedLeadIds(new Set(sortedLeads.map((l) => l.id)));
+  };
+
+  const handleSendSelectedToOutreach = () => {
+    const selectedList = sortedLeads.filter((l) => selectedLeadIds.has(l.id));
+    if (selectedList.length > 0 && onSendToOutreach) {
+      onSendToOutreach(selectedList);
     }
   };
 
@@ -217,56 +236,95 @@ export default function LeadsView({
               : "Export CSV"}
           </span>
         </button>
+
+        {/* Send to Outreach button */}
+        <button
+          type="button"
+          className="lf-btn-primary sm"
+          onClick={handleSendSelectedToOutreach}
+          disabled={selectedLeadIds.size === 0}
+        >
+          <Send size={14} />
+          <span>
+            {selectedLeadIds.size > 0
+              ? `Send (${selectedLeadIds.size}) to Outreach`
+              : "Send to Outreach"}
+          </span>
+        </button>
       </div>
 
-      {/* Verification Filter Pills */}
-      <div className="lf-filter-pills-bar">
-        <button
-          type="button"
-          className={`lf-filter-pill ${filterStatus === "all" ? "active" : ""}`}
-          onClick={() => setFilterStatus("all")}
-        >
-          All ({counts.total})
-        </button>
-        <button
-          type="button"
-          className={`lf-filter-pill ${filterStatus === "deliverable" ? "active" : ""}`}
-          onClick={() => setFilterStatus("deliverable")}
-        >
-          <CheckCircle2 size={12} className="text-emerald" />
-          <span>Deliverable Emails ({counts.deliverable})</span>
-        </button>
-        <button
-          type="button"
-          className={`lf-filter-pill ${filterStatus === "validPhone" ? "active" : ""}`}
-          onClick={() => setFilterStatus("validPhone")}
-        >
-          <Phone size={12} className="text-emerald" />
-          <span>Valid Phones ({counts.validPhone})</span>
-        </button>
-        <button
-          type="button"
-          className={`lf-filter-pill ${filterStatus === "both" ? "active" : ""}`}
-          onClick={() => setFilterStatus("both")}
-        >
-          <Sparkles size={12} className="text-amber" />
-          <span>Fully Verified ({counts.fullyVerified})</span>
-        </button>
-        <button
-          type="button"
-          className={`lf-filter-pill ${filterStatus === "hasWebsite" ? "active" : ""}`}
-          onClick={() => setFilterStatus("hasWebsite")}
-        >
-          <Globe size={12} className="text-blue" />
-          <span>Has Website ({counts.withWebsite})</span>
-        </button>
-        <button
-          type="button"
-          className={`lf-filter-pill ${filterStatus === "liveOnly" ? "active" : ""}`}
-          onClick={() => setFilterStatus("liveOnly")}
-        >
-          <span>Live Places Only ({counts.liveOnly})</span>
-        </button>
+      {/* Verification Filter Pills & Shortcuts */}
+      <div className="lf-filter-pills-bar" style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 10 }}>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+          <button
+            type="button"
+            className={`lf-filter-pill ${filterStatus === "all" ? "active" : ""}`}
+            onClick={() => setFilterStatus("all")}
+          >
+            All ({counts.total})
+          </button>
+          <button
+            type="button"
+            className={`lf-filter-pill ${filterStatus === "deliverable" ? "active" : ""}`}
+            onClick={() => setFilterStatus("deliverable")}
+          >
+            <CheckCircle2 size={12} className="text-emerald" />
+            <span>Deliverable Emails ({counts.deliverable})</span>
+          </button>
+          <button
+            type="button"
+            className={`lf-filter-pill ${filterStatus === "validPhone" ? "active" : ""}`}
+            onClick={() => setFilterStatus("validPhone")}
+          >
+            <Phone size={12} className="text-emerald" />
+            <span>Valid Phones ({counts.validPhone})</span>
+          </button>
+          <button
+            type="button"
+            className={`lf-filter-pill ${filterStatus === "both" ? "active" : ""}`}
+            onClick={() => setFilterStatus("both")}
+          >
+            <Sparkles size={12} className="text-amber" />
+            <span>Fully Verified ({counts.fullyVerified})</span>
+          </button>
+          <button
+            type="button"
+            className={`lf-filter-pill ${filterStatus === "hasWebsite" ? "active" : ""}`}
+            onClick={() => setFilterStatus("hasWebsite")}
+          >
+            <Globe size={12} className="text-blue" />
+            <span>Has Website ({counts.withWebsite})</span>
+          </button>
+          <button
+            type="button"
+            className={`lf-filter-pill ${filterStatus === "liveOnly" ? "active" : ""}`}
+            onClick={() => setFilterStatus("liveOnly")}
+          >
+            <span>Live Places Only ({counts.liveOnly})</span>
+          </button>
+        </div>
+
+        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+          <button
+            type="button"
+            className="lf-preset-chip"
+            onClick={handleSelectAllValid}
+            title="Select only deliverable/valid emails"
+            style={{ display: "inline-flex", alignItems: "center", gap: 4 }}
+          >
+            <CheckCircle2 size={12} className="text-emerald" />
+            <span>Select All Valid</span>
+          </button>
+          <button
+            type="button"
+            className="lf-preset-chip"
+            onClick={handleSelectAllOnPage}
+            title="Select all visible leads"
+            style={{ display: "inline-flex", alignItems: "center", gap: 4 }}
+          >
+            <span>Select All on Page ({sortedLeads.length})</span>
+          </button>
+        </div>
       </div>
 
       {/* Floating Bulk Actions Bar when checkboxes are checked */}
@@ -280,6 +338,14 @@ export default function LeadsView({
             <button
               type="button"
               className="lf-btn-primary sm"
+              onClick={handleSendSelectedToOutreach}
+            >
+              <Send size={14} />
+              <span>Send {selectedLeadIds.size} to Outreach Studio</span>
+            </button>
+            <button
+              type="button"
+              className="lf-btn-secondary sm"
               onClick={handleExportSelected}
             >
               <Download size={14} />
