@@ -1,6 +1,6 @@
 import config from '../config/env.js';
 import { loadDailyUsage, loadLeadsHistory, loadOutreachHistory, saveOutreachHistory, withOutreachHistoryLock } from '../services/storageService.js';
-import { executeLeadSearch } from '../services/leadFinderService.js';
+import { executeLeadSearch, isHunterQuotaExceeded } from '../services/leadFinderService.js';
 import { generateColdEmail } from '../services/deepseekService.js';
 
 export async function getStatus(req, res, next) {
@@ -14,6 +14,7 @@ export async function getStatus(req, res, next) {
       remaining,
       has_google_key: Boolean(config.GOOGLE_API_KEY),
       has_hunter_key: Boolean(config.HUNTER_API_KEY),
+      hunter_quota_exceeded: isHunterQuotaExceeded(),
     });
   } catch (err) {
     next(err);

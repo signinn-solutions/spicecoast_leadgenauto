@@ -176,11 +176,11 @@ export default function OutreachView({
     <div className="lf-view-container lf-animate-fade">
       {/* Queued Leads Active Banner */}
       {queueLeads.length > 0 && (
-        <div className="lf-search-complete-banner" style={{ background: "rgba(245, 158, 11, 0.08)", borderColor: "rgba(245, 158, 11, 0.3)" }}>
+        <div className="lf-search-complete-banner" style={{ background: "var(--purple-soft)", borderColor: "rgba(125, 98, 236, 0.3)" }}>
           <div className="lf-banner-left">
             <Sparkles size={18} className="text-amber" />
             <div>
-              <div className="lf-banner-title" style={{ color: "var(--amber-bright)" }}>
+              <div className="lf-banner-title" style={{ color: "var(--purple-dark)" }}>
                 Selected Review Queue &bull; {queueLeads.length} Lead(s) Loaded from CRM
               </div>
               <div className="lf-banner-text">
@@ -229,7 +229,7 @@ export default function OutreachView({
 
         <div className="lf-outreach-metric-box">
           <div className="lf-metric-label">Safety Dispatch Guardrail</div>
-          <div className="lf-metric-num lf-mono" style={{ color: "#38bdf8" }}>Active</div>
+          <div className="lf-metric-num lf-mono text-blue">Active</div>
           <div className="lf-metric-sub">Human confirmation required</div>
         </div>
       </div>

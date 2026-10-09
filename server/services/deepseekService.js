@@ -314,3 +314,91 @@ export async function draftReply(subject, body, senderName = '') {
   const result = await extractMetadataAndDraftReply(subject, body, '', senderName);
   return result.reply;
 }
+
+/**
+ * Classifies an incoming reply's sentiment/intent as 'positive', 'neutral', or 'negative'.
+ * Uses DeepSeek chat completion when configured, with accurate rule-based heuristics as fallback.
+ */
+export async function classifyReplySentiment(subject = '', body = '') {
+  const client = getDeepseekClient();
+  const textCombined = `${subject} ${body}`.trim();
+
+  if (client && config.DEEPSEEK_API_KEY && textCombined) {
+    try {
+      const response = await client.chat.completions.create({
+        model: config.DEEPSEEK_MODEL || 'deepseek-chat',
+        messages: [
+          {
+            role: 'system',
+            content:
+              'You are a B2B sales sentiment analyzer. Classify the customer reply into strictly one of three categories: "positive", "neutral", or "negative". Positive indicates interest in products, quotes, samples, catalog, or collaboration. Negative indicates rejection, unsubscribe, not interested, or hostile. Neutral indicates out of office, ambiguity, or automated acknowledgment. Return JSON: {"sentiment": "positive"|"neutral"|"negative"}',
+          },
+          {
+            role: 'user',
+            content: `Subject: ${subject}\n\nBody:\n${body.slice(0, 2000)}`,
+          },
+        ],
+        max_tokens: 50,
+        temperature: 0.1,
+      });
+
+      const raw = response.choices?.[0]?.message?.content?.trim() || '';
+      const match = raw.match(/\{[\s\S]*\}/);
+      if (match) {
+        const parsed = JSON.parse(match[0]);
+        if (parsed.sentiment && ['positive', 'neutral', 'negative'].includes(parsed.sentiment.toLowerCase())) {
+          return parsed.sentiment.toLowerCase();
+        }
+      }
+    } catch (err) {
+      console.warn(`[DeepSeek Sentiment Error]: ${err.message}. Using heuristic fallback.`);
+    }
+  }
+
+  // Fallback heuristic classification
+  const lower = textCombined.toLowerCase();
+  const negativeTriggers = [
+    'unsubscribe',
+    'remove me',
+    'not interested',
+    'stop contacting',
+    'do not email',
+    'wrong company',
+    'wrong person',
+    'take me off',
+    'spam',
+  ];
+  if (negativeTriggers.some((t) => lower.includes(t))) {
+    return 'negative';
+  }
+
+  const positiveTriggers = [
+    'interested',
+    'price',
+    'pricing',
+    'quote',
+    'quotation',
+    'sample',
+    'moq',
+    'catalog',
+    'catalogue',
+    'specification',
+    'send me',
+    'looking for',
+    'container',
+    'fob',
+    'cif',
+    'fcl',
+    'please share',
+    'call me',
+    'let us connect',
+    'sounds good',
+    'thank you for reaching',
+  ];
+  if (positiveTriggers.some((t) => lower.includes(t))) {
+    return 'positive';
+  }
+
+  return 'neutral';
+}
+

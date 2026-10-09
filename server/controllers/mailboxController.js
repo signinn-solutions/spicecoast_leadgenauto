@@ -6,6 +6,7 @@ import {
   loadOutreachHistory,
   saveOutreachHistory,
   loadLeadsHistory,
+  saveLeadsHistory,
   loadAutoSendSetting,
   saveAutoSendSetting,
   withOutreachHistoryLock,
@@ -13,6 +14,11 @@ import {
 } from '../services/storageService.js';
 import { processIncomingEmail } from '../services/webhookService.js';
 import { sendEmail } from '../services/mailService.js';
+import {
+  runLifecycleCheck,
+  dispatchFollowUpEmail,
+  reopenClosedLead,
+} from '../services/followUpEngine.js';
 
 export async function handleWebhook(req, res, next) {
   try {
@@ -157,6 +163,10 @@ async function sendColdMailUnlocked(req, res, next) {
       if (item.id === id || (item.leadId && `outreach-${item.leadId}` === id)) {
         item.status = 'sent';
         item.sentAt = sentDate;
+        item.first_contacted_at = item.first_contacted_at || sentDate;
+        item.last_contacted_at = sentDate;
+        item.follow_up_count = 0;
+        item.lifecycle_status = 'sent';
         if (subject) item.subject = subject;
         if (body) item.body = body;
         found = true;
@@ -172,10 +182,26 @@ async function sendColdMailUnlocked(req, res, next) {
         body,
         status: 'sent',
         sentAt: sentDate,
+        first_contacted_at: sentDate,
+        last_contacted_at: sentDate,
+        follow_up_count: 0,
+        lifecycle_status: 'sent',
         createdAt: sentDate.slice(0, 10),
       });
     }
     saveOutreachHistory(outreach);
+
+    // Also reflect timestamps in leads_history
+    const leadsHistory = loadLeadsHistory();
+    if (Array.isArray(leadsHistory.leads)) {
+      const matchLead = leadsHistory.leads.find((l) => l.id === draft.leadId || l.email === to);
+      if (matchLead) {
+        matchLead.first_contacted_at = matchLead.first_contacted_at || sentDate;
+        matchLead.last_contacted_at = sentDate;
+        matchLead.status = 'sent';
+        saveLeadsHistory(leadsHistory);
+      }
+    }
 
     return res.status(200).json({
       status: 'sent',
@@ -272,3 +298,71 @@ export async function toggleAutosend(req, res, next) {
     next(err);
   }
 }
+
+export async function getMailLifecycle(req, res, next) {
+  try {
+    const data = await runLifecycleCheck();
+    return res.status(200).json(data);
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function sendFollowUpDraft(req, res, next) {
+  try {
+    const { leadId, subject, body, to } = req.body || {};
+    if (!leadId) {
+      return res.status(400).json({ error: 'Missing leadId for follow-up dispatch.' });
+    }
+    const result = await dispatchFollowUpEmail(leadId, { subject, body, to });
+    return res.status(200).json(result);
+  } catch (err) {
+    return res.status(err.message.includes('not found') ? 404 : 400).json({ error: err.message });
+  }
+}
+
+export async function updateFollowUpDraft(req, res, next) {
+  return withOutreachHistoryLock(async () => {
+    try {
+      const { leadId, subject, body } = req.body || {};
+      if (!leadId) {
+        return res.status(400).json({ error: 'Missing leadId.' });
+      }
+
+      const outreach = loadOutreachHistory();
+      const item = outreach.find(
+        (o) => o.id === leadId || (o.leadId && `outreach-${o.leadId}` === leadId) || o.leadId === leadId
+      );
+
+      if (!item) {
+        return res.status(404).json({ error: 'Lead outreach record not found.' });
+      }
+
+      if (!item.follow_up_draft) {
+        return res.status(400).json({ error: 'No active follow-up draft found for this lead.' });
+      }
+
+      if (typeof subject === 'string') item.follow_up_draft.subject = subject;
+      if (typeof body === 'string') item.follow_up_draft.body = body;
+
+      saveOutreachHistory(outreach);
+      return res.status(200).json({ success: true, follow_up_draft: item.follow_up_draft });
+    } catch (err) {
+      next(err);
+    }
+  });
+}
+
+export async function reopenLead(req, res, next) {
+  try {
+    const { leadId } = req.body || {};
+    if (!leadId) {
+      return res.status(400).json({ error: 'Missing leadId.' });
+    }
+    const result = await reopenClosedLead(leadId);
+    return res.status(200).json(result);
+  } catch (err) {
+    return res.status(err.message.includes('not found') ? 404 : 400).json({ error: err.message });
+  }
+}
+

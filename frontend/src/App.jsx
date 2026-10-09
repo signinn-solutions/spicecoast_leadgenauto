@@ -55,6 +55,7 @@ export default function LeadFinderApp({ onLogout }) {
   });
   const [mailboxMessages, setMailboxMessages] = useState([]);
   const [outreachList, setOutreachList] = useState([]);
+  const [mailLifecycle, setMailLifecycle] = useState(null);
 
   // Active Modals & Drawers
   const [selectedLead, setSelectedLead] = useState(null);
@@ -72,6 +73,7 @@ export default function LeadFinderApp({ onLogout }) {
   const [isSavingDraft, setIsSavingDraft] = useState(false);
   const [isSendingPitchId, setIsSendingPitchId] = useState(null);
   const [isSendingReplyId, setIsSendingReplyId] = useState(null);
+  const [isSendingFollowUpId, setIsSendingFollowUpId] = useState(null);
   const [isSimulatingInbound, setIsSimulatingInbound] = useState(false);
   const [isTogglingAutoSend, setIsTogglingAutoSend] = useState(false);
   const refreshPromiseRef = useRef(null);
@@ -88,11 +90,11 @@ export default function LeadFinderApp({ onLogout }) {
     if (!isSilent) setIsRefreshing(true);
     const request = (async () => {
       try {
-        const urls = ["/api/status", "/api/leads", "/api/mailbox/status", "/api/mailbox/messages", "/api/mailbox/outreach"];
+        const urls = ["/api/status", "/api/leads", "/api/mailbox/status", "/api/mailbox/messages", "/api/mailbox/outreach", "/api/mailbox/lifecycle"];
         const responses = await Promise.all(urls.map((url) => fetch(url, { signal: AbortSignal.timeout(10000) })));
         const failed = responses.find((response) => !response.ok);
         if (failed) throw new Error(`API returned HTTP ${failed.status}.`);
-        const [statusData, leadsData, mailboxData, messagesData, outreachData] = await Promise.all(responses.map((response) => response.json()));
+        const [statusData, leadsData, mailboxData, messagesData, outreachData, lifecycleData] = await Promise.all(responses.map((response) => response.json()));
         setServerOnline(true);
         lastFetchErrorRef.current = false;
         setServerStatus(statusData);
@@ -102,6 +104,7 @@ export default function LeadFinderApp({ onLogout }) {
         setMailboxStatus(mailboxData);
         setMailboxMessages(messagesData.messages || []);
         setOutreachList(outreachData.outreach || []);
+        setMailLifecycle(lifecycleData);
       } catch (error) {
         setServerOnline(false);
         if (!isSilent || !lastFetchErrorRef.current) {
@@ -526,6 +529,102 @@ export default function LeadFinderApp({ onLogout }) {
     }
   };
 
+  // Dispatch Reviewed Follow-Up Email
+  const handleSendFollowUp = async (leadId, { subject, body, to }) => {
+    setIsSendingFollowUpId(leadId);
+    try {
+      const res = await fetch("/api/mailbox/send-followup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ leadId, subject, body, to }),
+      });
+
+      if (res.ok) {
+        setNotice({
+          type: "success",
+          title: "Follow-Up Dispatched",
+          text: `Follow-up email dispatched to ${to}.`,
+        });
+        fetchAllData(true);
+        return true;
+      } else {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "Failed to dispatch follow-up.");
+      }
+    } catch (err) {
+      setNotice({
+        type: "error",
+        title: "Dispatch Failed",
+        text: err.message,
+      });
+      return false;
+    } finally {
+      setIsSendingFollowUpId(null);
+    }
+  };
+
+  // Update Follow-Up Draft Subject/Body
+  const handleUpdateFollowUpDraft = async (leadId, { subject, body }) => {
+    try {
+      const res = await fetch("/api/mailbox/update-followup-draft", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ leadId, subject, body }),
+      });
+
+      if (res.ok) {
+        setNotice({
+          type: "success",
+          title: "Follow-Up Draft Saved",
+          text: "Changes saved to follow-up draft.",
+        });
+        fetchAllData(true);
+        return true;
+      } else {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "Failed to save draft changes.");
+      }
+    } catch (err) {
+      setNotice({
+        type: "error",
+        title: "Save Failed",
+        text: err.message,
+      });
+      return false;
+    }
+  };
+
+  // Reopen Closed Lead
+  const handleReopenLead = async (leadId) => {
+    try {
+      const res = await fetch("/api/mailbox/reopen-lead", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ leadId }),
+      });
+
+      if (res.ok) {
+        setNotice({
+          type: "success",
+          title: "Lead Reopened",
+          text: "Lead has been restored and queued for follow-up.",
+        });
+        fetchAllData(true);
+        return true;
+      } else {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "Failed to reopen lead.");
+      }
+    } catch (err) {
+      setNotice({
+        type: "error",
+        title: "Reopen Failed",
+        text: err.message,
+      });
+      return false;
+    }
+  };
+
   // Toggle Auto-Send Setting
   const handleToggleAutoSend = async () => {
     const nextState = !mailboxStatus.auto_send;
@@ -761,11 +860,16 @@ export default function LeadFinderApp({ onLogout }) {
           {activeView === "mailbox" && (
             <MailboxView
               mailboxStatus={mailboxStatus}
+              mailLifecycle={mailLifecycle}
               mailboxMessages={mailboxMessages}
               onRefresh={() => fetchAllData(false)}
               isRefreshing={isRefreshing}
               onSendReply={handleSendMailboxReply}
               isSendingReplyId={isSendingReplyId}
+              onSendFollowUp={handleSendFollowUp}
+              isSendingFollowUpId={isSendingFollowUpId}
+              onUpdateFollowUpDraft={handleUpdateFollowUpDraft}
+              onReopenLead={handleReopenLead}
               onSimulateInbound={handleSimulateInbound}
               isSimulating={isSimulatingInbound}
             />

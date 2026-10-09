@@ -6,11 +6,14 @@ import {
   saveReplyUsage,
   loadMailboxHistory,
   saveMailboxHistory,
+  loadOutreachHistory,
+  saveOutreachHistory,
   loadAutoSendSetting,
   withMailboxHistoryLock,
 } from './storageService.js';
 import { extractMetadataAndDraftReply } from './deepseekService.js';
 import { sendEmail } from './mailService.js';
+import { computeLeadEngagementScore } from './lifecycleScoringService.js';
 
 export function looksLikeALeadReply(subject = '', body = '') {
   const positiveSignals = [
@@ -207,6 +210,26 @@ async function runIncomingEmail(payload, forceBypassAuth, manualAutoSend) {
     mailbox: receiverEmail,
     receivedAt: formattedDate,
   };
+
+  // Compute engagement score and link to outreach record if sender was contacted
+  const outreach = loadOutreachHistory();
+  const matchedOutreach = outreach.find(
+    (o) => o.recipient && o.recipient.toLowerCase() === senderEmail.toLowerCase()
+  );
+
+  const scoreResult = await computeLeadEngagementScore(
+    matchedOutreach || { first_contacted_at: formattedDate, company: metadata.buyerCompany },
+    [messageRecord],
+    matchedOutreach ? [{ sentAt: matchedOutreach.sentAt || matchedOutreach.first_contacted_at }] : []
+  );
+
+  messageRecord.score = scoreResult;
+
+  if (matchedOutreach) {
+    matchedOutreach.status = scoreResult.isHot ? 'hot' : 'replied';
+    matchedOutreach.score_result = scoreResult;
+    saveOutreachHistory(outreach);
+  }
 
   // Save to interaction history
   const history = loadMailboxHistory();

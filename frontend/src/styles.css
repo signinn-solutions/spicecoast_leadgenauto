@@ -1,58 +1,85 @@
 /* ==========================================================
    SpiceCoast Autonomous Lead Automation & CRM
-   Production SaaS Design System & Stylesheet
+   Design System & Stylesheet Inspired by Snov.io (app.snov.io)
    ========================================================== */
 
 :root {
-  --bg-base: #0d0a07;
-  --bg-surface-1: #15110c;
-  --bg-surface-2: #1d1812;
-  --bg-surface-3: #262018;
-  --bg-surface-hover: #30281e;
-  --bg-glass: rgba(21, 17, 12, 0.85);
+  /* Snov.io Brand Color System */
+  --purple: #7d62ec;
+  --purple-light: #7d64e9;
+  --purple-super-light: #f1effc;
+  --purple-dark: #6a4fe1;
+  --purple-glow: rgba(125, 98, 236, 0.25);
+  --purple-soft: #f1effc;
 
-  --border-subtle: rgba(255, 255, 255, 0.06);
-  --border-card: rgba(227, 162, 46, 0.12);
-  --border-active: rgba(227, 162, 46, 0.4);
-  --border-strong: #3d3323;
+  /* Primary Brand Theme Mapping */
+  --amber: #7d62ec;
+  --amber-hover: #6a4fe1;
+  --amber-soft: #f1effc;
+  --amber-glow: rgba(125, 98, 236, 0.25);
+  --amber-bright: #6a4fe1;
 
-  --amber: #f59e0b;
-  --amber-hover: #d97706;
-  --amber-soft: rgba(245, 158, 11, 0.12);
-  --amber-glow: rgba(245, 158, 11, 0.25);
+  --turmeric: #7d62ec;
+  --turmeric-soft: #f1effc;
 
-  --turmeric: #e3a22e;
-  --turmeric-soft: rgba(227, 162, 46, 0.12);
-
+  /* Snov.io Functional Status Colors */
   --emerald: #10b981;
   --emerald-hover: #059669;
-  --emerald-soft: rgba(16, 185, 129, 0.12);
+  --emerald-soft: #ecfdf5;
+  --emerald-border: #a7f3d0;
 
-  --rose: #f43f5e;
-  --rose-soft: rgba(244, 63, 94, 0.12);
+  --rose: #f65353;
+  --rose-hover: #e03838;
+  --rose-soft: #fef2f2;
+  --rose-border: #fecaca;
 
-  --blue: #38bdf8;
-  --blue-soft: rgba(56, 189, 248, 0.12);
+  --blue: #3b82f6;
+  --blue-soft: #eff6ff;
+  --blue-border: #bfdbfe;
 
-  --text-main: #fcf9f2;
-  --text-muted: #a69c89;
-  --text-faint: #6c6250;
-  --text-inverse: #0d0a07;
+  --orange-warn: #f59e0b;
+  --orange-soft: #fffbeb;
+  --orange-border: #fde68a;
 
+  /* Snov.io Neutral & Surface Palette */
+  --bg-base: #f6f8fd;
+  --bg-surface-1: #ffffff;
+  --bg-surface-2: #f8f9fb;
+  --bg-surface-3: #f1f4f9;
+  --bg-surface-hover: #eff2f7;
+  --bg-glass: rgba(255, 255, 255, 0.94);
+
+  /* Snov.io Exact Text Variables */
+  --text-main: #192435;
+  --text-secondary: #666e7a;
+  --text-muted: #666e7a;
+  --text-faint: #999fa7;
+  --text-disabled: #909090;
+  --text-inverse: #ffffff;
+
+  /* Borders & Dividers */
+  --border-subtle: #ebecf0;
+  --border-card: #e2e8f0;
+  --border-active: #7d62ec;
+  --border-strong: #c7cfda;
+
+  /* Layout Dimensions */
   --sidebar-w: 260px;
   --sidebar-collapsed-w: 74px;
   --header-h: 68px;
 
+  /* Border Radii */
   --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 14px;
-  --radius-xl: 20px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
   --radius-pill: 9999px;
 
-  --shadow-sm: 0 2px 6px rgba(0, 0, 0, 0.25);
-  --shadow-md: 0 6px 20px rgba(0, 0, 0, 0.35);
-  --shadow-lg: 0 12px 36px rgba(0, 0, 0, 0.5);
-  --shadow-glow: 0 0 24px rgba(245, 158, 11, 0.15);
+  /* Snov.io Elevated Soft Shadows */
+  --shadow-sm: 0 1px 3px rgba(25, 36, 53, 0.05);
+  --shadow-md: 0 4px 14px rgba(25, 36, 53, 0.06), 0 1px 3px rgba(25, 36, 53, 0.04);
+  --shadow-lg: 0 10px 28px rgba(25, 36, 53, 0.09), 0 3px 8px rgba(25, 36, 53, 0.05);
+  --shadow-glow: 0 0 20px rgba(125, 98, 236, 0.2);
 }
 
 /* Base Reset & Fonts */
@@ -65,14 +92,34 @@
 body {
   background-color: var(--bg-base);
   color: var(--text-main);
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: 'Roboto', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   overflow-x: hidden;
 }
 
 .lf-mono { font-family: 'IBM Plex Mono', monospace; }
-.lf-display { font-family: 'Fraunces', Georgia, serif; }
+.lf-display { font-family: 'Roboto', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+
+/* Custom Snov.io Clean Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar:horizontal {
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface-2);
+  margin: 4px 0;
+}
+::-webkit-scrollbar-thumb {
+  background: #d5dce5;
+  border-radius: var(--radius-sm);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #b8c3d1;
+}
 
 /* Global App Shell Layout */
 .lf-app-shell {
@@ -80,13 +127,13 @@ body {
   min-height: 100vh;
   width: 100vw;
   background-color: var(--bg-base);
-  background-image: radial-gradient(circle at 1px 1px, rgba(245, 158, 11, 0.04) 1px, transparent 0);
+  background-image: radial-gradient(circle at 1px 1px, rgba(125, 98, 236, 0.04) 1px, transparent 0);
   background-size: 28px 28px;
   position: relative;
 }
 
 /* ==========================================================
-   SIDEBAR NAVIGATION
+   SIDEBAR NAVIGATION (Snov.io White & Purple Active)
    ========================================================== */
 .lf-sidebar {
   width: var(--sidebar-w);
@@ -100,7 +147,7 @@ body {
   flex-direction: column;
   z-index: 40;
   transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-  backdrop-filter: blur(12px);
+  box-shadow: 1px 0 3px rgba(25, 36, 53, 0.03);
 }
 
 .lf-sidebar.collapsed {
@@ -129,13 +176,13 @@ body {
   width: 38px;
   height: 38px;
   border-radius: var(--radius-md);
-  background: linear-gradient(135deg, var(--amber), #b45309);
-  color: #1a1205;
+  background: linear-gradient(135deg, var(--purple), var(--purple-dark));
+  color: #ffffff;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  box-shadow: 0 4px 14px var(--amber-glow);
+  box-shadow: 0 4px 14px var(--purple-glow);
 }
 
 .lf-brand-info {
@@ -151,7 +198,7 @@ body {
 }
 
 .lf-brand-tagline {
-  font-size: 10.5px;
+  font-size: 11px;
   color: var(--text-muted);
   font-family: 'IBM Plex Mono', monospace;
   margin-top: -2px;
@@ -174,7 +221,7 @@ body {
 .lf-collapse-btn:hover {
   color: var(--text-main);
   background: var(--bg-surface-2);
-  border-color: var(--border-card);
+  border-color: var(--border-strong);
 }
 
 /* Sidebar CTA button */
@@ -190,20 +237,20 @@ body {
   gap: 9px;
   padding: 10px 14px;
   border-radius: var(--radius-md);
-  background: linear-gradient(135deg, rgba(245, 158, 11, 0.18), rgba(217, 119, 6, 0.1));
-  border: 1px solid var(--amber);
-  color: var(--amber);
+  background: var(--purple-soft);
+  border: 1px solid rgba(125, 98, 236, 0.35);
+  color: var(--purple);
   font-size: 13.5px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s ease;
-  box-shadow: 0 2px 10px rgba(245, 158, 11, 0.08);
+  box-shadow: 0 1px 3px rgba(125, 98, 236, 0.08);
 }
 
 .lf-btn-new-discovery:hover {
-  background: var(--amber);
-  color: #1a1205;
-  box-shadow: 0 4px 16px var(--amber-glow);
+  background: var(--purple);
+  color: #ffffff;
+  box-shadow: 0 4px 16px var(--purple-glow);
   transform: translateY(-1px);
 }
 
@@ -218,7 +265,7 @@ body {
 }
 
 .lf-nav-group-label {
-  font-size: 10px;
+  font-size: 10.5px;
   font-weight: 700;
   letter-spacing: 0.08em;
   color: var(--text-faint);
@@ -248,9 +295,9 @@ body {
 }
 
 .lf-nav-item.active {
-  background: var(--bg-surface-3);
-  color: var(--amber);
-  border-color: var(--border-card);
+  background: var(--purple-soft);
+  color: var(--purple);
+  border-color: transparent;
   font-weight: 600;
 }
 
@@ -262,7 +309,7 @@ body {
   height: 70%;
   width: 3px;
   border-radius: 0 3px 3px 0;
-  background: var(--amber);
+  background: var(--purple);
 }
 
 .lf-nav-item-icon {
@@ -303,27 +350,28 @@ body {
 }
 
 .lf-nav-badge.default {
-  background: var(--bg-surface-hover);
+  background: var(--bg-surface-2);
   color: var(--text-muted);
+  border: 1px solid var(--border-subtle);
 }
 
 .lf-nav-badge.gold {
-  background: var(--amber-soft);
-  color: var(--amber);
-  border: 1px solid rgba(245, 158, 11, 0.3);
+  background: #fffbeb;
+  color: #d97706;
+  border: 1px solid #fde68a;
 }
 
 .lf-nav-badge.emerald {
   background: var(--emerald-soft);
-  color: var(--emerald);
-  border: 1px solid rgba(16, 185, 129, 0.3);
+  color: #059669;
+  border: 1px solid #a7f3d0;
 }
 
 /* Sidebar Footer & Quotas */
 .lf-sidebar-footer {
   padding: 14px;
   border-top: 1px solid var(--border-subtle);
-  background: rgba(13, 10, 7, 0.6);
+  background: #fafbfe;
 }
 
 .lf-quota-card {
@@ -363,7 +411,7 @@ body {
 .lf-meter-bar {
   width: 100%;
   height: 6px;
-  background: var(--bg-surface-3);
+  background: #eaedf3;
   border-radius: var(--radius-pill);
   overflow: hidden;
 }
@@ -375,7 +423,7 @@ body {
 }
 
 .lf-meter-fill.amber {
-  background: linear-gradient(90deg, #f59e0b, #d97706);
+  background: linear-gradient(90deg, #7d62ec, #6a4fe1);
 }
 
 .lf-meter-fill.emerald {
@@ -383,7 +431,7 @@ body {
 }
 
 .lf-footer-origin {
-  font-size: 10px;
+  font-size: 10.5px;
   color: var(--text-faint);
   font-family: 'IBM Plex Mono', monospace;
   text-align: center;
@@ -410,14 +458,14 @@ body {
 
 .lf-status-pill.online {
   background: var(--emerald-soft);
-  color: var(--emerald);
-  border: 1px solid rgba(16, 185, 129, 0.3);
+  color: #059669;
+  border: 1px solid #a7f3d0;
 }
 
 .lf-status-pill.offline {
   background: var(--rose-soft);
   color: var(--rose);
-  border: 1px solid rgba(244, 63, 94, 0.3);
+  border: 1px solid #fecaca;
 }
 
 .lf-pulse-dot {
@@ -434,7 +482,7 @@ body {
 }
 
 /* ==========================================================
-   MAIN LAYOUT & HEADER
+   MAIN LAYOUT & HEADER (Snov.io Crisp White Header)
    ========================================================== */
 .lf-layout-wrap {
   flex: 1;
@@ -459,10 +507,11 @@ body {
   align-items: center;
   justify-content: space-between;
   padding: 0 32px;
-  background: rgba(13, 10, 7, 0.85);
+  background: rgba(255, 255, 255, 0.94);
   backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--border-card);
   gap: 16px;
+  box-shadow: 0 1px 3px rgba(25, 36, 53, 0.03);
 }
 
 .lf-header-left {
@@ -511,8 +560,8 @@ body {
   padding: 6px 12px;
   border-radius: var(--radius-pill);
   font-size: 12px;
-  border: 1px solid var(--border-subtle);
-  background: var(--bg-surface-1);
+  border: 1px solid var(--border-card);
+  background: #ffffff;
   color: var(--text-muted);
 }
 
@@ -532,20 +581,20 @@ body {
 }
 
 .lf-header-pill.mode-auto {
-  background: var(--amber-soft);
-  border-color: rgba(245, 158, 11, 0.35);
-  color: var(--amber);
+  background: var(--purple-soft);
+  border-color: rgba(125, 98, 236, 0.35);
+  color: var(--purple);
 }
 
 .lf-header-pill.mode-review {
   background: var(--emerald-soft);
   border-color: rgba(16, 185, 129, 0.35);
-  color: var(--emerald);
+  color: #059669;
 }
 
 .lf-header-icon-btn {
-  background: var(--bg-surface-1);
-  border: 1px solid var(--border-subtle);
+  background: #ffffff;
+  border: 1px solid var(--border-card);
   color: var(--text-muted);
   width: 34px;
   height: 34px;
@@ -560,7 +609,7 @@ body {
 .lf-header-icon-btn:hover {
   color: var(--text-main);
   background: var(--bg-surface-2);
-  border-color: var(--border-card);
+  border-color: var(--border-strong);
 }
 
 /* Main Viewport Container */
@@ -579,7 +628,7 @@ body {
 }
 
 /* ==========================================================
-   BUTTONS & FORM CONTROLS
+   BUTTONS & FORM CONTROLS (Snov.io Vibrant Purple & Clean White)
    ========================================================== */
 .lf-btn-primary {
   display: inline-flex;
@@ -588,19 +637,19 @@ body {
   gap: 8px;
   padding: 10px 18px;
   border-radius: var(--radius-md);
-  background: linear-gradient(135deg, var(--amber), var(--amber-hover));
-  color: #161005;
-  border: 1px solid var(--amber);
+  background: linear-gradient(135deg, var(--purple), var(--purple-dark));
+  color: #ffffff;
+  border: 1px solid var(--purple-dark);
   font-size: 13.5px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.18s ease;
-  box-shadow: 0 4px 14px var(--amber-glow);
+  box-shadow: 0 2px 6px var(--purple-glow);
 }
 
 .lf-btn-primary:hover:not(:disabled) {
   transform: translateY(-1px);
-  box-shadow: 0 6px 18px rgba(245, 158, 11, 0.35);
+  box-shadow: 0 4px 14px rgba(125, 98, 236, 0.4);
 }
 
 .lf-btn-primary:disabled {
@@ -610,8 +659,8 @@ body {
 }
 
 .lf-btn-primary.gold {
-  background: linear-gradient(135deg, #e3a22e, #b47918);
-  border-color: #e3a22e;
+  background: linear-gradient(135deg, var(--purple), var(--purple-dark));
+  border-color: var(--purple-dark);
 }
 
 .lf-btn-primary.sm {
@@ -627,19 +676,20 @@ body {
   gap: 7px;
   padding: 9px 16px;
   border-radius: var(--radius-md);
-  background: var(--bg-surface-2);
-  border: 1px solid var(--border-card);
+  background: #ffffff;
+  border: 1px solid #d5dce5;
   color: var(--text-main);
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.15s ease;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
 }
 
 .lf-btn-secondary:hover:not(:disabled) {
-  background: var(--bg-surface-hover);
-  border-color: var(--border-active);
-  color: #fff;
+  background: #f8fafc;
+  border-color: #c2cbd6;
+  color: var(--text-main);
 }
 
 .lf-btn-secondary.sm {
@@ -661,7 +711,7 @@ body {
   padding: 6px 10px;
   background: transparent;
   border: none;
-  color: var(--amber);
+  color: var(--purple);
   font-size: 12.5px;
   font-weight: 500;
   cursor: pointer;
@@ -669,7 +719,7 @@ body {
 }
 
 .lf-btn-ghost:hover {
-  color: #fbbf24;
+  color: var(--purple-dark);
 }
 
 .lf-btn-ghost-sm {
@@ -690,8 +740,8 @@ body {
 }
 
 .lf-btn-icon-sm {
-  background: var(--bg-surface-2);
-  border: 1px solid var(--border-subtle);
+  background: #ffffff;
+  border: 1px solid var(--border-card);
   color: var(--text-muted);
   width: 30px;
   height: 30px;
@@ -706,8 +756,8 @@ body {
 
 .lf-btn-icon-sm:hover {
   color: var(--text-main);
-  background: var(--bg-surface-hover);
-  border-color: var(--border-card);
+  background: var(--bg-surface-2);
+  border-color: var(--border-strong);
 }
 
 .lf-btn-icon-xs {
@@ -741,20 +791,20 @@ body {
 }
 
 .lf-btn-pitch-badge.generate {
-  background: var(--amber-soft);
-  color: var(--amber);
-  border: 1px solid rgba(245, 158, 11, 0.3);
+  background: var(--purple-soft);
+  color: var(--purple);
+  border: 1px solid rgba(125, 98, 236, 0.3);
 }
 
 .lf-btn-pitch-badge.generate:hover {
-  background: var(--amber);
-  color: #1a1205;
+  background: var(--purple);
+  color: #ffffff;
 }
 
 .lf-btn-pitch-badge.review {
   background: var(--emerald-soft);
-  color: var(--emerald);
-  border: 1px solid rgba(16, 185, 129, 0.3);
+  color: #059669;
+  border: 1px solid #a7f3d0;
 }
 
 .lf-btn-pitch-badge.review:hover {
@@ -762,13 +812,13 @@ body {
   color: #fff;
 }
 
-/* Inputs & Textareas */
+/* Inputs & Textareas (Snov.io Crisp White & Soft Ring) */
 .lf-input,
 .lf-textarea,
 .lf-select {
   width: 100%;
-  background: var(--bg-surface-2);
-  border: 1px solid var(--border-card);
+  background: #ffffff;
+  border: 1px solid #d8dde6;
   border-radius: var(--radius-md);
   padding: 10px 14px;
   color: var(--text-main);
@@ -781,14 +831,15 @@ body {
 .lf-input:focus,
 .lf-textarea:focus,
 .lf-select:focus {
-  border-color: var(--amber);
-  box-shadow: 0 0 0 3px var(--amber-soft);
+  border-color: var(--purple);
+  box-shadow: 0 0 0 3px rgba(125, 98, 236, 0.18);
 }
 
 .lf-input:disabled,
 .lf-textarea:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+  background: var(--bg-surface-2);
 }
 
 .lf-textarea {
@@ -797,10 +848,10 @@ body {
 }
 
 /* ==========================================================
-   PANELS & CARDS
+   PANELS & CARDS (Snov.io Crisp White Elevated Surfaces)
    ========================================================== */
 .lf-panel {
-  background: var(--bg-surface-1);
+  background: #ffffff;
   border: 1px solid var(--border-card);
   border-radius: var(--radius-lg);
   padding: 24px;
@@ -831,12 +882,11 @@ body {
 
 /* Hero Banner */
 .lf-hero-banner {
-  background: linear-gradient(135deg, rgba(245, 158, 11, 0.08) 0%, rgba(13, 10, 7, 0.95) 100%),
-              var(--bg-surface-1);
+  background: linear-gradient(135deg, #ffffff 0%, #f6f8fd 100%), #ffffff;
   border: 1px solid var(--border-card);
   border-radius: var(--radius-xl);
   padding: 32px 36px;
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--shadow-sm);
   position: relative;
   overflow: hidden;
 }
@@ -848,7 +898,7 @@ body {
   top: -80px;
   width: 280px;
   height: 280px;
-  background: radial-gradient(circle, rgba(245, 158, 11, 0.12) 0%, transparent 70%);
+  background: radial-gradient(circle, rgba(125, 98, 236, 0.08) 0%, transparent 70%);
   pointer-events: none;
 }
 
@@ -858,9 +908,9 @@ body {
   gap: 6px;
   padding: 4px 10px;
   border-radius: var(--radius-pill);
-  background: var(--amber-soft);
-  color: var(--amber);
-  border: 1px solid rgba(245, 158, 11, 0.25);
+  background: var(--purple-soft);
+  color: var(--purple);
+  border: 1px solid rgba(125, 98, 236, 0.25);
   font-size: 11.5px;
   font-weight: 600;
   margin-bottom: 12px;
@@ -916,10 +966,11 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  background: var(--bg-surface-2);
+  background: #ffffff;
   border: 1px solid var(--border-card);
   padding: 6px 14px;
   border-radius: var(--radius-pill);
+  box-shadow: var(--shadow-sm);
 }
 
 .lf-quota-badge-label {
@@ -930,7 +981,7 @@ body {
 .lf-quota-badge-val {
   font-size: 13px;
   font-weight: 600;
-  color: var(--amber);
+  color: var(--purple);
 }
 
 /* ==========================================================
@@ -943,7 +994,7 @@ body {
 }
 
 .lf-stat-card {
-  background: var(--bg-surface-1);
+  background: #ffffff;
   border: 1px solid var(--border-card);
   border-radius: var(--radius-lg);
   padding: 20px;
@@ -953,11 +1004,12 @@ body {
   cursor: pointer;
   position: relative;
   overflow: hidden;
+  box-shadow: var(--shadow-sm);
 }
 
 .lf-stat-card:hover {
   transform: translateY(-2px);
-  border-color: var(--border-active);
+  border-color: var(--purple);
   box-shadow: var(--shadow-md);
 }
 
@@ -985,10 +1037,10 @@ body {
   justify-content: center;
 }
 
-.lf-stat-icon-wrap.amber { background: var(--amber-soft); color: var(--amber); }
-.lf-stat-icon-wrap.emerald { background: var(--emerald-soft); color: var(--emerald); }
-.lf-stat-icon-wrap.gold { background: var(--turmeric-soft); color: var(--turmeric); }
-.lf-stat-icon-wrap.blue { background: var(--blue-soft); color: var(--blue); }
+.lf-stat-icon-wrap.amber { background: var(--purple-soft); color: var(--purple); }
+.lf-stat-icon-wrap.emerald { background: var(--emerald-soft); color: #059669; }
+.lf-stat-icon-wrap.gold { background: #fffbeb; color: #d97706; }
+.lf-stat-icon-wrap.blue { background: var(--blue-soft); color: #2563eb; }
 
 .lf-stat-number {
   font-size: 30px;
@@ -1029,7 +1081,7 @@ body {
 .lf-pipeline-step {
   flex: 1;
   min-width: 160px;
-  background: var(--bg-surface-2);
+  background: #ffffff;
   border: 1px solid var(--border-card);
   border-radius: var(--radius-md);
   padding: 16px 14px;
@@ -1037,11 +1089,12 @@ body {
   flex-direction: column;
   cursor: pointer;
   transition: all 0.18s ease;
+  box-shadow: 0 1px 2px rgba(25, 36, 53, 0.03);
 }
 
 .lf-pipeline-step:hover {
-  background: var(--bg-surface-hover);
-  border-color: var(--border-active);
+  background: #f8fafc;
+  border-color: var(--purple);
   transform: translateY(-1px);
 }
 
@@ -1093,7 +1146,7 @@ body {
 }
 
 .lf-quick-pick-card {
-  background: var(--bg-surface-2);
+  background: #ffffff;
   border: 1px solid var(--border-card);
   border-radius: var(--radius-md);
   padding: 14px;
@@ -1102,11 +1155,12 @@ body {
   flex-direction: column;
   gap: 6px;
   transition: all 0.18s ease;
+  box-shadow: 0 1px 2px rgba(25, 36, 53, 0.03);
 }
 
 .lf-quick-pick-card:hover {
-  background: var(--bg-surface-hover);
-  border-color: var(--amber);
+  background: #f8fafc;
+  border-color: var(--purple);
   transform: translateY(-1px);
 }
 
@@ -1125,7 +1179,7 @@ body {
   align-items: center;
   gap: 4px;
   font-size: 11px;
-  color: var(--amber);
+  color: var(--purple);
   font-weight: 500;
   margin-top: 4px;
 }
@@ -1142,16 +1196,17 @@ body {
   align-items: center;
   justify-content: space-between;
   padding: 10px 14px;
-  background: var(--bg-surface-2);
+  background: #ffffff;
   border: 1px solid var(--border-card);
   border-radius: var(--radius-md);
   cursor: pointer;
   transition: all 0.15s ease;
+  box-shadow: 0 1px 2px rgba(25, 36, 53, 0.02);
 }
 
 .lf-recent-lead-item:hover {
-  background: var(--bg-surface-hover);
-  border-color: var(--border-active);
+  background: #f8fafc;
+  border-color: var(--purple);
 }
 
 .lf-recent-lead-info {
@@ -1226,7 +1281,7 @@ body {
 .lf-count-indicator {
   font-size: 13px;
   font-weight: 700;
-  color: var(--amber);
+  color: var(--purple);
 }
 
 .lf-preset-groups {
@@ -1245,7 +1300,7 @@ body {
 .lf-preset-group-title {
   font-size: 11px;
   font-weight: 600;
-  color: var(--amber);
+  color: var(--purple);
   opacity: 0.9;
   letter-spacing: 0.02em;
 }
@@ -1264,7 +1319,7 @@ body {
 }
 
 .lf-preset-chip {
-  background: var(--bg-surface-2);
+  background: #ffffff;
   border: 1px solid var(--border-card);
   color: var(--text-muted);
   font-size: 11.5px;
@@ -1275,14 +1330,15 @@ body {
 }
 
 .lf-preset-chip:hover {
-  background: var(--bg-surface-hover);
+  background: #f8fafc;
   color: var(--text-main);
 }
 
 .lf-preset-chip.active {
-  background: var(--amber-soft);
-  color: var(--amber);
-  border-color: rgba(245, 158, 11, 0.4);
+  background: var(--purple-soft);
+  color: var(--purple);
+  border-color: rgba(125, 98, 236, 0.4);
+  font-weight: 600;
 }
 
 /* Count slider & presets */
@@ -1294,7 +1350,7 @@ body {
 
 .lf-range-slider {
   flex: 1;
-  accent-color: var(--amber);
+  accent-color: var(--purple);
   cursor: pointer;
 }
 
@@ -1304,7 +1360,7 @@ body {
 }
 
 .lf-count-preset-btn {
-  background: var(--bg-surface-2);
+  background: #ffffff;
   border: 1px solid var(--border-card);
   color: var(--text-muted);
   font-size: 11px;
@@ -1314,9 +1370,10 @@ body {
 }
 
 .lf-count-preset-btn.active {
-  background: var(--amber);
-  color: #1a1205;
+  background: var(--purple);
+  color: #ffffff;
   font-weight: 600;
+  border-color: var(--purple);
 }
 
 /* Mode selector cards */
@@ -1327,7 +1384,7 @@ body {
 }
 
 .lf-mode-card {
-  background: var(--bg-surface-2);
+  background: #ffffff;
   border: 1px solid var(--border-card);
   border-radius: var(--radius-md);
   padding: 14px;
@@ -1336,17 +1393,18 @@ body {
   flex-direction: column;
   gap: 6px;
   transition: all 0.18s ease;
+  box-shadow: 0 1px 2px rgba(25, 36, 53, 0.02);
 }
 
 .lf-mode-card:hover {
-  background: var(--bg-surface-hover);
-  border-color: var(--border-active);
+  background: #f8fafc;
+  border-color: var(--border-strong);
 }
 
 .lf-mode-card.active {
-  border-color: var(--amber);
-  background: linear-gradient(135deg, rgba(245, 158, 11, 0.08), rgba(28, 24, 18, 0.95));
-  box-shadow: 0 0 16px var(--amber-soft);
+  border-color: var(--purple);
+  background: linear-gradient(135deg, #f1effc, #ffffff);
+  box-shadow: 0 0 16px rgba(125, 98, 236, 0.12);
 }
 
 .lf-mode-card-header {
@@ -1379,19 +1437,19 @@ body {
   gap: 10px;
   padding: 14px;
   border-radius: var(--radius-md);
-  background: linear-gradient(135deg, var(--amber), #b45309);
-  color: #161005;
-  border: 1px solid var(--amber);
+  background: linear-gradient(135deg, var(--purple), var(--purple-dark));
+  color: #ffffff;
+  border: 1px solid var(--purple-dark);
   font-size: 15px;
   font-weight: 700;
   cursor: pointer;
   transition: all 0.2s ease;
-  box-shadow: 0 4px 20px var(--amber-glow);
+  box-shadow: 0 4px 20px var(--purple-glow);
 }
 
 .lf-btn-submit:hover:not(:disabled) {
   transform: translateY(-1px);
-  box-shadow: 0 6px 24px rgba(245, 158, 11, 0.4);
+  box-shadow: 0 6px 24px rgba(125, 98, 236, 0.4);
 }
 
 .lf-btn-submit:disabled {
@@ -1402,10 +1460,11 @@ body {
 /* Radar Animation Box */
 .lf-search-radar-box {
   margin-top: 24px;
-  background: var(--bg-surface-2);
-  border: 1px solid var(--border-active);
+  background: #ffffff;
+  border: 1px solid var(--purple);
   border-radius: var(--radius-md);
   padding: 18px;
+  box-shadow: var(--shadow-sm);
 }
 
 .lf-radar-header {
@@ -1414,7 +1473,7 @@ body {
   gap: 8px;
   font-size: 13.5px;
   font-weight: 600;
-  color: var(--amber);
+  color: var(--purple);
   margin-bottom: 12px;
 }
 
@@ -1430,7 +1489,7 @@ body {
   gap: 8px;
   font-size: 11.5px;
   color: var(--text-muted);
-  background: var(--bg-surface-1);
+  background: #f8fafc;
   padding: 8px 10px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border-subtle);
@@ -1438,14 +1497,15 @@ body {
 
 .lf-radar-step.active {
   color: var(--text-main);
-  border-color: rgba(245, 158, 11, 0.3);
+  border-color: rgba(125, 98, 236, 0.35);
+  background: #f1effc;
 }
 
 .lf-radar-dot {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: var(--amber);
+  background: var(--purple);
 }
 
 .lf-radar-dot.pulse {
@@ -1454,8 +1514,8 @@ body {
 
 /* Search complete banner */
 .lf-search-complete-banner {
-  background: rgba(16, 185, 129, 0.08);
-  border: 1px solid rgba(16, 185, 129, 0.3);
+  background: var(--emerald-soft);
+  border: 1px solid var(--emerald-border);
   border-radius: var(--radius-lg);
   padding: 16px 20px;
   display: flex;
@@ -1473,7 +1533,7 @@ body {
 .lf-banner-title {
   font-size: 13.5px;
   font-weight: 600;
-  color: var(--emerald);
+  color: #059669;
 }
 
 .lf-banner-text {
@@ -1483,7 +1543,7 @@ body {
 }
 
 /* ==========================================================
-   CRM DATA TABLE & TOOLBAR
+   CRM DATA TABLE & TOOLBAR (Snov.io Crisp Data Grids)
    ========================================================== */
 .lf-crm-toolbar {
   display: flex;
@@ -1495,11 +1555,12 @@ body {
 
 .lf-scope-tabs {
   display: flex;
-  background: var(--bg-surface-1);
+  background: #ffffff;
   border: 1px solid var(--border-card);
   border-radius: var(--radius-md);
   padding: 3px;
   gap: 2px;
+  box-shadow: 0 1px 2px rgba(25, 36, 53, 0.03);
 }
 
 .lf-scope-tab {
@@ -1518,8 +1579,8 @@ body {
 }
 
 .lf-scope-tab.active {
-  background: var(--bg-surface-3);
-  color: var(--amber);
+  background: var(--purple-soft);
+  color: var(--purple);
   font-weight: 600;
 }
 
@@ -1545,8 +1606,8 @@ body {
 
 .lf-search-input {
   width: 100%;
-  background: var(--bg-surface-1);
-  border: 1px solid var(--border-card);
+  background: #ffffff;
+  border: 1px solid #d8dde6;
   border-radius: var(--radius-md);
   padding: 8px 32px 8px 36px;
   color: var(--text-main);
@@ -1555,7 +1616,8 @@ body {
 }
 
 .lf-search-input:focus {
-  border-color: var(--amber);
+  border-color: var(--purple);
+  box-shadow: 0 0 0 3px rgba(125, 98, 236, 0.18);
 }
 
 .lf-search-clear {
@@ -1574,10 +1636,11 @@ body {
   display: flex;
   align-items: center;
   gap: 6px;
-  background: var(--bg-surface-1);
+  background: #ffffff;
   border: 1px solid var(--border-card);
   border-radius: var(--radius-md);
   padding: 2px 10px;
+  box-shadow: 0 1px 2px rgba(25, 36, 53, 0.03);
 }
 
 .lf-sort-wrap .lf-select {
@@ -1601,23 +1664,24 @@ body {
   gap: 6px;
   padding: 5px 12px;
   border-radius: var(--radius-pill);
-  background: var(--bg-surface-1);
+  background: #ffffff;
   border: 1px solid var(--border-card);
   color: var(--text-muted);
   font-size: 12px;
   cursor: pointer;
   transition: all 0.15s ease;
+  box-shadow: 0 1px 2px rgba(25, 36, 53, 0.02);
 }
 
 .lf-filter-pill:hover {
-  background: var(--bg-surface-2);
+  background: #f8fafc;
   color: var(--text-main);
 }
 
 .lf-filter-pill.active {
-  background: var(--amber-soft);
-  color: var(--amber);
-  border-color: rgba(245, 158, 11, 0.4);
+  background: var(--purple-soft);
+  color: var(--purple);
+  border-color: rgba(125, 98, 236, 0.4);
   font-weight: 600;
 }
 
@@ -1626,8 +1690,8 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: var(--bg-surface-3);
-  border: 1px solid var(--amber);
+  background: #ffffff;
+  border: 1px solid var(--purple);
   border-radius: var(--radius-md);
   padding: 10px 18px;
   box-shadow: var(--shadow-lg);
@@ -1646,7 +1710,7 @@ body {
 
 .lf-bulk-count {
   font-weight: 700;
-  color: var(--amber);
+  color: var(--purple);
 }
 
 .lf-bulk-actions {
@@ -1657,7 +1721,7 @@ body {
 
 /* Table container & element */
 .lf-table-container {
-  background: var(--bg-surface-1);
+  background: #ffffff;
   border: 1px solid var(--border-card);
   border-radius: var(--radius-lg);
   overflow-x: auto;
@@ -1672,7 +1736,7 @@ body {
 }
 
 .lf-crm-table th {
-  background: var(--bg-surface-2);
+  background: #f8fafc;
   color: var(--text-muted);
   font-size: 11.5px;
   font-weight: 600;
@@ -1685,16 +1749,16 @@ body {
 
 .lf-crm-table td {
   padding: 14px 16px;
-  border-bottom: 1px solid var(--border-subtle);
+  border-bottom: 1px solid #f1f4f8;
   vertical-align: middle;
 }
 
-.lf-crm-table tr:hover {
-  background: rgba(245, 158, 11, 0.02);
+.lf-crm-table tr:hover td {
+  background: #f6f8fd;
 }
 
-.lf-crm-table tr.selected-row {
-  background: rgba(245, 158, 11, 0.06);
+.lf-crm-table tr.selected-row td {
+  background: #f1effc;
 }
 
 .lf-table-company {
@@ -1718,7 +1782,7 @@ body {
 }
 
 .clickable-name:hover {
-  color: var(--amber);
+  color: var(--purple);
   text-decoration: underline;
 }
 
@@ -1782,12 +1846,12 @@ body {
 }
 
 /* ==========================================================
-   SLIDE-OVER LEAD DETAIL DRAWER
+   SLIDE-OVER LEAD DETAIL DRAWER (Snov.io White Modal & Panels)
    ========================================================== */
 .lf-drawer-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.65);
+  background: rgba(25, 36, 53, 0.45);
   backdrop-filter: blur(4px);
   z-index: 50;
   display: flex;
@@ -1798,7 +1862,7 @@ body {
   width: 580px;
   max-width: 90vw;
   height: 100vh;
-  background: var(--bg-surface-1);
+  background: #ffffff;
   border-left: 1px solid var(--border-card);
   display: flex;
   flex-direction: column;
@@ -1813,7 +1877,7 @@ body {
   align-items: flex-start;
   justify-content: space-between;
   gap: 14px;
-  background: var(--bg-surface-2);
+  background: #f8fafc;
 }
 
 .lf-drawer-tag-row {
@@ -1848,7 +1912,7 @@ body {
 
 .lf-drawer-close:hover {
   color: var(--text-main);
-  background: var(--bg-surface-3);
+  background: var(--bg-surface-2);
 }
 
 .lf-drawer-body {
@@ -1868,7 +1932,7 @@ body {
 }
 
 .lf-dossier-card {
-  background: var(--bg-surface-2);
+  background: #f8fafc;
   border: 1px solid var(--border-card);
   border-radius: var(--radius-md);
   padding: 18px;
@@ -1903,13 +1967,13 @@ body {
 }
 
 .lf-external-link {
-  color: var(--amber);
+  color: var(--purple);
   display: inline-flex;
   align-items: center;
 }
 
 .lf-web-link {
-  color: var(--amber);
+  color: var(--purple);
   text-decoration: none;
   display: inline-flex;
   align-items: center;
@@ -1922,7 +1986,7 @@ body {
 
 /* Drawer Pitch Box */
 .lf-drawer-pitch-box {
-  background: var(--bg-surface-2);
+  background: #ffffff;
   border: 1px solid var(--border-card);
   border-radius: var(--radius-md);
   padding: 18px;
@@ -1964,7 +2028,7 @@ body {
 
 .lf-field-warning {
   font-size: 11.5px;
-  color: var(--amber);
+  color: var(--orange-warn);
 }
 
 .lf-pitch-content-wrap {
@@ -2003,8 +2067,8 @@ body {
 
 /* Confirmation Box */
 .lf-confirm-box {
-  background: rgba(245, 158, 11, 0.1);
-  border: 1px solid var(--amber);
+  background: var(--purple-soft);
+  border: 1px solid var(--purple);
   border-radius: var(--radius-md);
   padding: 14px;
   display: flex;
@@ -2018,7 +2082,7 @@ body {
   gap: 6px;
   font-size: 13px;
   font-weight: 600;
-  color: var(--amber);
+  color: var(--purple);
 }
 
 .lf-confirm-text {
@@ -2034,13 +2098,13 @@ body {
 }
 
 /* ==========================================================
-   OUTREACH STUDIO
+   OUTREACH STUDIO (Snov.io Campaign Cards & Banners)
    ========================================================== */
 .lf-outreach-metrics-banner {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 16px;
-  background: var(--bg-surface-1);
+  background: #ffffff;
   border: 1px solid var(--border-card);
   border-radius: var(--radius-lg);
   padding: 18px 22px;
@@ -2083,8 +2147,8 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: linear-gradient(135deg, rgba(245, 158, 11, 0.12), rgba(28, 24, 18, 0.95));
-  border: 1px solid var(--amber);
+  background: linear-gradient(135deg, #f1effc, #ffffff);
+  border: 1px solid var(--purple);
   border-radius: var(--radius-md);
   padding: 12px 18px;
   box-shadow: var(--shadow-md);
@@ -2108,7 +2172,7 @@ body {
 }
 
 .lf-outreach-card-elevated {
-  background: var(--bg-surface-1);
+  background: #ffffff;
   border: 1px solid var(--border-card);
   border-radius: var(--radius-lg);
   padding: 20px;
@@ -2123,8 +2187,8 @@ body {
 }
 
 .lf-outreach-card-elevated:hover {
-  border-color: rgba(245, 158, 11, 0.4);
-  box-shadow: 0 10px 28px -6px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(245, 158, 11, 0.15);
+  border-color: rgba(125, 98, 236, 0.4);
+  box-shadow: 0 10px 28px -6px rgba(25, 36, 53, 0.08), 0 0 0 1px rgba(125, 98, 236, 0.15);
   transform: translateY(-2px);
 }
 
@@ -2159,13 +2223,13 @@ body {
 }
 
 .lf-company-avatar.live {
-  background: linear-gradient(135deg, rgba(245, 158, 11, 0.2), rgba(16, 185, 129, 0.25));
-  color: var(--amber);
-  border: 1px solid rgba(245, 158, 11, 0.35);
+  background: linear-gradient(135deg, rgba(125, 98, 236, 0.12), rgba(16, 185, 129, 0.12));
+  color: var(--purple);
+  border: 1px solid rgba(125, 98, 236, 0.3);
 }
 
 .lf-company-avatar.demo {
-  background: var(--bg-surface-3);
+  background: #f1f4f8;
   color: var(--text-faint);
   border: 1px solid var(--border-subtle);
 }
@@ -2215,7 +2279,7 @@ body {
   gap: 5px;
   font-size: 11.5px;
   color: var(--text-muted);
-  background: var(--bg-surface-2);
+  background: #f8fafc;
   border: 1px solid var(--border-subtle);
   padding: 4px 9px;
   border-radius: var(--radius-sm);
@@ -2233,7 +2297,7 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
-  background: var(--bg-surface-2);
+  background: #f8fafc;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-sm);
   padding: 8px 12px;
@@ -2244,8 +2308,8 @@ body {
   font-size: 9.5px;
   font-weight: 700;
   font-family: 'IBM Plex Mono', monospace;
-  color: var(--amber);
-  background: var(--amber-soft);
+  color: var(--purple);
+  background: var(--purple-soft);
   padding: 2px 5px;
   border-radius: var(--radius-sm);
   flex-shrink: 0;
@@ -2265,12 +2329,12 @@ body {
 
 .lf-outreach-body-preview {
   flex: 1;
-  background: var(--bg-surface-2);
+  background: #f8fafc;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
   padding: 13px 14px;
   font-size: 12.5px;
-  color: var(--text-muted);
+  color: var(--text-main);
   line-height: 1.55;
   max-height: 135px;
   min-height: 80px;
@@ -2278,19 +2342,17 @@ body {
   white-space: pre-wrap;
   position: relative;
   scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+  scrollbar-color: rgba(25, 36, 53, 0.2) transparent;
 }
 
 .lf-outreach-body-preview::-webkit-scrollbar {
   width: 4px;
 }
-
 .lf-outreach-body-preview::-webkit-scrollbar-track {
   background: transparent;
 }
-
 .lf-outreach-body-preview::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.2);
+  background: #cbd5e1;
   border-radius: 4px;
 }
 
@@ -2319,12 +2381,12 @@ body {
 }
 
 /* ==========================================================
-   COLD MAIL REVIEW MODAL
+   COLD MAIL REVIEW MODAL (Snov.io White Modal & Clean Well)
    ========================================================== */
 .lf-modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.7);
+  background: rgba(25, 36, 53, 0.5);
   backdrop-filter: blur(6px);
   z-index: 60;
   display: flex;
@@ -2337,7 +2399,7 @@ body {
   width: 720px;
   max-width: 95vw;
   max-height: 90vh;
-  background: var(--bg-surface-1);
+  background: #ffffff;
   border: 1px solid var(--border-card);
   border-radius: var(--radius-xl);
   box-shadow: var(--shadow-lg);
@@ -2348,7 +2410,7 @@ body {
 
 .lf-modal-header {
   padding: 20px 24px;
-  background: var(--bg-surface-2);
+  background: #f8fafc;
   border-bottom: 1px solid var(--border-card);
   display: flex;
   align-items: center;
@@ -2426,7 +2488,7 @@ body {
 
 /* Email Mockup Preview */
 .lf-email-mockup {
-  background: #18140e;
+  background: #f8fafc;
   border: 1px solid var(--border-card);
   border-radius: var(--radius-md);
   padding: 20px;
@@ -2475,7 +2537,7 @@ body {
 
 .lf-modal-footer {
   padding: 16px 24px;
-  background: var(--bg-surface-2);
+  background: #f8fafc;
   border-top: 1px solid var(--border-card);
   display: flex;
   align-items: center;
@@ -2498,11 +2560,11 @@ body {
   gap: 6px;
   font-size: 11.5px;
   font-family: 'IBM Plex Mono', monospace;
-  color: var(--emerald);
+  color: #059669;
   background: var(--emerald-soft);
   padding: 4px 10px;
   border-radius: var(--radius-pill);
-  border: 1px solid rgba(16, 185, 129, 0.3);
+  border: 1px solid var(--emerald-border);
 }
 
 .lf-mailbox-split-view {
@@ -2513,17 +2575,18 @@ body {
 }
 
 .lf-mailbox-list-pane {
-  background: var(--bg-surface-1);
+  background: #ffffff;
   border: 1px solid var(--border-card);
   border-radius: var(--radius-lg);
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  box-shadow: var(--shadow-sm);
 }
 
 .lf-list-pane-header {
   padding: 14px 16px;
-  background: var(--bg-surface-2);
+  background: #f8fafc;
   border-bottom: 1px solid var(--border-card);
   display: flex;
   align-items: center;
@@ -2551,15 +2614,16 @@ body {
   flex-direction: column;
   gap: 6px;
   transition: all 0.15s ease;
+  background: #ffffff;
 }
 
 .lf-thread-item:hover {
-  background: var(--bg-surface-2);
+  background: #f6f8fd;
 }
 
 .lf-thread-item.active {
-  background: var(--bg-surface-3);
-  border-left: 3px solid var(--amber);
+  background: #f1effc;
+  border-left: 3px solid var(--purple);
 }
 
 .lf-thread-item-top {
@@ -2596,11 +2660,12 @@ body {
 
 /* Mailbox Detail Pane */
 .lf-mailbox-detail-pane {
-  background: var(--bg-surface-1);
+  background: #ffffff;
   border: 1px solid var(--border-card);
   border-radius: var(--radius-lg);
   padding: 24px;
   overflow-y: auto;
+  box-shadow: var(--shadow-sm);
 }
 
 .lf-conversation-wrap {
@@ -2616,7 +2681,7 @@ body {
 }
 
 .lf-party-card {
-  background: var(--bg-surface-2);
+  background: #f8fafc;
   border: 1px solid var(--border-card);
   border-radius: var(--radius-md);
   padding: 12px 14px;
@@ -2652,7 +2717,7 @@ body {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 10px;
-  background: var(--bg-surface-2);
+  background: #f8fafc;
   border: 1px solid var(--border-card);
   border-radius: var(--radius-md);
   padding: 12px;
@@ -2676,9 +2741,9 @@ body {
   font-weight: 600;
 }
 
-.lf-intel-val.gold { color: var(--amber); }
-.lf-intel-val.blue { color: var(--blue); }
-.lf-intel-val.emerald { color: var(--emerald); }
+.lf-intel-val.gold { color: #d97706; }
+.lf-intel-val.blue { color: #2563eb; }
+.lf-intel-val.emerald { color: #059669; }
 .lf-intel-val.red { color: var(--rose); }
 
 .lf-detected-products-row {
@@ -2696,7 +2761,7 @@ body {
 }
 
 .lf-email-body-box {
-  background: var(--bg-surface-2);
+  background: #f8fafc;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
   padding: 16px;
@@ -2724,8 +2789,8 @@ body {
 }
 
 .lf-ai-reply-box {
-  background: linear-gradient(135deg, rgba(16, 185, 129, 0.05), rgba(28, 24, 18, 0.95));
-  border: 1px solid rgba(16, 185, 129, 0.25);
+  background: linear-gradient(135deg, rgba(125, 98, 236, 0.04), #ffffff);
+  border: 1px solid rgba(125, 98, 236, 0.3);
   border-radius: var(--radius-md);
   padding: 18px;
   display: flex;
@@ -2745,7 +2810,7 @@ body {
   gap: 8px;
   font-size: 13px;
   font-weight: 600;
-  color: var(--emerald);
+  color: var(--purple);
 }
 
 .lf-reply-text {
@@ -2790,7 +2855,7 @@ body {
 }
 
 .lf-scenario-btn {
-  background: var(--bg-surface-2);
+  background: #ffffff;
   border: 1px solid var(--border-card);
   color: var(--text-muted);
   font-size: 12px;
@@ -2798,17 +2863,443 @@ body {
   border-radius: var(--radius-pill);
   cursor: pointer;
   transition: all 0.15s ease;
+  box-shadow: 0 1px 2px rgba(25, 36, 53, 0.02);
 }
 
 .lf-scenario-btn:hover {
-  background: var(--bg-surface-hover);
+  background: #f8fafc;
   color: var(--text-main);
 }
 
 .lf-scenario-btn.active {
-  background: var(--amber-soft);
-  color: var(--amber);
-  border-color: rgba(245, 158, 11, 0.4);
+  background: var(--purple-soft);
+  color: var(--purple);
+  border-color: rgba(125, 98, 236, 0.4);
+}
+
+/* ==========================================================
+   MAIL LIFECYCLE DASHBOARD & ENGAGEMENT STUDIO
+   ========================================================== */
+.lf-lifecycle-analytics-bar {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+@media (max-width: 1200px) {
+  .lf-lifecycle-analytics-bar {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .lf-lifecycle-analytics-bar {
+    grid-template-columns: 1fr;
+  }
+}
+
+.lf-lifecycle-stat-card {
+  background: #ffffff;
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-lg);
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  position: relative;
+  overflow: hidden;
+  transition: all 0.2s ease;
+  box-shadow: var(--shadow-sm);
+}
+
+.lf-lifecycle-stat-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--border-active);
+  box-shadow: var(--shadow-md);
+}
+
+.lf-lifecycle-stat-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: transparent;
+}
+
+.lf-lifecycle-stat-card.blue::before { background: var(--blue); }
+.lf-lifecycle-stat-card.emerald::before { background: var(--emerald); }
+.lf-lifecycle-stat-card.amber::before { background: var(--purple); }
+.lf-lifecycle-stat-card.orange::before { background: #f97316; }
+.lf-lifecycle-stat-card.slate::before { background: #64748b; }
+
+.lf-stat-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.lf-stat-card-title {
+  font-size: 11.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+
+.lf-stat-card-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.lf-stat-card-icon.blue { background: var(--blue-soft); color: #2563eb; }
+.lf-stat-card-icon.emerald { background: var(--emerald-soft); color: #059669; }
+.lf-stat-card-icon.amber { background: var(--purple-soft); color: var(--purple); }
+.lf-stat-card-icon.orange { background: rgba(249, 115, 22, 0.1); color: #ea580c; }
+.lf-stat-card-icon.slate { background: rgba(100, 116, 139, 0.1); color: #475569; }
+
+.lf-stat-card-value {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text-main);
+  letter-spacing: -0.02em;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.lf-stat-card-sub {
+  font-size: 11.5px;
+  color: var(--text-faint);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Lifecycle Navigation Tabs */
+.lf-lifecycle-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 18px;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.lf-lifecycle-tabs {
+  display: flex;
+  align-items: center;
+  background: #f8fafc;
+  border: 1px solid var(--border-card);
+  padding: 4px;
+  border-radius: var(--radius-md);
+  gap: 4px;
+}
+
+.lf-lifecycle-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  border: none;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.lf-lifecycle-tab:hover {
+  color: var(--text-main);
+  background: rgba(25, 36, 53, 0.04);
+}
+
+.lf-lifecycle-tab.active {
+  background: #ffffff;
+  color: var(--purple);
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(25, 36, 53, 0.08);
+  border: 1px solid var(--border-card);
+}
+
+.lf-lifecycle-tab.hot.active {
+  color: #d97706;
+  border-color: #fde68a;
+}
+
+.lf-tab-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: var(--radius-pill);
+  font-size: 11px;
+  font-weight: 600;
+  background: #edf0f5;
+  color: var(--text-muted);
+}
+
+.lf-lifecycle-tab.active .lf-tab-count {
+  background: var(--purple);
+  color: #ffffff;
+}
+
+.lf-lifecycle-tab.hot.active .lf-tab-count {
+  background: #f59e0b;
+  color: #ffffff;
+}
+
+/* Hot Leads Grid & Cards */
+.lf-hot-leads-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+  gap: 16px;
+}
+
+.lf-hot-lead-card {
+  background: #ffffff;
+  border: 1px solid rgba(125, 98, 236, 0.25);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  position: relative;
+  background-image: radial-gradient(circle at top right, rgba(125, 98, 236, 0.04), transparent 70%);
+  transition: all 0.2s ease;
+  box-shadow: var(--shadow-sm);
+}
+
+.lf-hot-lead-card:hover {
+  border-color: var(--purple);
+  box-shadow: 0 8px 24px rgba(125, 98, 236, 0.12);
+  transform: translateY(-2px);
+}
+
+.lf-hot-lead-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.lf-hot-lead-title-box {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.lf-hot-lead-company {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.lf-hot-lead-contact {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.lf-hot-score-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border-radius: var(--radius-pill);
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  color: #d97706;
+  font-size: 12px;
+  font-weight: 700;
+  font-family: 'IBM Plex Mono', monospace;
+  box-shadow: 0 1px 3px rgba(217, 119, 6, 0.12);
+}
+
+.lf-score-breakdown-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.lf-score-signal-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  padding: 3px 8px;
+  border-radius: var(--radius-pill);
+  border: 1px solid transparent;
+}
+
+.lf-score-signal-pill.earned {
+  background: var(--emerald-soft);
+  border-color: var(--emerald-border);
+  color: #059669;
+}
+
+.lf-score-signal-pill.earned.gold {
+  background: #fffbeb;
+  border-color: #fde68a;
+  color: #d97706;
+}
+
+.lf-score-signal-pill.earned.cyan {
+  background: var(--blue-soft);
+  border-color: var(--blue-border);
+  color: #2563eb;
+}
+
+.lf-score-signal-pill.unearned {
+  background: #f1f4f8;
+  border-color: var(--border-subtle);
+  color: var(--text-faint);
+  opacity: 0.8;
+}
+
+/* Follow-up Queue Cards */
+.lf-followup-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.lf-followup-card {
+  background: #ffffff;
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  transition: all 0.2s ease;
+  box-shadow: var(--shadow-sm);
+}
+
+.lf-followup-card:hover {
+  border-color: var(--border-active);
+}
+
+.lf-followup-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.lf-followup-lead-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.lf-followup-timing-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: var(--radius-pill);
+  font-size: 11.5px;
+  font-weight: 600;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  color: #d97706;
+}
+
+.lf-followup-draft-editor {
+  background: #f8fafc;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.lf-draft-subject-input {
+  width: 100%;
+  background: #ffffff;
+  border: 1px solid #d8dde6;
+  color: var(--text-main);
+  padding: 8px 12px;
+  font-size: 13px;
+  border-radius: var(--radius-sm);
+  font-weight: 500;
+}
+
+.lf-draft-body-textarea {
+  width: 100%;
+  background: #ffffff;
+  border: 1px solid #d8dde6;
+  color: var(--text-main);
+  padding: 10px 12px;
+  font-size: 13px;
+  line-height: 1.6;
+  border-radius: var(--radius-sm);
+  font-family: inherit;
+  resize: vertical;
+}
+
+/* Sent Tab Table */
+.lf-sent-table-wrap {
+  background: #ffffff;
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+}
+
+.lf-sent-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.lf-sent-table th {
+  background: #f8fafc;
+  padding: 12px 16px;
+  text-align: left;
+  font-size: 11.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border-card);
+}
+
+.lf-sent-table td {
+  padding: 14px 16px;
+  border-bottom: 1px solid #f1f4f8;
+  color: var(--text-main);
+  vertical-align: middle;
+}
+
+.lf-sent-table tr:hover td {
+  background: #f6f8fd;
+}
+
+.lf-future-feature-callout {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  background: #eff6ff;
+  border: 1px dashed #bfdbfe;
+  border-radius: var(--radius-md);
+  color: #2563eb;
+  font-size: 12px;
+  margin-top: 18px;
 }
 
 /* ==========================================================
@@ -2847,10 +3338,11 @@ body {
   align-items: center;
   justify-content: space-between;
   padding: 10px 14px;
-  background: var(--bg-surface-2);
+  background: #ffffff;
   border: 1px solid var(--border-card);
   border-radius: var(--radius-md);
   gap: 12px;
+  box-shadow: 0 1px 2px rgba(25, 36, 53, 0.02);
 }
 
 .lf-history-query-box {
@@ -2887,6 +3379,11 @@ body {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  background: #ffffff;
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-lg);
+  padding: 18px;
+  box-shadow: var(--shadow-sm);
 }
 
 .lf-integration-header {
@@ -2915,8 +3412,8 @@ body {
 
 .lf-integration-detail {
   font-size: 12px;
-  color: var(--text-faint);
-  background: var(--bg-surface-2);
+  color: var(--text-muted);
+  background: #f8fafc;
   padding: 6px 10px;
   border-radius: var(--radius-sm);
 }
@@ -2932,7 +3429,7 @@ body {
   align-items: center;
   justify-content: space-between;
   padding: 8px 12px;
-  background: var(--bg-surface-2);
+  background: #f8fafc;
   border-radius: var(--radius-sm);
   font-size: 13px;
   color: var(--text-muted);
@@ -2954,7 +3451,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: var(--bg-surface-2);
+  background: #f8fafc;
   border: 1px solid var(--border-card);
   border-radius: var(--radius-md);
   padding: 8px 12px;
@@ -2963,8 +3460,9 @@ body {
 
 .lf-webhook-url-val {
   font-size: 12px;
-  color: var(--amber);
+  color: var(--purple);
   word-break: break-all;
+  font-weight: 500;
 }
 
 .lf-webhook-specs {
@@ -2974,7 +3472,7 @@ body {
 }
 
 .lf-spec-item {
-  background: var(--bg-surface-2);
+  background: #f8fafc;
   padding: 6px 10px;
   border-radius: var(--radius-sm);
   font-size: 11.5px;
@@ -2987,7 +3485,7 @@ body {
 }
 
 /* ==========================================================
-   TOAST NOTIFICATION
+   TOAST NOTIFICATION (Snov.io Crisp Notification)
    ========================================================== */
 .lf-toast {
   position: fixed;
@@ -2999,7 +3497,7 @@ body {
   gap: 12px;
   padding: 14px 18px;
   border-radius: var(--radius-md);
-  background: var(--bg-surface-3);
+  background: #ffffff;
   border: 1px solid var(--border-card);
   box-shadow: var(--shadow-lg);
   max-width: 420px;
@@ -3007,18 +3505,18 @@ body {
 }
 
 .lf-toast.success {
-  border-color: rgba(16, 185, 129, 0.5);
-  background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(28, 24, 18, 0.98));
+  border-color: #a7f3d0;
+  background: #ffffff;
 }
 
 .lf-toast.warning {
-  border-color: rgba(245, 158, 11, 0.5);
-  background: linear-gradient(135deg, rgba(245, 158, 11, 0.1), rgba(28, 24, 18, 0.98));
+  border-color: #fde68a;
+  background: #ffffff;
 }
 
 .lf-toast.error {
-  border-color: rgba(244, 63, 94, 0.5);
-  background: linear-gradient(135deg, rgba(244, 63, 94, 0.1), rgba(28, 24, 18, 0.98));
+  border-color: #fecaca;
+  background: #ffffff;
 }
 
 .lf-toast-icon {
@@ -3071,32 +3569,32 @@ body {
 
 .lf-badge-pill.green {
   background: var(--emerald-soft);
-  color: var(--emerald);
-  border: 1px solid rgba(16, 185, 129, 0.3);
+  color: #059669;
+  border: 1px solid var(--emerald-border);
 }
 
 .lf-badge-pill.gold {
-  background: var(--amber-soft);
-  color: var(--amber);
-  border: 1px solid rgba(245, 158, 11, 0.3);
+  background: #fffbeb;
+  color: #d97706;
+  border: 1px solid #fde68a;
 }
 
 .lf-badge-pill.blue {
   background: var(--blue-soft);
-  color: var(--blue);
-  border: 1px solid rgba(56, 189, 248, 0.3);
+  color: #2563eb;
+  border: 1px solid var(--blue-border);
 }
 
 .lf-badge-pill.red {
   background: var(--rose-soft);
-  color: var(--rose);
-  border: 1px solid rgba(244, 63, 94, 0.3);
+  color: #dc2626;
+  border: 1px solid var(--rose-border);
 }
 
 .lf-badge-pill.muted {
-  background: var(--bg-surface-3);
-  color: var(--text-faint);
-  border: 1px solid var(--border-subtle);
+  background: #edf0f5;
+  color: var(--text-muted);
+  border: 1px solid #e2e8f0;
 }
 
 .lf-badge-pill.sm {
@@ -3105,9 +3603,9 @@ body {
 }
 
 .lf-badge-demo {
-  background: var(--amber-soft);
-  color: var(--amber);
-  border: 1px solid rgba(245, 158, 11, 0.3);
+  background: var(--purple-soft);
+  color: var(--purple);
+  border: 1px solid rgba(125, 98, 236, 0.3);
   padding: 1px 5px;
   border-radius: var(--radius-sm);
   font-size: 10px;
@@ -3116,10 +3614,10 @@ body {
 }
 
 /* Text colors */
-.text-amber { color: var(--amber); }
-.text-emerald { color: var(--emerald); }
+.text-amber { color: var(--purple); }
+.text-emerald { color: #059669; }
 .text-rose { color: var(--rose); }
-.text-blue { color: var(--blue); }
+.text-blue { color: #2563eb; }
 .text-white { color: var(--text-main); }
 .text-muted { color: var(--text-muted); }
 .bold { font-weight: 600; }
@@ -3136,7 +3634,7 @@ body {
 }
 
 .lf-loading-card {
-  background: var(--bg-surface-1);
+  background: #ffffff;
   border: 1px solid var(--border-card);
   border-radius: var(--radius-xl);
   padding: 40px;
@@ -3240,7 +3738,7 @@ body {
   .lf-sidebar-backdrop {
     position: fixed;
     inset: 0;
-    background: rgba(0,0,0,0.6);
+    background: rgba(25, 36, 53, 0.45);
     backdrop-filter: blur(4px);
     z-index: 39;
   }
@@ -3274,16 +3772,43 @@ body {
   }
 }
 
-/* Dashboard access uses the existing application theme. */
-.lf-auth-card { width: min(420px, calc(100vw - 32px)); padding: 32px; }
-.lf-auth-form { display: grid; gap: 12px; margin-top: 24px; }
-.lf-auth-form input { width: 100%; padding: 12px; border-radius: 8px; border: 1px solid var(--border-color, #3f3f46); color: inherit; background: var(--bg-base, #18181b); }
-.lf-auth-error { color: var(--color-error, #f87171); margin-top: 16px; }
+/* Dashboard access uses the application theme */
+.lf-auth-card {
+  width: min(420px, calc(100vw - 32px));
+  padding: 32px;
+  background: #ffffff;
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-lg);
+}
+.lf-auth-form {
+  display: grid;
+  gap: 12px;
+  margin-top: 24px;
+}
+.lf-auth-form input {
+  width: 100%;
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid #d8dde6;
+  color: var(--text-main);
+  background: #ffffff;
+}
+.lf-auth-form input:focus {
+  border-color: var(--purple);
+  box-shadow: 0 0 0 3px rgba(125, 98, 236, 0.18);
+  outline: none;
+}
+.lf-auth-error {
+  color: var(--rose);
+  margin-top: 16px;
+}
 
 :where(button, a, input, select, textarea, [tabindex]):focus-visible {
-  outline: 2px solid var(--amber);
+  outline: 2px solid var(--purple);
   outline-offset: 3px;
 }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;

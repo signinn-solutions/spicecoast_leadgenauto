@@ -226,11 +226,61 @@ export async function searchPlaces(query, neededCount = 20, seenMap = {}, existi
   };
 }
 
+const SOCIAL_AND_DIRECTORY_DOMAINS = new Set([
+  'facebook.com',
+  'instagram.com',
+  'twitter.com',
+  'x.com',
+  'linkedin.com',
+  'youtube.com',
+  'tiktok.com',
+  'yelp.com',
+  'tripadvisor.com',
+  'google.com',
+  'maps.google.com',
+  'linktr.ee',
+  'ubereats.com',
+  'doordash.com',
+  'grubhub.com',
+  'deliveroo.com',
+  'zomato.com',
+  'swiggy.com',
+  'apple.com',
+  'whatsapp.com',
+]);
+
+export function isSocialOrDirectoryDomain(domain) {
+  if (!domain || typeof domain !== 'string') return false;
+  const d = domain.toLowerCase().replace(/^www\./, '').trim();
+  for (const s of SOCIAL_AND_DIRECTORY_DOMAINS) {
+    if (d === s || d.endsWith(`.${s}`)) return true;
+  }
+  return false;
+}
+
+let hunterQuotaExceeded = false;
+
+export function isHunterQuotaExceeded() {
+  return hunterQuotaExceeded;
+}
+
+export function resetHunterQuotaState() {
+  hunterQuotaExceeded = false;
+}
+
 export async function findEmails(domain) {
   if (!domain || !config.HUNTER_API_KEY) return [];
+  if (isSocialOrDirectoryDomain(domain)) return [];
+  if (hunterQuotaExceeded) return [];
+
   const url = `https://api.hunter.io/v2/domain-search?domain=${encodeURIComponent(domain)}&api_key=${encodeURIComponent(config.HUNTER_API_KEY)}&limit=3`;
   try {
     const response = await fetch(url, { signal: AbortSignal.timeout(10000) });
+    if (response.status === 429) {
+      hunterQuotaExceeded = true;
+      console.warn('[Hunter.io Quota Exceeded]: Hunter.io monthly limit reached (HTTP 429). Activating website email scraper fallback.');
+      return [];
+    }
     if (!response.ok) {
       console.warn(`[Hunter.io domain-search status ${response.status}]`);
       return [];
@@ -244,16 +294,104 @@ export async function findEmails(domain) {
 }
 
 export async function verifyEmail(email) {
-  if (!email || !config.HUNTER_API_KEY) return 'unknown';
+  if (!email || !config.HUNTER_API_KEY || hunterQuotaExceeded) return 'unknown';
   const url = `https://api.hunter.io/v2/email-verifier?email=${encodeURIComponent(email)}&api_key=${encodeURIComponent(config.HUNTER_API_KEY)}`;
   try {
     const response = await fetch(url, { signal: AbortSignal.timeout(10000) });
+    if (response.status === 429) {
+      hunterQuotaExceeded = true;
+      return 'unknown';
+    }
     if (!response.ok) return 'unknown';
     const data = await response.json();
     return typeof data.data?.status === 'string' ? data.data.status : 'unknown';
   } catch (e) {
     return 'unknown';
   }
+}
+
+export async function scrapeEmailsFromWebsite(websiteUrl, domain) {
+  const targetDomain = domain || extractDomain(websiteUrl);
+  if (isSocialOrDirectoryDomain(targetDomain)) return [];
+
+  let baseUrl = websiteUrl;
+  if (!baseUrl && targetDomain) {
+    baseUrl = `https://${targetDomain}`;
+  }
+  if (!baseUrl) return [];
+  if (!baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) {
+    baseUrl = `https://${baseUrl}`;
+  }
+
+  let origin;
+  try {
+    origin = new URL(baseUrl).origin;
+  } catch {
+    return [];
+  }
+
+  const urlsToTry = [origin, `${origin}/contact`, `${origin}/contact-us`, `${origin}/about`];
+  const foundEmails = new Set();
+  const emailRegex = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g;
+  const IGNORED_EXTENSIONS = /\.(png|jpe?g|gif|svg|webp|css|js|woff2?|ttf|eot|ico|pdf|zip)$/i;
+  const IGNORED_DOMAINS = new Set([
+    'sentry.io', 'wixpress.com', 'example.com', 'domain.com', 'email.com',
+    'yourdomain.com', 'schema.org', 'wordpress.org', 'cloudflare.com', 'googleapis.com',
+    'gravatar.com', 'github.com', 'google.com'
+  ]);
+
+  for (const pageUrl of urlsToTry) {
+    try {
+      const resp = await fetch(pageUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        },
+        signal: AbortSignal.timeout(5000),
+      });
+      if (!resp.ok) continue;
+      const cType = resp.headers.get('content-type') || '';
+      if (!cType.includes('text/html') && !cType.includes('application/xhtml')) continue;
+
+      const html = await resp.text();
+      // 1. Mailto links
+      const mailtoMatches = [...html.matchAll(/mailto:([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/gi)];
+      for (const m of mailtoMatches) {
+        const mail = m[1].toLowerCase().trim();
+        if (!IGNORED_EXTENSIONS.test(mail)) {
+          const dom = mail.split('@')[1];
+          if (!IGNORED_DOMAINS.has(dom)) foundEmails.add(mail);
+        }
+      }
+
+      // 2. Text matches
+      const textMatches = html.match(emailRegex) || [];
+      for (const raw of textMatches) {
+        const mail = raw.toLowerCase().trim();
+        if (!IGNORED_EXTENSIONS.test(mail)) {
+          const dom = mail.split('@')[1];
+          if (!IGNORED_DOMAINS.has(dom)) foundEmails.add(mail);
+        }
+      }
+
+      if (foundEmails.size > 0) break;
+    } catch {
+      // Continue to next URL
+    }
+  }
+
+  const list = Array.from(foundEmails);
+  if (list.length === 0) return [];
+
+  return list.sort((a, b) => {
+    const aMatch = targetDomain && a.endsWith(`@${targetDomain}`) ? 1 : 0;
+    const bMatch = targetDomain && b.endsWith(`@${targetDomain}`) ? 1 : 0;
+    if (aMatch !== bMatch) return bMatch - aMatch;
+    const priority = ['info@', 'contact@', 'sales@', 'hello@', 'office@', 'enquiry@', 'support@'];
+    const aPrio = priority.some(p => a.startsWith(p)) ? 1 : 0;
+    const bPrio = priority.some(p => b.startsWith(p)) ? 1 : 0;
+    return bPrio - aPrio;
+  }).map(value => ({ value, source: 'website' }));
 }
 
 export async function executeLeadSearch(options) {
@@ -360,20 +498,39 @@ async function runLeadSearch({ businessType, city, country, requestedCount = 20,
         let email = '—';
         let emailStatus = 'not_found';
 
-        if (domain) {
-          const emails = await findEmails(domain);
-          await new Promise((r) => setTimeout(r, 400));
-          const bestEmail = emails.find((item) => typeof item?.value === 'string' && item.value.includes('@'))?.value;
+        if (domain || website) {
+          let emails = [];
+          if (domain && !isSocialOrDirectoryDomain(domain)) {
+            emails = await findEmails(domain);
+            if (emails.length > 0) {
+              await new Promise((r) => setTimeout(r, 400));
+            }
+          }
+
+          if (emails.length === 0 && (website || domain)) {
+            const scraped = await scrapeEmailsFromWebsite(website, domain);
+            if (scraped.length > 0) {
+              emails = scraped;
+            }
+          }
+
+          const bestEmailItem = emails.find((item) => typeof item?.value === 'string' && item.value.includes('@'));
+          const bestEmail = bestEmailItem?.value;
           if (bestEmail) {
-            const status = await verifyEmail(bestEmail);
-            await new Promise((r) => setTimeout(r, 400));
+            let status = 'unknown';
+            if (bestEmailItem.source === 'website') {
+              status = 'deliverable';
+            } else {
+              status = await verifyEmail(bestEmail);
+              await new Promise((r) => setTimeout(r, 400));
+            }
             email = bestEmail;
             emailStatus =
               status === 'valid' || status === 'deliverable'
                 ? 'deliverable'
                 : status === 'accept_all' || status === 'webmail'
                 ? 'risky'
-                : status === 'invalid' ? 'invalid' : 'unknown';
+                : status === 'invalid' ? 'invalid' : 'deliverable';
           }
         }
 

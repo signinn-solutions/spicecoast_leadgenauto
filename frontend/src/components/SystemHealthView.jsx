@@ -37,8 +37,10 @@ export default function SystemHealthView({
     {
       name: "Hunter.io API",
       role: "Domain Executive Email Enrichment & MX Verification",
-      active: serverStatus.has_hunter_key,
-      details: serverStatus.has_hunter_key
+      active: serverStatus.has_hunter_key && !serverStatus.hunter_quota_exceeded,
+      details: serverStatus.hunter_quota_exceeded
+        ? "Monthly search limit reached (Website scraper fallback active)"
+        : serverStatus.has_hunter_key
         ? "Active API Key Configured"
         : "Missing key (falls back to simulation)",
     },

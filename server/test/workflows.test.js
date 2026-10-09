@@ -7,7 +7,7 @@ import config from '../config/env.js';
 import app from '../app.js';
 import { sendEmailViaHostinger } from '../services/mailService.js';
 import { processIncomingEmail } from '../services/webhookService.js';
-import { extractDomain, isPlaceDuplicate, executeLeadSearch } from '../services/leadFinderService.js';
+import { extractDomain, isPlaceDuplicate, executeLeadSearch, isSocialOrDirectoryDomain, scrapeEmailsFromWebsite } from '../services/leadFinderService.js';
 import { extractMetadataAndDraftReply, getDeepseekClient } from '../services/deepseekService.js';
 import {
   getTodayDateString, loadLeadsHistory, saveLeadsHistory, loadOutreachHistory,
@@ -39,6 +39,9 @@ test('lead discovery, drafts and quota stay within isolated storage', async () =
     globalThis.fetch = () => { throw new Error('Unexpected network request'); };
 
     assert.equal(extractDomain('https://www.Example.com/path'), 'example.com');
+    assert.equal(isSocialOrDirectoryDomain('instagram.com'), true);
+    assert.equal(isSocialOrDirectoryDomain('sub.facebook.com'), true);
+    assert.equal(isSocialOrDirectoryDomain('spiceimporters.de'), false);
     assert.equal(isPlaceDuplicate({ id: 'a', name: 'Different' }, { a: { name: 'Original' } }), true);
     assert.equal(isPlaceDuplicate({ name: 'Same Company', website: 'https://same.example' }, {}, [
       { name: 'Other', website: 'https://www.same.example/about' },
@@ -455,6 +458,23 @@ test('concurrent sends dispatch each saved draft once', async () => {
     assert.equal(blockedSimulatedReply.status, 400);
     assert.equal(providerCalls, 2);
     assert.equal(loadMailboxHistory().find((message) => message.id === simulatedMessage.id).status, 'drafted');
+
+    // Verify website email scraper fallback extracts emails correctly
+    const mockHtml = '<html><body><a href="mailto:info@targetspice.com">Contact</a><p>Sales: sales@targetspice.com</p></body></html>';
+    globalThis.fetch = async (url) => {
+      if (url.includes('targetspice.com')) {
+        return {
+          ok: true,
+          headers: new Headers({ 'content-type': 'text/html' }),
+          text: async () => mockHtml,
+        };
+      }
+      return { ok: false };
+    };
+    const scrapedEmails = await scrapeEmailsFromWebsite('https://targetspice.com', 'targetspice.com');
+    assert.equal(scrapedEmails.length >= 2, true);
+    assert.equal(scrapedEmails.some((e) => e.value === 'info@targetspice.com'), true);
+    assert.equal(scrapedEmails.some((e) => e.value === 'sales@targetspice.com'), true);
   } finally {
     if (server) await new Promise((resolve) => server.close(resolve));
     closeStorage();

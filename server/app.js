@@ -29,25 +29,55 @@ app.use((req, res, next) => {
 });
 
 // CORS Configuration
-if (config.CORS_ORIGIN === '*') {
-  app.use(cors());
-} else {
-  const allowedOrigins = config.CORS_ORIGIN.split(',').map((o) => o.trim());
-  app.use(
-    cors({
-      origin: (origin, callback) => {
-        if (!origin || allowedOrigins.includes(origin) || allowedOrigins.includes('*')) {
-          callback(null, true);
-        } else {
-          const err = new Error('CORS policy: Not allowed by CORS');
-          err.statusCode = 403;
-          callback(err);
-        }
-      },
-      credentials: true,
-    })
-  );
+const rawOrigins = (config.CORS_ORIGIN || '*').split(',').map((o) => o.trim());
+const allowedOrigins = new Set(rawOrigins);
+for (const origin of rawOrigins) {
+  if (origin.startsWith('http://localhost:')) {
+    allowedOrigins.add(origin.replace('http://localhost:', 'http://127.0.0.1:'));
+  } else if (origin.startsWith('http://127.0.0.1:')) {
+    allowedOrigins.add(origin.replace('http://127.0.0.1:', 'http://localhost:'));
+  }
 }
+
+function checkOrigin(origin) {
+  if (!origin || allowedOrigins.has('*') || allowedOrigins.has(origin)) {
+    return true;
+  }
+  if (config.NODE_ENV === 'development') {
+    try {
+      const parsed = new URL(origin);
+      if (['localhost', '127.0.0.1', '[::1]'].includes(parsed.hostname)) {
+        for (const allowed of allowedOrigins) {
+          try {
+            const allowedUrl = new URL(allowed);
+            if (
+              ['localhost', '127.0.0.1', '[::1]'].includes(allowedUrl.hostname) &&
+              allowedUrl.port === parsed.port
+            ) {
+              return true;
+            }
+          } catch {}
+        }
+      }
+    } catch {}
+  }
+  return false;
+}
+
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      if (checkOrigin(origin)) {
+        callback(null, true);
+      } else {
+        const err = new Error('CORS policy: Not allowed by CORS');
+        err.statusCode = 403;
+        callback(err);
+      }
+    },
+    credentials: true,
+  })
+);
 
 // Request body parsing
 app.use(express.json({ limit: '256kb' }));
