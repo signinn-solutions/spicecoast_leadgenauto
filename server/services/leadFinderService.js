@@ -357,7 +357,9 @@ async function runLeadSearch({
   };
   // Execute Live APIs
   if (mode === 'live') {
-    const searchRes = await searchPlaces(query, fetchCount, seenMap, existingLeads);
+    // Request up to 3x candidate places so we can auto-search for leads that have emails
+    const candidateTarget = Math.min(fetchCount * 3, 60);
+    const searchRes = await searchPlaces(query, candidateTarget, seenMap, existingLeads);
     if (searchRes.providerError && searchRes.places.length === 0) {
       const err = new Error(searchRes.providerError);
       err.statusCode = 502;
@@ -368,12 +370,22 @@ async function runLeadSearch({
     candidatesReturned = searchRes.candidatesReturned;
     const places = searchRes.places || [];
     duplicatesSkipped = searchRes.duplicatesSkipped || 0;
+
+    const verifiedLeads = [];
+    const unverifiedLeads = [];
+
     if (places && places.length > 0) {
       for (let idx = 0; idx < places.length; idx++) {
+        // If we have fulfilled the requested count of leads WITH emails, and we already have some candidates, we can stop fetching more candidates
+        if (verifiedLeads.length >= fetchCount) {
+          break;
+        }
+
         if (!consumeQuota()) {
           warnings.push("Discovery stopped at the current quota.");
           break;
         }
+
         const place = places[idx];
         const placeId = place.id || `live-${Date.now()}-${idx}`;
         const name = place.displayName?.text || `${cleanCity} ${cleanType} ${idx + 1}`;
@@ -382,7 +394,7 @@ async function runLeadSearch({
         const website = place.websiteUri || '';
         const domain = extractDomain(website);
         let email = '—';
-        let emailStatus = 'not_found';
+        let emailStatus = 'unverified';
         let emailCandidates = [];
         if (domain || website) {
           let emails = await scrapeEmailsFromWebsite(website, domain);
@@ -398,6 +410,12 @@ async function runLeadSearch({
             emailStatus = status === 'valid' || status === 'deliverable' ? 'deliverable' : ['accept_all', 'webmail', 'risky'].includes(status) ? 'risky' : status === 'invalid' ? 'invalid' : 'unknown';
           }
         }
+
+        const isUnverified = (email === '—');
+        if (isUnverified) {
+          emailStatus = 'unverified';
+        }
+
         const phoneStatus = phone && phone !== '—' ? 'listed' : 'not_found';
         const leadObj = {
           id: placeId,
@@ -410,6 +428,7 @@ async function runLeadSearch({
           phoneStatus,
           email,
           emailStatus,
+          isUnverified,
           emailCandidates,
           emailDiscovery: emailCandidates.find(item=>item.value===email) || null,
           website: website || (domain ? `https://${domain}` : '#'),
@@ -446,7 +465,13 @@ async function runLeadSearch({
           emailStatus,
           foundAt: today
         };
-        processedLeads.push(leadObj);
+
+        if (isUnverified) {
+          unverifiedLeads.push(leadObj);
+        } else {
+          verifiedLeads.push(leadObj);
+        }
+
         // Persist each completed lead so a long batch survives request disconnects or restart.
         saveLeadsHistory({
           ...loadLeadsHistory(),
@@ -455,12 +480,15 @@ async function runLeadSearch({
         saveSeenPlaces(seenMap);
         onProgress({
           stage: 'enriching',
-          processed: processedLeads.length,
+          processed: verifiedLeads.length + unverifiedLeads.length,
           target: fetchCount,
           query
         });
       }
     }
+
+    // Place verified leads (with emails) at top, and unverified leads (no email) at bottom
+    processedLeads.push(...verifiedLeads, ...unverifiedLeads);
   }
 
   // Explicit dev-gated simulation execution if mode is simulated

@@ -44,8 +44,10 @@ export default function LeadsView({
       // Status pill match
       const hasEmail = isLiveLead(lead) && (lead.emailStatus === "deliverable" || lead.emailStatus === "valid");
       const hasPhone = isLiveLead(lead) && ["valid", "listed"].includes(lead.phoneStatus);
+      const isUnverified = !hasEmail || lead.emailStatus === "unverified" || lead.email === "—";
       if (filterStatus === "published") return isLiveLead(lead) && lead.emailDiscovery?.source === "website";
       if (filterStatus === "deliverable") return hasEmail;
+      if (filterStatus === "unverified") return isUnverified;
       if (filterStatus === "validPhone") return hasPhone;
       if (filterStatus === "both") return hasEmail && hasPhone;
       if (filterStatus === "hasWebsite") return Boolean(safeUrl(lead.website));
@@ -68,8 +70,13 @@ export default function LeadsView({
         return bDeliv - aDeliv;
       });
     } else {
-      // newest default
-      list.sort((a, b) => (b.foundAt || "").localeCompare(a.foundAt || ""));
+      // newest default (verified email leads first, unverified at bottom)
+      list.sort((a, b) => {
+        const aHasEmail = a.email && a.email !== "—" ? 1 : 0;
+        const bHasEmail = b.email && b.email !== "—" ? 1 : 0;
+        if (aHasEmail !== bHasEmail) return bHasEmail - aHasEmail;
+        return (b.foundAt || "").localeCompare(a.foundAt || "");
+      });
     }
     return list;
   }, [filteredLeads, sortBy]);
@@ -84,6 +91,7 @@ export default function LeadsView({
   const counts = useMemo(() => {
     const total = baseList.length;
     const deliverable = baseList.filter(l => isLiveLead(l) && (l.emailStatus === "deliverable" || l.emailStatus === "valid")).length;
+    const unverified = baseList.filter(l => !l.email || l.email === "—" || l.emailStatus === "unverified" || l.emailStatus === "not_found").length;
     const validPhone = baseList.filter(l => isLiveLead(l) && ["valid", "listed"].includes(l.phoneStatus)).length;
     const fullyVerified = baseList.filter(l => isLiveLead(l) && (l.emailStatus === "deliverable" || l.emailStatus === "valid") && ["valid", "listed"].includes(l.phoneStatus)).length;
     const withWebsite = baseList.filter(l => safeUrl(l.website)).length;
@@ -92,6 +100,7 @@ export default function LeadsView({
       total,
       published: baseList.filter(l=>isLiveLead(l) && l.emailDiscovery?.source === "website").length,
       deliverable,
+      unverified,
       validPhone,
       fullyVerified,
       withWebsite,
@@ -211,6 +220,10 @@ export default function LeadsView({
           <button type="button" className={`lf-filter-pill ${filterStatus === "deliverable" ? "active" : ""}`} onClick={() => setFilterStatus("deliverable")}>
             <CheckCircle2 size={12} className="text-emerald" />
             <span>Deliverable Emails ({counts.deliverable})</span>
+          </button>
+          <button type="button" className={`lf-filter-pill ${filterStatus === "unverified" ? "active" : ""}`} onClick={() => setFilterStatus("unverified")}>
+            <AlertCircle size={12} className="text-amber" />
+            <span>Unverified / No Email ({counts.unverified})</span>
           </button>
           <button type="button" className={`lf-filter-pill ${filterStatus === "validPhone" ? "active" : ""}`} onClick={() => setFilterStatus("validPhone")}>
             <Phone size={12} className="text-emerald" />
