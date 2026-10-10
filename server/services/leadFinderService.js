@@ -13,6 +13,7 @@ import {
   withOutreachHistoryLock,
 } from './storageService.js';
 import { generateColdEmail } from './deepseekService.js';
+import { scrapeEmailsForWebsite } from './emailScraper.js';
 
 const PREFIXES = [
   'Global', 'Royal', 'Apex', 'Pinnacle', 'Aroma', 'Golden', 'Pacific', 'Atlantic',
@@ -268,6 +269,10 @@ export function resetHunterQuotaState() {
   hunterQuotaExceeded = false;
 }
 
+export function setHunterQuotaExceeded(exceeded = true) {
+  hunterQuotaExceeded = Boolean(exceeded);
+}
+
 export async function findEmails(domain) {
   if (!domain || !config.HUNTER_API_KEY) return [];
   if (isSocialOrDirectoryDomain(domain)) return [];
@@ -276,9 +281,9 @@ export async function findEmails(domain) {
   const url = `https://api.hunter.io/v2/domain-search?domain=${encodeURIComponent(domain)}&api_key=${encodeURIComponent(config.HUNTER_API_KEY)}&limit=3`;
   try {
     const response = await fetch(url, { signal: AbortSignal.timeout(10000) });
-    if (response.status === 429) {
+    if (response.status === 429 || response.status === 402) {
       hunterQuotaExceeded = true;
-      console.warn('[Hunter.io Quota Exceeded]: Hunter.io monthly limit reached (HTTP 429). Activating website email scraper fallback.');
+      console.warn(`[Hunter.io Quota Exceeded]: Hunter.io limit reached (HTTP ${response.status}). Activating website email scraper fallback.`);
       return [];
     }
     if (!response.ok) {
@@ -286,6 +291,11 @@ export async function findEmails(domain) {
       return [];
     }
     const data = await response.json();
+    if (Array.isArray(data?.errors) && data.errors.some(err => err.id?.includes('limit') || err.code === 429 || err.code === 402)) {
+      hunterQuotaExceeded = true;
+      console.warn('[Hunter.io Quota Exceeded]: Hunter.io credit/quota limit reached in response payload. Activating website email scraper fallback.');
+      return [];
+    }
     return Array.isArray(data.data?.emails) ? data.data.emails : [];
   } catch (e) {
     console.warn(`[Hunter.io findEmails error]: ${e.message}`);
@@ -298,8 +308,9 @@ export async function verifyEmail(email) {
   const url = `https://api.hunter.io/v2/email-verifier?email=${encodeURIComponent(email)}&api_key=${encodeURIComponent(config.HUNTER_API_KEY)}`;
   try {
     const response = await fetch(url, { signal: AbortSignal.timeout(10000) });
-    if (response.status === 429) {
+    if (response.status === 429 || response.status === 402) {
       hunterQuotaExceeded = true;
+      console.warn(`[Hunter.io Quota Exceeded]: Hunter.io limit reached during email verification (HTTP ${response.status}). Web scraper fallback is active.`);
       return 'unknown';
     }
     if (!response.ok) return 'unknown';
@@ -323,6 +334,27 @@ export async function scrapeEmailsFromWebsite(websiteUrl, domain) {
     baseUrl = `https://${baseUrl}`;
   }
 
+  // 1. Primary: Use dedicated emailScraper engine with contact crawling and MX verification
+  try {
+    const scrapedResult = await scrapeEmailsForWebsite(baseUrl);
+    if (scrapedResult && Array.isArray(scrapedResult.emails) && scrapedResult.emails.length > 0) {
+      return scrapedResult.emails.map((candidate) => ({
+        value: candidate.email,
+        email: candidate.email,
+        source: 'website',
+        confidence: candidate.confidence,
+        score: candidate.score,
+        hasMx: candidate.hasMx,
+        type: candidate.type,
+        sameDomain: candidate.sameDomain,
+        pages: candidate.pages,
+      }));
+    }
+  } catch (e) {
+    console.warn(`[emailScraper discovery error]: ${e.message}`);
+  }
+
+  // 2. Secondary fallback: direct page scan if advanced crawler returned 0 candidates
   let origin;
   try {
     origin = new URL(baseUrl).origin;
@@ -344,17 +376,17 @@ export async function scrapeEmailsFromWebsite(websiteUrl, domain) {
     try {
       const resp = await fetch(pageUrl, {
         headers: {
-          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'User-Agent': 'Mozilla/5.0 (compatible; SpiceCoastBot/1.0; +https://thespicecoast.com)',
           'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
         },
         signal: AbortSignal.timeout(5000),
       });
       if (!resp.ok) continue;
-      const cType = resp.headers.get('content-type') || '';
-      if (!cType.includes('text/html') && !cType.includes('application/xhtml')) continue;
+      const cType = resp.headers?.get ? (resp.headers.get('content-type') || '') : '';
+      if (cType && !cType.includes('text/html') && !cType.includes('application/xhtml')) continue;
 
-      const html = await resp.text();
-      // 1. Mailto links
+      const html = typeof resp.text === 'function' ? await resp.text() : '';
+      // Mailto links
       const mailtoMatches = [...html.matchAll(/mailto:([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/gi)];
       for (const m of mailtoMatches) {
         const mail = m[1].toLowerCase().trim();
@@ -364,7 +396,7 @@ export async function scrapeEmailsFromWebsite(websiteUrl, domain) {
         }
       }
 
-      // 2. Text matches
+      // Text matches
       const textMatches = html.match(emailRegex) || [];
       for (const raw of textMatches) {
         const mail = raw.toLowerCase().trim();
@@ -391,7 +423,7 @@ export async function scrapeEmailsFromWebsite(websiteUrl, domain) {
     const aPrio = priority.some(p => a.startsWith(p)) ? 1 : 0;
     const bPrio = priority.some(p => b.startsWith(p)) ? 1 : 0;
     return bPrio - aPrio;
-  }).map(value => ({ value, source: 'website' }));
+  }).map(value => ({ value, email: value, source: 'website' }));
 }
 
 export async function executeLeadSearch(options) {
@@ -440,7 +472,7 @@ async function runLeadSearch({ businessType, city, country, requestedCount = 20,
       err.statusCode = 503;
       throw err;
     }
-    if (!config.HUNTER_API_KEY) {
+    if (!config.HUNTER_API_KEY && !hunterQuotaExceeded) {
       const err = new Error('Hunter.io API key is not configured.');
       err.statusCode = 503;
       throw err;
@@ -500,13 +532,15 @@ async function runLeadSearch({ businessType, city, country, requestedCount = 20,
 
         if (domain || website) {
           let emails = [];
-          if (domain && !isSocialOrDirectoryDomain(domain)) {
+          // 1. Query Hunter.io if key is configured and monthly quota / credits are not exceeded
+          if (domain && !isSocialOrDirectoryDomain(domain) && config.HUNTER_API_KEY && !hunterQuotaExceeded) {
             emails = await findEmails(domain);
             if (emails.length > 0) {
               await new Promise((r) => setTimeout(r, 400));
             }
           }
 
+          // 2. If Hunter has no results OR Hunter credits/quota are exhausted, use web scraper
           if (emails.length === 0 && (website || domain)) {
             const scraped = await scrapeEmailsFromWebsite(website, domain);
             if (scraped.length > 0) {
@@ -519,10 +553,13 @@ async function runLeadSearch({ businessType, city, country, requestedCount = 20,
           if (bestEmail) {
             let status = 'unknown';
             if (bestEmailItem.source === 'website') {
-              status = 'deliverable';
-            } else {
+              // Web scraper candidates already check MX records and scoring
+              status = bestEmailItem.hasMx === false ? 'invalid' : 'deliverable';
+            } else if (config.HUNTER_API_KEY && !hunterQuotaExceeded) {
               status = await verifyEmail(bestEmail);
               await new Promise((r) => setTimeout(r, 400));
+            } else {
+              status = 'deliverable';
             }
             email = bestEmail;
             emailStatus =
