@@ -27,7 +27,7 @@ ENV/
 # Local data & history
 # daily_usage.json
 # leads_history.json
-*.sqlite
+
 *.sqlite-shm
 *.sqlite-wal
 

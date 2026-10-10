@@ -1,8 +1,10 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import LeadFinderApp from '../App.jsx';
 import PlatformConsole from './PlatformConsole.jsx';
 import { apiFetch, setSessionToken } from '../api.js';
 export default function AuthGate() {
+  const sessionRevision = useRef(0);
+  const logoutPending = useRef(false);
   const [activation, setActivation] = useState(() => {
     const params = new URLSearchParams(window.location.hash.slice(1));
     const token = params.get('activate'),
@@ -24,23 +26,27 @@ export default function AuthGate() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const check = useCallback(async () => {
+    const revision = ++sessionRevision.current;
     setChecking(true);
     setError('');
     try {
       const res = await apiFetch('/api/auth/session');
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Unable to check dashboard access.');
+      if (revision !== sessionRevision.current) return;
       setSessionToken(data.csrfToken);
       setSession(data);
     } catch (err) {
-      setError(err.message);
+      if (revision === sessionRevision.current) setError(err.message);
     } finally {
-      setChecking(false);
+      if (revision === sessionRevision.current) setChecking(false);
     }
   }, []);
   useEffect(() => {
     check();
     const expire = () => {
+      ++sessionRevision.current;
+      setChecking(false);
       setSessionToken('');
       setSession({
         enabled: true,
@@ -111,8 +117,13 @@ export default function AuthGate() {
     }
   };
   const logout = async () => {
+    if (logoutPending.current) return;
+    logoutPending.current = true;
+    ++sessionRevision.current;
+    setChecking(false);
     try {
       const res = await apiFetch('/api/auth/logout', {
+        signal: AbortSignal.timeout(10000),
         method: 'POST'
       });
       if (!res.ok && res.status !== 401) throw new Error('Could not sign out. Please try again.');
@@ -122,7 +133,9 @@ export default function AuthGate() {
         authenticated: false
       });
     } catch (err) {
-      window.alert(err.message);
+      window.alert(err.name === 'TimeoutError' ? 'Sign out timed out. Your session may still be active; please try again.' : err.message);
+    } finally {
+      logoutPending.current = false;
     }
   };
   if (!activation && session?.authenticated && session.user?.role!=='super_admin' && session.user?.tenant?.subscription && !session.user.tenant.subscription.allowed) return <main className="lf-loading-screen"><section className="lf-panel lf-auth-card"><h1>{session.user.tenant.name}</h1><p role="status">{session.user.tenant.subscription.reason}</p><p>Signinn manages your subscription. Your workspace records are preserved.</p><button className="lf-btn-primary" disabled={checking} onClick={check}>Check access again</button><button className="lf-btn-secondary" onClick={logout}>Sign out</button>{error && <p role="alert">{error}</p>}</section></main>;
