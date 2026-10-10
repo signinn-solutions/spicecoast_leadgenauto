@@ -24,7 +24,15 @@ services:
       - key: AUTO_SEND
         value: "false"
       - key: DAILY_LEAD_LIMIT
+        value: "60"
+      - key: DAILY_SEND_LIMIT
         value: "50"
+      - key: QUOTA_TIMEZONE
+        value: Asia/Kolkata
+      - key: SETTINGS_ENCRYPTION_KEY
+        sync: false
+      - key: HOSTINGER_MAILBOX_ID
+        sync: false
       - key: DAILY_REPLY_LIMIT
         value: "30"
       - key: GOOGLE_API_KEY

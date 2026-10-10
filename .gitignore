@@ -30,3 +30,6 @@ ENV/
 *.sqlite
 *.sqlite-shm
 *.sqlite-wal
+
+# Private local setup, backup and QA artifacts
+.local/

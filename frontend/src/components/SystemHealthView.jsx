@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 
 export default function SystemHealthView({
+  webhookPath = "/webhook",
   serverStatus = {},
   mailboxStatus = {},
   allLeads = [],
@@ -32,7 +33,7 @@ export default function SystemHealthView({
       active: serverStatus.has_google_key,
       details: serverStatus.has_google_key
         ? "Active API Key Configured"
-        : "Missing key (falls back to simulation)",
+        : "Missing key: live search unavailable",
     },
     {
       name: "Hunter.io API",
@@ -71,7 +72,7 @@ export default function SystemHealthView({
   ];
 
   const handleCopy = async () => {
-    const url = `${window.location.origin}/webhook`;
+    const url = window.location.origin + webhookPath;
     if (!(await onCopyWebhook(url))) return;
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -170,7 +171,7 @@ export default function SystemHealthView({
             </p>
             <div className="lf-webhook-url-bar">
               <span className="lf-webhook-url-val lf-mono">
-                {window.location.origin}/webhook
+                {window.location.origin}{webhookPath}
               </span>
               <button
                 type="button"

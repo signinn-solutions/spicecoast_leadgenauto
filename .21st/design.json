@@ -1,0 +1,73 @@
+{
+  "version": 1,
+  "project": {
+    "name": "Signinn Leadgen",
+    "productType": "Platform administration and isolated tenant lead operations",
+    "stack": [
+      "react",
+      "vite"
+    ]
+  },
+  "sources": {
+    "tokens": [
+      "frontend/src/styles.css"
+    ],
+    "components": [
+      "frontend/src/components"
+    ],
+    "assets": [],
+    "instructions": []
+  },
+  "design": {
+    "colorMode": "light",
+    "colors": {
+      "primary": "#7d62ec",
+      "surface": "#ffffff",
+      "background": "#f6f8fd",
+      "text": "#192435"
+    },
+    "typography": {},
+    "spacing": {},
+    "radius": {},
+    "shadows": {},
+    "motion": {},
+    "density": "compact"
+  },
+  "components": {
+    "installed": [],
+    "preferredPrimitives": [
+      "lf-panel",
+      "lf-input",
+      "lf-select",
+      "lf-crm-table",
+      "lf-btn-primary",
+      "lf-btn-secondary"
+    ],
+    "patterns": []
+  },
+  "constraints": {
+    "must": [
+      "Reuse existing CSS variables and React controls",
+      "Keep role restrictions enforced by the server",
+      "Preserve responsive layouts and labelled form controls"
+    ],
+    "avoid": []
+  },
+  "decisions": [
+    {
+      "decision": "Platform super admins use a dedicated Signinn console; customer users see their tenant workspace.",
+      "source": "User clarification on platform versus SpiceCoast tenant"
+    }
+  ],
+  "evidence": [
+    {
+      "fact": "project.stack:react",
+      "source": "package.json"
+    },
+    {
+      "fact": "project.stack:vite",
+      "source": "package.json"
+    }
+  ],
+  "generatedAt": "2026-10-10T08:58:09.447Z"
+}

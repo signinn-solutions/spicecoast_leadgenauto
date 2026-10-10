@@ -1,13 +1,16 @@
 import nodemailer from 'nodemailer';
 import config from '../config/env.js';
-
+import { guardedDelivery, validateMail } from './deliveryService.js';
 let smtpTransporter = null;
-
+let smtpFingerprint = null;
 export function getSmtpTransporter() {
   if (!config.SMTP_HOST || !config.SMTP_USER || !config.SMTP_PASS) {
     return null;
   }
-  if (!smtpTransporter) {
+  const fingerprint = JSON.stringify([config.SMTP_HOST, config.SMTP_PORT, config.SMTP_USER, config.SMTP_PASS, config.SMTP_SECURE]);
+  if (!smtpTransporter || smtpFingerprint !== fingerprint) {
+    smtpTransporter?.close?.();
+    smtpFingerprint = fingerprint;
     smtpTransporter = nodemailer.createTransport({
       host: config.SMTP_HOST,
       port: config.SMTP_PORT,
@@ -22,49 +25,56 @@ export function getSmtpTransporter() {
       disableUrlAccess: true,
       auth: {
         user: config.SMTP_USER,
-        pass: config.SMTP_PASS,
-      },
+        pass: config.SMTP_PASS
+      }
     });
   }
   return smtpTransporter;
 }
-
-export async function sendEmailViaHostinger(toAddress, subject, body, { reply = false } = {}) {
+export async function sendEmailViaHostinger(toAddress, subject, body, {
+  reply = false,
+  inReplyTo = null,
+  messageId = null
+} = {}) {
+  validateMail(toAddress, subject, body);
   if (!config.HOSTINGER_API_TOKEN) {
     console.log('[Hostinger API] No HOSTINGER_API_TOKEN configured. Logged as simulated dispatch.');
     return {
       status: 'simulated',
-      message: 'No Hostinger API token configured. Draft recorded.',
+      message: 'No Hostinger API token configured. Draft recorded.'
     };
   }
-
+  if (!config.HOSTINGER_SEND_ENDPOINT || !/^https:\/\/api\.mail\.hostinger\.com\/api\/v1\/mailboxes\/[a-z0-9_-]+\/send$/i.test(config.HOSTINGER_SEND_ENDPOINT)) throw Object.assign(new Error('Configure a Hostinger mailbox resource ID and the current Mail API send endpoint.'), {
+    definiteFailure: true
+  });
   const cleanSubject = reply && !subject.toLowerCase().startsWith('re:') ? `Re: ${subject}` : subject;
   const headers = {
     Authorization: `Bearer ${config.HOSTINGER_API_TOKEN}`,
-    'Content-Type': 'application/json',
+    'Content-Type': 'application/json'
   };
   const payload = {
     to: [toAddress],
-    from: config.SENDER_MAILBOX,
+    ...(inReplyTo ? {
+      inReplyTo
+    } : {}),
     subject: cleanSubject,
-    text: body,
+    text: body
   };
-
   let response;
   try {
     response = await fetch(config.HOSTINGER_SEND_ENDPOINT, {
       method: 'POST',
       headers,
       body: JSON.stringify(payload),
-      signal: AbortSignal.timeout(15000),
+      signal: AbortSignal.timeout(15000)
     });
-
   } catch {
     throw new Error('Email provider request failed.');
   }
-
   if (!response.ok) {
-    throw new Error(`Email provider rejected message (HTTP ${response.status}).`);
+    throw Object.assign(new Error(`Email provider rejected message (HTTP ${response.status}).`), {
+      definiteFailure: response.status < 500
+    });
   }
 
   // A successful HTTP status is the transport acknowledgement; APIs may
@@ -73,23 +83,34 @@ export async function sendEmailViaHostinger(toAddress, subject, body, { reply = 
   if (['failed', 'failure', 'error', 'rejected'].includes(String(data?.status).toLowerCase()) || data?.error) {
     throw new Error('Email provider rejected message.');
   }
-  return { ...data, status: 'sent' };
+  return {
+    ...data,
+    status: 'sent'
+  };
 }
-
-export async function sendEmailViaSmtp(toAddress, subject, body, { reply = false } = {}) {
+export async function sendEmailViaSmtp(toAddress, subject, body, {
+  reply = false,
+  inReplyTo = null,
+  messageId = null
+} = {}) {
+  validateMail(toAddress, subject, body);
   const transporter = getSmtpTransporter();
   if (!transporter) {
-    throw new Error('SMTP transporter is not configured.');
+    throw Object.assign(new Error('SMTP transporter is not configured.'), {
+      definiteFailure: true
+    });
   }
-
   const cleanSubject = reply && !subject.toLowerCase().startsWith('re:') ? `Re: ${subject}` : subject;
   const mailOptions = {
     from: config.SENDER_MAILBOX,
     to: toAddress,
+    ...(messageId ? {
+      inReplyTo: messageId,
+      references: [messageId]
+    } : {}),
     subject: cleanSubject,
-    text: body,
+    text: body
   };
-
   let result;
   try {
     result = await transporter.sendMail(mailOptions);
@@ -99,14 +120,17 @@ export async function sendEmailViaSmtp(toAddress, subject, body, { reply = false
   const accepted = Array.isArray(result?.accepted) ? result.accepted : [];
   const rejected = Array.isArray(result?.rejected) ? result.rejected : [];
   const recipient = toAddress.trim().toLowerCase();
-  if (!accepted.some((address) => typeof address === 'string' && address.toLowerCase() === recipient) ||
-      rejected.some((address) => typeof address === 'string' && address.toLowerCase() === recipient)) {
-    throw new Error('SMTP server did not accept recipient.');
+  if (!accepted.some(address => typeof address === 'string' && address.toLowerCase() === recipient) || rejected.some(address => typeof address === 'string' && address.toLowerCase() === recipient)) {
+    throw Object.assign(new Error('SMTP server did not accept recipient.'), {
+      definiteFailure: true
+    });
   }
-  return { status: 'sent', messageId: result.messageId };
+  return {
+    status: 'sent',
+    messageId: result.messageId
+  };
 }
-
-export async function sendEmail(toAddress, subject, body, options = {}) {
+async function dispatchTransport(toAddress, subject, body, options = {}) {
   // If Hostinger API Token is present, prefer Hostinger Agentic Mail API
   if (config.HOSTINGER_API_TOKEN) {
     return await sendEmailViaHostinger(toAddress, subject, body, options);
@@ -117,4 +141,7 @@ export async function sendEmail(toAddress, subject, body, options = {}) {
   }
   // Otherwise simulate
   return await sendEmailViaHostinger(toAddress, subject, body, options);
+}
+export async function sendEmail(toAddress, subject, body, options = {}) {
+  return guardedDelivery(toAddress, subject, body, options, () => dispatchTransport(toAddress, subject, body, options));
 }

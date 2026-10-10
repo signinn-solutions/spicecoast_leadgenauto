@@ -1,12 +1,32 @@
-import test from 'node:test';
+import test, { beforeEach, afterEach } from 'node:test';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { closeStorage } from '../services/storageService.js';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import app from '../app.js';
 import config from '../config/env.js';
 import { hashPassword } from '../middleware/dashboardAuth.js';
-
+let testDir, storageConfig;
+beforeEach(() => {
+  testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'spicecoast-auth-'));
+  const keys = ['DB_PATH', 'DAILY_USAGE_FILE', 'REPLY_USAGE_FILE', 'LEADS_HISTORY_FILE', 'SEEN_PLACES_FILE', 'MAILBOX_HISTORY_FILE', 'OUTREACH_HISTORY_FILE'];
+  storageConfig = Object.fromEntries(keys.map(k => [k, config[k]]));
+  for (const k of keys) config[k] = path.join(testDir, k);
+});
+afterEach(() => {
+  closeStorage();
+  Object.assign(config, storageConfig);
+  fs.rmSync(testDir, {
+    recursive: true,
+    force: true
+  });
+});
 test('single-business dashboard authentication fails closed, protects mutations, and revokes sessions', async () => {
-  const original = { ...config };
+  const original = {
+    ...config
+  };
   config.NODE_ENV = 'production';
   config.ADMIN_EMAIL = '';
   config.ADMIN_PASSWORD_HASH = '';
@@ -20,9 +40,21 @@ test('single-business dashboard authentication fails closed, protects mutations,
     config.ADMIN_EMAIL = 'owner@example.test';
     config.ADMIN_PASSWORD_HASH = await hashPassword('test-only-long-password');
     assert.equal((await request('/api/status')).status, 401);
-    const login = (password, extra = {}) => request('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json', ...extra }, body: JSON.stringify({ email: config.ADMIN_EMAIL, password }) });
+    const login = (password, extra = {}) => request('/api/auth/login', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...extra
+      },
+      body: JSON.stringify({
+        email: config.ADMIN_EMAIL,
+        password
+      })
+    });
     assert.equal((await login('wrong')).status, 401);
-    assert.equal((await login('test-only-long-password', { Origin: 'https://untrusted.test' })).status, 403);
+    assert.equal((await login('test-only-long-password', {
+      Origin: 'https://untrusted.test'
+    })).status, 403);
     const response = await login('test-only-long-password');
     assert.equal(response.status, 200);
     const setCookie = response.headers.get('set-cookie');
@@ -33,31 +65,77 @@ test('single-business dashboard authentication fails closed, protects mutations,
     const session = await response.json();
     assert.equal(session.authenticated, true);
     assert.ok(session.csrfToken);
-    const current = await request('/api/auth/session', { headers: { cookie } });
+    const current = await request('/api/auth/session', {
+      headers: {
+        cookie
+      }
+    });
     assert.equal((await current.json()).authenticated, true);
-    assert.equal((await request('/api/mailbox/toggle-autosend', { method: 'POST', headers: { cookie } })).status, 403);
-    assert.equal((await request('/api/unknown', { headers: { cookie, Origin: 'https://untrusted.test' } })).status, 403);
-    assert.equal((await request('/api/unknown', { headers: { cookie } })).status, 404);
-    assert.equal((await request('/api/auth/logout', { method: 'POST', headers: { cookie, 'X-CSRF-Token': session.csrfToken } })).status, 200);
-    assert.equal((await request('/api/status', { headers: { cookie } })).status, 401);
+    assert.equal((await request('/api/mailbox/toggle-autosend', {
+      method: 'POST',
+      headers: {
+        cookie
+      }
+    })).status, 403);
+    assert.equal((await request('/api/unknown', {
+      headers: {
+        cookie,
+        Origin: 'https://untrusted.test'
+      }
+    })).status, 403);
+    assert.equal((await request('/api/unknown', {
+      headers: {
+        cookie
+      }
+    })).status, 404);
+    assert.equal((await request('/api/auth/logout', {
+      method: 'POST',
+      headers: {
+        cookie,
+        'X-CSRF-Token': session.csrfToken
+      }
+    })).status, 200);
+    assert.equal((await request('/api/status', {
+      headers: {
+        cookie
+      }
+    })).status, 401);
     const rotated = await login('test-only-long-password');
     const rotatedCookie = rotated.headers.get('set-cookie').split(';')[0];
     config.ADMIN_PASSWORD_HASH = await hashPassword('replacement-test-password');
-    assert.equal((await request('/api/status', { headers: { cookie: rotatedCookie } })).status, 401);
+    assert.equal((await request('/api/status', {
+      headers: {
+        cookie: rotatedCookie
+      }
+    })).status, 401);
     for (let i = 0; i < 10; i++) await login('wrong');
     assert.equal((await login('wrong')).status, 429);
     const webhook = await request('/webhook');
-    assert.deepEqual(await webhook.json(), { status: 'ok', method: 'POST' });
-    assert.equal((await request('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{' })).status, 400);
+    assert.deepEqual(await webhook.json(), {
+      status: 'ok',
+      method: 'POST'
+    });
+    assert.equal((await request('/api/auth/login', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: '{'
+    })).status, 400);
   } finally {
     for (const key of ['NODE_ENV', 'ADMIN_EMAIL', 'ADMIN_PASSWORD_HASH']) config[key] = original[key];
     await new Promise(resolve => server.close(resolve));
   }
 });
-
 test('local development bypass is denied for foreign Host and Origin', async () => {
-  const original = { ...config };
-  Object.assign(config, { NODE_ENV: 'development', ADMIN_EMAIL: '', ADMIN_PASSWORD_HASH: '' });
+  const original = {
+    ...config
+  };
+  Object.assign(config, {
+    NODE_ENV: 'development',
+    ADMIN_EMAIL: '',
+    ADMIN_PASSWORD_HASH: ''
+  });
   const server = app.listen(0, '127.0.0.1');
   await new Promise(resolve => server.once('listening', resolve));
   const base = `http://127.0.0.1:${server.address().port}`;
@@ -65,9 +143,13 @@ test('local development bypass is denied for foreign Host and Origin', async () 
     assert.equal((await fetch(base + '/api/auth/session')).status, 200);
     const foreignHostStatus = await new Promise((resolve, reject) => {
       const request = http.request({
-        hostname: '127.0.0.1', port: server.address().port, path: '/api/auth/session',
-        headers: { Host: 'untrusted.test' },
-      }, (response) => {
+        hostname: '127.0.0.1',
+        port: server.address().port,
+        path: '/api/auth/session',
+        headers: {
+          Host: 'untrusted.test'
+        }
+      }, response => {
         response.resume();
         response.on('end', () => resolve(response.statusCode));
       });
@@ -75,7 +157,11 @@ test('local development bypass is denied for foreign Host and Origin', async () 
       request.end();
     });
     assert.equal(foreignHostStatus, 503);
-    assert.equal((await fetch(base + '/api/unknown', { headers: { Origin: 'https://untrusted.test' } })).status, 403);
+    assert.equal((await fetch(base + '/api/unknown', {
+      headers: {
+        Origin: 'https://untrusted.test'
+      }
+    })).status, 403);
   } finally {
     for (const key of ['NODE_ENV', 'ADMIN_EMAIL', 'ADMIN_PASSWORD_HASH']) config[key] = original[key];
     await new Promise(resolve => server.close(resolve));

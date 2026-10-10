@@ -1,77 +1,68 @@
 import React from "react";
-import {
-  Compass,
-  Search,
-  Users,
-  Send,
-  Inbox,
-  BarChart3,
-  TrendingUp,
-  CheckCircle2,
-  AlertCircle,
-  Clock,
-  Sparkles,
-  ChevronRight,
-  MapPin,
-  Mail,
-  Phone,
-  Globe,
-  ArrowRight,
-  ShieldCheck,
-  Building2,
-  Package,
-} from "lucide-react";
-
+import { Compass, Search, Users, Send, Inbox, BarChart3, TrendingUp, CheckCircle2, AlertCircle, Clock, Sparkles, ChevronRight, MapPin, Mail, Phone, Globe, ArrowRight, ShieldCheck, Building2, Package } from "lucide-react";
 export default function DashboardView({
+  canDiscover=true,
   allLeads = [],
   outreachList = [],
   mailboxMessages = [],
   searchHistory = [],
-  leadUsage = { count: 0, limit: 50 },
+  leadUsage = {
+    count: 0,
+    limit: 50
+  },
   onNavigate,
   onSelectLead,
-  onQuickSearch,
+  onQuickSearch
 }) {
-  const isLiveLead = (lead) => lead.source === "live";
-  const isLiveOutreach = (item) =>
-    item.source === "live" &&
-    allLeads.find((lead) => lead.id === item.leadId)?.source === "live";
-
+  const isLiveLead = lead => lead.source === "live";
+  const isLiveOutreach = item => item.source === "live" && allLeads.find(lead => lead.id === item.leadId)?.source === "live";
   const activateOnKeyDown = (event, action) => {
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
       action();
     }
   };
-
   const liveLeads = allLeads.filter(isLiveLead);
   const totalLeads = allLeads.length;
-  const deliverableEmails = liveLeads.filter(
-    (l) => l.emailStatus === "deliverable" || l.emailStatus === "valid"
-  ).length;
-  const validPhones = liveLeads.filter((l) => l.phoneStatus === "valid").length;
-  const deliverabilityRate =
-    liveLeads.length > 0
-      ? Math.round((deliverableEmails / liveLeads.length) * 100)
-      : 0;
-
-  const pendingDrafts = outreachList.filter(
-    (o) => o.status === "pending_review" && isLiveOutreach(o)
-  ).length;
-  const sentOutreach = outreachList.filter((o) => o.status === "sent").length;
+  const deliverableEmails = liveLeads.filter(l => l.emailStatus === "deliverable" || l.emailStatus === "valid").length;
+  const validPhones = liveLeads.filter(l => ["valid", "listed"].includes(l.phoneStatus)).length;
+  const deliverabilityRate = liveLeads.length > 0 ? Math.round(deliverableEmails / liveLeads.length * 100) : 0;
+  const pendingDrafts = outreachList.filter(o => o.status === "pending_review" && isLiveOutreach(o)).length;
+  const sentOutreach = outreachList.filter(o => o.status === "sent").length;
 
   // Preset quick searches for one-click discovery
-  const quickPicks = [
-    { niche: "Spice Importer", city: "Hamburg", country: "Germany", icon: "🇩🇪" },
-    { niche: "Food Distributor", city: "Rotterdam", country: "Netherlands", icon: "🇳🇱" },
-    { niche: "Gourmet Foods Broker", city: "Dubai", country: "UAE", icon: "🇦🇪" },
-    { niche: "Specialty Spice Wholesaler", city: "London", country: "UK", icon: "🇬🇧" },
-    { niche: "Organic Commodities", city: "New York", country: "USA", icon: "🇺🇸" },
-    { niche: "Ethnic Food Importers", city: "Toronto", country: "Canada", icon: "🇨🇦" },
-  ];
-
-  return (
-    <div className="lf-view-container lf-animate-fade">
+  const quickPicks = [{
+    niche: "Spice Importer",
+    city: "Hamburg",
+    country: "Germany",
+    icon: "🇩🇪"
+  }, {
+    niche: "Food Distributor",
+    city: "Rotterdam",
+    country: "Netherlands",
+    icon: "🇳🇱"
+  }, {
+    niche: "Gourmet Foods Broker",
+    city: "Dubai",
+    country: "UAE",
+    icon: "🇦🇪"
+  }, {
+    niche: "Specialty Spice Wholesaler",
+    city: "London",
+    country: "UK",
+    icon: "🇬🇧"
+  }, {
+    niche: "Organic Commodities",
+    city: "New York",
+    country: "USA",
+    icon: "🇺🇸"
+  }, {
+    niche: "Ethnic Food Importers",
+    city: "Toronto",
+    country: "Canada",
+    icon: "🇨🇦"
+  }];
+  return <div className="lf-view-container lf-animate-fade">
       {/* Top Banner */}
       <div className="lf-hero-banner">
         <div className="lf-hero-content">
@@ -87,20 +78,12 @@ export default function DashboardView({
             Synthesize bespoke DeepSeek B2B proposals and automate inbound inquiry triage with zero manual friction.
           </p>
           <div className="lf-hero-actions">
-            <button
-              type="button"
-              className="lf-btn-primary"
-              onClick={() => onNavigate("search")}
-            >
+            <button type="button" className="lf-btn-primary" disabled={!canDiscover} onClick={() => onNavigate("search")}>
               <Search size={16} />
               <span>Launch Lead Prospector</span>
               <ChevronRight size={15} />
             </button>
-            <button
-              type="button"
-              className="lf-btn-secondary"
-              onClick={() => onNavigate("results")}
-            >
+            <button type="button" className="lf-btn-secondary" onClick={() => onNavigate("results")}>
               <Users size={16} />
               <span>Browse CRM Database ({totalLeads})</span>
             </button>
@@ -111,13 +94,7 @@ export default function DashboardView({
       {/* 4 Metric KPI Cards */}
       <div className="lf-stats-grid">
         {/* Total Leads */}
-        <div
-          className="lf-stat-card"
-          onClick={() => onNavigate("results")}
-          onKeyDown={(event) => activateOnKeyDown(event, () => onNavigate("results"))}
-          role="button"
-          tabIndex={0}
-        >
+        <div className="lf-stat-card" onClick={() => onNavigate("results")} onKeyDown={event => activateOnKeyDown(event, () => onNavigate("results"))} role="button" tabIndex={0}>
           <div className="lf-stat-top">
             <span className="lf-stat-title">Total Discovered Leads</span>
             <div className="lf-stat-icon-wrap amber">
@@ -136,13 +113,7 @@ export default function DashboardView({
         </div>
 
         {/* Deliverable Email Rate */}
-        <div
-          className="lf-stat-card"
-          onClick={() => onNavigate("results")}
-          onKeyDown={(event) => activateOnKeyDown(event, () => onNavigate("results"))}
-          role="button"
-          tabIndex={0}
-        >
+        <div className="lf-stat-card" onClick={() => onNavigate("results")} onKeyDown={event => activateOnKeyDown(event, () => onNavigate("results"))} role="button" tabIndex={0}>
           <div className="lf-stat-top">
             <span className="lf-stat-title">Email Deliverability</span>
             <div className="lf-stat-icon-wrap emerald">
@@ -161,13 +132,7 @@ export default function DashboardView({
         </div>
 
         {/* AI Outreach Drafts */}
-        <div
-          className="lf-stat-card"
-          onClick={() => onNavigate("outreach")}
-          onKeyDown={(event) => activateOnKeyDown(event, () => onNavigate("outreach"))}
-          role="button"
-          tabIndex={0}
-        >
+        <div className="lf-stat-card" onClick={() => onNavigate("outreach")} onKeyDown={event => activateOnKeyDown(event, () => onNavigate("outreach"))} role="button" tabIndex={0}>
           <div className="lf-stat-top">
             <span className="lf-stat-title">AI Cold Pitches</span>
             <div className="lf-stat-icon-wrap gold">
@@ -184,13 +149,7 @@ export default function DashboardView({
         </div>
 
         {/* Inbound Inquiries */}
-        <div
-          className="lf-stat-card"
-          onClick={() => onNavigate("mailbox")}
-          onKeyDown={(event) => activateOnKeyDown(event, () => onNavigate("mailbox"))}
-          role="button"
-          tabIndex={0}
-        >
+        <div className="lf-stat-card" onClick={() => onNavigate("mailbox")} onKeyDown={event => activateOnKeyDown(event, () => onNavigate("mailbox"))} role="button" tabIndex={0}>
           <div className="lf-stat-top">
             <span className="lf-stat-title">Inbound Inquiries</span>
             <div className="lf-stat-icon-wrap blue">
@@ -216,24 +175,14 @@ export default function DashboardView({
               Track leads through automated discovery, enrichment, cold AI outreach, and inbound buyer response
             </p>
           </div>
-          <button
-            type="button"
-            className="lf-btn-ghost"
-            onClick={() => onNavigate("analytics")}
-          >
+          <button type="button" className="lf-btn-ghost" onClick={() => onNavigate("analytics")}>
             <span>View Funnel Analytics</span>
             <ArrowRight size={14} />
           </button>
         </div>
 
         <div className="lf-pipeline-steps">
-          <div
-            className="lf-pipeline-step active"
-            onClick={() => onNavigate("search")}
-            onKeyDown={(event) => activateOnKeyDown(event, () => onNavigate("search"))}
-            role="button"
-            tabIndex={0}
-          >
+          <div className="lf-pipeline-step active" aria-disabled={!canDiscover} onClick={() => canDiscover && onNavigate("search")} onKeyDown={event => activateOnKeyDown(event, () => canDiscover && onNavigate("search"))} role="button" tabIndex={canDiscover ? 0 : -1}>
             <div className="lf-step-badge">1. Discovery</div>
             <div className="lf-step-count lf-mono">{liveLeads.length}</div>
             <div className="lf-step-name">Businesses Identified</div>
@@ -242,13 +191,7 @@ export default function DashboardView({
 
           <div className="lf-step-arrow">&rarr;</div>
 
-          <div
-            className="lf-pipeline-step active"
-            onClick={() => onNavigate("results")}
-            onKeyDown={(event) => activateOnKeyDown(event, () => onNavigate("results"))}
-            role="button"
-            tabIndex={0}
-          >
+          <div className="lf-pipeline-step active" onClick={() => onNavigate("results")} onKeyDown={event => activateOnKeyDown(event, () => onNavigate("results"))} role="button" tabIndex={0}>
             <div className="lf-step-badge">2. Verification</div>
             <div className="lf-step-count lf-mono text-emerald">
               {deliverableEmails}
@@ -259,13 +202,7 @@ export default function DashboardView({
 
           <div className="lf-step-arrow">&rarr;</div>
 
-          <div
-            className="lf-pipeline-step active"
-            onClick={() => onNavigate("outreach")}
-            onKeyDown={(event) => activateOnKeyDown(event, () => onNavigate("outreach"))}
-            role="button"
-            tabIndex={0}
-          >
+          <div className="lf-pipeline-step active" onClick={() => onNavigate("outreach")} onKeyDown={event => activateOnKeyDown(event, () => onNavigate("outreach"))} role="button" tabIndex={0}>
             <div className="lf-step-badge">3. Pitch Studio</div>
             <div className="lf-step-count lf-mono text-amber">
               {outreachList.filter(isLiveOutreach).length}
@@ -276,13 +213,7 @@ export default function DashboardView({
 
           <div className="lf-step-arrow">&rarr;</div>
 
-          <div
-            className="lf-pipeline-step active"
-            onClick={() => onNavigate("outreach")}
-            onKeyDown={(event) => activateOnKeyDown(event, () => onNavigate("outreach"))}
-            role="button"
-            tabIndex={0}
-          >
+          <div className="lf-pipeline-step active" onClick={() => onNavigate("outreach")} onKeyDown={event => activateOnKeyDown(event, () => onNavigate("outreach"))} role="button" tabIndex={0}>
             <div className="lf-step-badge">4. Dispatch</div>
             <div className="lf-step-count lf-mono">{sentOutreach}</div>
             <div className="lf-step-name">Outreach Dispatched</div>
@@ -291,13 +222,7 @@ export default function DashboardView({
 
           <div className="lf-step-arrow">&rarr;</div>
 
-          <div
-            className="lf-pipeline-step active"
-            onClick={() => onNavigate("mailbox")}
-            onKeyDown={(event) => activateOnKeyDown(event, () => onNavigate("mailbox"))}
-            role="button"
-            tabIndex={0}
-          >
+          <div className="lf-pipeline-step active" onClick={() => onNavigate("mailbox")} onKeyDown={event => activateOnKeyDown(event, () => onNavigate("mailbox"))} role="button" tabIndex={0}>
             <div className="lf-step-badge">5. Buyer Inbound</div>
             <div className="lf-step-count lf-mono text-blue">
               {mailboxMessages.length}
@@ -323,15 +248,7 @@ export default function DashboardView({
           </div>
 
           <div className="lf-quick-picks-grid">
-            {quickPicks.map((pick, idx) => (
-              <div
-                key={idx}
-                className="lf-quick-pick-card"
-                onClick={() => onQuickSearch(pick.niche, pick.city, pick.country)}
-                onKeyDown={(event) => activateOnKeyDown(event, () => onQuickSearch(pick.niche, pick.city, pick.country))}
-                role="button"
-                tabIndex={0}
-              >
+            {quickPicks.map((pick, idx) => <div key={idx} className="lf-quick-pick-card" aria-disabled={!canDiscover} onClick={() => canDiscover && onQuickSearch(pick.niche, pick.city, pick.country)} onKeyDown={event => activateOnKeyDown(event, () => canDiscover && onQuickSearch(pick.niche, pick.city, pick.country))} role="button" tabIndex={0}>
                 <div className="lf-pick-top">
                   <span className="lf-pick-flag">{pick.icon}</span>
                   <span className="lf-pick-location">
@@ -343,8 +260,7 @@ export default function DashboardView({
                   <span>Harvest 15 leads</span>
                   <ArrowRight size={13} />
                 </div>
-              </div>
-            ))}
+              </div>)}
           </div>
         </section>
 
@@ -357,43 +273,24 @@ export default function DashboardView({
                 Latest commercial contacts processed and ready for outreach review
               </p>
             </div>
-            <button
-              type="button"
-              className="lf-btn-ghost"
-              onClick={() => onNavigate("results")}
-            >
+            <button type="button" className="lf-btn-ghost" onClick={() => onNavigate("results")}>
               <span>View All ({totalLeads})</span>
               <ChevronRight size={14} />
             </button>
           </div>
 
-          {allLeads.length === 0 ? (
-            <div className="lf-empty-state">
+          {allLeads.length === 0 ? <div className="lf-empty-state">
               <Search size={32} className="text-muted" />
               <p>No leads in database yet. Run a discovery search to get started.</p>
-            </div>
-          ) : (
-            <div className="lf-recent-leads-list">
-              {allLeads.slice(0, 5).map((lead) => {
-                const hasDeliverable =
-                  lead.emailStatus === "deliverable" || lead.emailStatus === "valid";
-                const isSent = lead.coldMailDraft?.status === "sent";
-
-                return (
-                  <div
-                    key={lead.id}
-                    className="lf-recent-lead-item"
-                    onClick={() => onSelectLead(lead)}
-                    onKeyDown={(event) => activateOnKeyDown(event, () => onSelectLead(lead))}
-                    role="button"
-                    tabIndex={0}
-                  >
+            </div> : <div className="lf-recent-leads-list">
+              {allLeads.slice(0, 5).map(lead => {
+            const hasDeliverable = lead.emailStatus === "deliverable" || lead.emailStatus === "valid";
+            const isSent = lead.coldMailDraft?.status === "sent";
+            return <div key={lead.id} className="lf-recent-lead-item" onClick={() => onSelectLead(lead)} onKeyDown={event => activateOnKeyDown(event, () => onSelectLead(lead))} role="button" tabIndex={0}>
                     <div className="lf-recent-lead-info">
                       <div className="lf-recent-lead-name">
                         <span>{lead.name}</span>
-                        {!isLiveLead(lead) && (
-                          <span className="lf-badge-demo">{lead.source === "simulated" ? "Demo" : "Unconfirmed"}</span>
-                        )}
+                        {!isLiveLead(lead) && <span className="lf-badge-demo">{lead.source === "simulated" ? "Demo" : "Unconfirmed"}</span>}
                       </div>
                       <div className="lf-recent-lead-meta">
                         <MapPin size={11} />
@@ -402,27 +299,20 @@ export default function DashboardView({
                     </div>
 
                     <div className="lf-recent-lead-badges">
-                      {isLiveLead(lead) && hasDeliverable ? (
-                        <span className="lf-badge-pill green">
+                      {isLiveLead(lead) && hasDeliverable ? <span className="lf-badge-pill green">
                           <CheckCircle2 size={11} /> Deliverable
-                        </span>
-                      ) : (
-                        <span className="lf-badge-pill muted">
+                        </span> : <span className="lf-badge-pill muted">
                           {lead.email ? "Risky Email" : "No Email"}
-                        </span>
-                      )}
+                        </span>}
 
                       <span className="lf-btn-icon-sm" title="View company dossier">
                         <ChevronRight size={14} />
                       </span>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+                  </div>;
+          })}
+            </div>}
         </section>
       </div>
-    </div>
-  );
+    </div>;
 }

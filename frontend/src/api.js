@@ -5,5 +5,6 @@ export async function apiFetch(url, options = {}) {
   if (csrfToken && !['GET', 'HEAD'].includes((options.method || 'GET').toUpperCase())) headers.set('X-CSRF-Token', csrfToken);
   const response = await window.fetch(url, { ...options, headers, credentials: 'same-origin' });
   if (response.status === 401 && !url.includes('/auth/')) window.dispatchEvent(new Event('session-expired'));
+  if(response.status===403 && !url.includes('/auth/')) { const data=await response.clone().json().catch(()=>null); if(data?.code==='SUBSCRIPTION_ACCESS_BLOCKED') window.dispatchEvent(new Event('subscription-blocked')); }
   return response;
 }

@@ -7,7 +7,7 @@ import { classifyReplySentiment } from './deepseekService.js';
 export function hasBuyingIntentKeywords(text = '') {
   if (!text || typeof text !== 'string') return false;
   const lower = text.toLowerCase();
-  return LIFECYCLE_CONFIG.BUYING_INTENT_KEYWORDS.some((kw) => lower.includes(kw));
+  return LIFECYCLE_CONFIG.BUYING_INTENT_KEYWORDS.some(kw => lower.includes(kw));
 }
 
 /**
@@ -18,7 +18,6 @@ export function isFastReply(outreachSentAt, replyReceivedAt) {
   const sentTime = new Date(outreachSentAt).getTime();
   const replyTime = new Date(replyReceivedAt).getTime();
   if (Number.isNaN(sentTime) || Number.isNaN(replyTime)) return false;
-
   const diffMs = replyTime - sentTime;
   // Reply must be after or simultaneous with sent, and within 24 hours (86,400,000 ms)
   const twentyFourHoursMs = 24 * 60 * 60 * 1000;
@@ -37,12 +36,7 @@ export function isFastReply(outreachSentAt, replyReceivedAt) {
  */
 export async function computeLeadEngagementScore(lead = {}, inboundMessages = [], outboundMessages = []) {
   // Aggregate thread details
-  const initialSentAt =
-    lead.first_contacted_at ||
-    lead.sentAt ||
-    (outboundMessages[0]?.sentAt) ||
-    lead.createdAt;
-
+  const initialSentAt = lead.first_contacted_at || lead.sentAt || outboundMessages[0]?.sentAt || lead.createdAt;
   const hasInbound = inboundMessages.length > 0;
   const firstInbound = inboundMessages[0] || null;
 
@@ -51,16 +45,14 @@ export async function computeLeadEngagementScore(lead = {}, inboundMessages = []
 
   // Signal 2: Replied within 24 hours (+2)
   let fastReplyEarned = false;
-  if (hasInbound && initialSentAt && firstInbound?.receivedAt) {
+  if (!lead.directInbound && hasInbound && initialSentAt && firstInbound?.receivedAt) {
     fastReplyEarned = isFastReply(initialSentAt, firstInbound.receivedAt);
   }
 
   // Signal 3: Buying intent keywords (+2)
   let buyingIntentEarned = false;
   if (hasInbound) {
-    const combinedInboundText = inboundMessages
-      .map((m) => `${m.subject || ''} ${m.body || ''}`)
-      .join(' ');
+    const combinedInboundText = inboundMessages.map(m => `${m.subject || ''} ${m.body || ''}`).join(' ');
     buyingIntentEarned = hasBuyingIntentKeywords(combinedInboundText);
   }
 
@@ -68,26 +60,27 @@ export async function computeLeadEngagementScore(lead = {}, inboundMessages = []
   // For example: initial outreach + inbound reply + our reply/follow-up + second reply,
   // or total inbound messages >= 2, or total messages across thread >= 3.
   const totalThreadExchanges = outboundMessages.length + inboundMessages.length;
-  const multiExchangeEarned =
-    inboundMessages.length >= 2 || (outboundMessages.length >= 2 && inboundMessages.length >= 1) || totalThreadExchanges >= 3;
+  const multiExchangeEarned = inboundMessages.length >= 2 || outboundMessages.length >= 2 && inboundMessages.length >= 1 || totalThreadExchanges >= 3;
 
   // Signal 5: DeepSeek sentiment classification is positive (+2)
   let positiveSentimentEarned = false;
+  let negativeSentiment = false;
   if (hasInbound) {
     // Check if sentiment was already recorded in metadata
-    const existingSentiment =
-      firstInbound?.metadata?.sentiment ||
-      inboundMessages.find((m) => m.metadata?.sentiment)?.metadata?.sentiment;
-
+    const existingSentiment = firstInbound?.metadata?.sentiment || inboundMessages.find(m => m.metadata?.sentiment)?.metadata?.sentiment;
     if (existingSentiment && typeof existingSentiment === 'string') {
       const lower = existingSentiment.toLowerCase();
       positiveSentimentEarned = lower === 'positive' || lower === 'urgent';
+      negativeSentiment = lower === 'negative';
     } else {
       // Classify using DeepSeek or heuristic
-      const sentiment = await classifyReplySentiment(firstInbound.subject || '', firstInbound.body || '');
+      const sentiment = await classifyReplySentiment(firstInbound.subject || '', firstInbound.body || '', {
+        useAI: false
+      });
       positiveSentimentEarned = sentiment === 'positive';
+      negativeSentiment = sentiment === 'negative';
       firstInbound.metadata = firstInbound.metadata || {};
-      firstInbound.metadata.sentiment = positiveSentimentEarned ? 'Positive' : 'Neutral';
+      firstInbound.metadata.sentiment = sentiment;
     }
   }
 
@@ -98,52 +91,43 @@ export async function computeLeadEngagementScore(lead = {}, inboundMessages = []
   if (buyingIntentEarned) totalScore += 2;
   if (multiExchangeEarned) totalScore += 2;
   if (positiveSentimentEarned) totalScore += 2;
-
-  const isHot = totalScore >= LIFECYCLE_CONFIG.HOT_LEAD_THRESHOLD;
-
-  const breakdown = [
-    {
-      id: 'replied',
-      label: 'Inbound Response Received',
-      points: 2,
-      earned: repliedEarned,
-      icon: 'Mail',
-      description: 'Lead responded to cold outreach or initiated direct inquiry',
-    },
-    {
-      id: 'fast_reply',
-      label: 'Fast Reply (<24h)',
-      points: 2,
-      earned: fastReplyEarned,
-      icon: 'Clock',
-      description: 'Responded within 24 hours of email dispatch',
-    },
-    {
-      id: 'buying_intent',
-      label: 'Commercial Buying Intent',
-      points: 2,
-      earned: buyingIntentEarned,
-      icon: 'Target',
-      description: 'Mentioned pricing, quotes, samples, MOQ, or catalog',
-    },
-    {
-      id: 'multi_exchange',
-      label: 'Multi-Turn Thread (2+ Exchanges)',
-      points: 2,
-      earned: multiExchangeEarned,
-      icon: 'MessageSquare',
-      description: 'Thread has sustained active conversation beyond single reply',
-    },
-    {
-      id: 'positive_sentiment',
-      label: 'Positive Sentiment (AI Classified)',
-      points: 2,
-      earned: positiveSentimentEarned,
-      icon: 'Sparkles',
-      description: 'DeepSeek classified reply tone as commercially receptive',
-    },
-  ];
-
+  const isHot = !negativeSentiment && totalScore >= LIFECYCLE_CONFIG.HOT_LEAD_THRESHOLD;
+  const breakdown = [{
+    id: 'replied',
+    label: 'Inbound Response Received',
+    points: 2,
+    earned: repliedEarned,
+    icon: 'Mail',
+    description: 'Lead responded to cold outreach or initiated direct inquiry'
+  }, {
+    id: 'fast_reply',
+    label: 'Fast Reply (<24h)',
+    points: 2,
+    earned: fastReplyEarned,
+    icon: 'Clock',
+    description: 'Responded within 24 hours of email dispatch'
+  }, {
+    id: 'buying_intent',
+    label: 'Commercial Buying Intent',
+    points: 2,
+    earned: buyingIntentEarned,
+    icon: 'Target',
+    description: 'Mentioned pricing, quotes, samples, MOQ, or catalog'
+  }, {
+    id: 'multi_exchange',
+    label: 'Multi-Turn Thread (2+ Exchanges)',
+    points: 2,
+    earned: multiExchangeEarned,
+    icon: 'MessageSquare',
+    description: 'Thread has sustained active conversation beyond single reply'
+  }, {
+    id: 'positive_sentiment',
+    label: 'Positive Sentiment',
+    points: 2,
+    earned: positiveSentimentEarned,
+    icon: 'Sparkles',
+    description: 'Reply tone is commercially receptive'
+  }];
   return {
     score: totalScore,
     maxScore: 10,
@@ -153,8 +137,8 @@ export async function computeLeadEngagementScore(lead = {}, inboundMessages = []
       fastReply: fastReplyEarned,
       buyingIntent: buyingIntentEarned,
       multiExchange: multiExchangeEarned,
-      positiveSentiment: positiveSentimentEarned,
+      positiveSentiment: positiveSentimentEarned
     },
-    breakdown,
+    breakdown
   };
 }

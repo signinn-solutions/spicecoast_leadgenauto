@@ -1,28 +1,10 @@
 import React, { useState, useEffect, useRef } from "react";
 import useDialogFocus from "../hooks/useDialogFocus.js";
 import { safeUrl } from "../safeUrl.js";
-import {
-  X,
-  Building2,
-  MapPin,
-  Phone,
-  Mail,
-  Globe,
-  ExternalLink,
-  CheckCircle2,
-  AlertCircle,
-  XCircle,
-  Copy,
-  Check,
-  Sparkles,
-  Send,
-  Loader2,
-  Clock,
-  ShieldCheck,
-  Edit3,
-} from "lucide-react";
-
+import { X, Building2, MapPin, Phone, Mail, Globe, ExternalLink, CheckCircle2, AlertCircle, XCircle, Copy, Check, Sparkles, Send, Loader2, Clock, ShieldCheck, Edit3 } from "lucide-react";
 export default function LeadDetailDrawer({
+  canSend = true,
+  canDraft = true,
   lead,
   onClose,
   onGeneratePitch,
@@ -31,7 +13,7 @@ export default function LeadDetailDrawer({
   isSavingDraft,
   onSendPitch,
   isSendingPitch,
-  mailboxAddress = "sales@thespicecoast.com",
+  mailboxAddress = "sales@thespicecoast.com"
 }) {
   const panelRef = useRef(null);
   const [copiedKey, setCopiedKey] = useState(null);
@@ -39,7 +21,6 @@ export default function LeadDetailDrawer({
   const [body, setBody] = useState("");
   const [isEditing, setIsEditing] = useState(false);
   const [confirmSend, setConfirmSend] = useState(false);
-
   useEffect(() => {
     if (lead?.coldMailDraft) {
       setSubject(lead.coldMailDraft.subject || "");
@@ -51,16 +32,11 @@ export default function LeadDetailDrawer({
     setConfirmSend(false);
     setIsEditing(false);
   }, [lead]);
-
   useDialogFocus(Boolean(lead), panelRef, onClose, ".lf-drawer-close");
-
   if (!lead) return null;
-
   const isLive = lead.source === "live";
-  const hasDeliverableEmail =
-    lead.emailStatus === "deliverable" || lead.emailStatus === "valid";
+  const hasDeliverableEmail = lead.emailStatus === "deliverable" || lead.emailStatus === "valid";
   const isSent = lead.coldMailDraft?.status === "sent";
-
   const handleCopy = async (text, key) => {
     try {
       await navigator.clipboard.writeText(text);
@@ -68,31 +44,17 @@ export default function LeadDetailDrawer({
       setTimeout(() => setCopiedKey(null), 2000);
     } catch {}
   };
-
   const handleSave = async () => {
     if (await onSaveDraft(lead.id, subject, body)) setIsEditing(false);
   };
-
   const handleSend = async () => {
     await onSendPitch(lead.id, lead.email, subject, body);
     setConfirmSend(false);
   };
-
-  return (
-    <div
-      className="lf-drawer-backdrop"
-      onPointerDown={(event) => {
-        if (event.target === event.currentTarget) onClose();
-      }}
-    >
-      <div
-        ref={panelRef}
-        className="lf-drawer-panel lf-animate-slide-left"
-        tabIndex={-1}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="drawer-company-title"
-      >
+  return <div className="lf-drawer-backdrop" onPointerDown={event => {
+    if (event.target === event.currentTarget) onClose();
+  }}>
+      <div ref={panelRef} className="lf-drawer-panel lf-animate-slide-left" tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="drawer-company-title">
         {/* Header */}
         <div className="lf-drawer-header">
           <div>
@@ -106,12 +68,7 @@ export default function LeadDetailDrawer({
               {lead.name}
             </h2>
           </div>
-          <button
-            type="button"
-            className="lf-drawer-close"
-            onClick={onClose}
-            aria-label="Close lead dossier"
-          >
+          <button type="button" className="lf-drawer-close" onClick={onClose} aria-label="Close lead dossier">
             <X size={18} />
           </button>
         </div>
@@ -120,7 +77,7 @@ export default function LeadDetailDrawer({
         <div className="lf-drawer-body">
           {/* Company Dossier Card */}
           <div className="lf-dossier-card">
-            <h3 className="lf-card-section-title">Verified Contact Dossier</h3>
+            <h3 className="lf-card-section-title">Contact Dossier</h3>
 
             <div className="lf-dossier-row">
               <div className="lf-dossier-label">
@@ -129,19 +86,9 @@ export default function LeadDetailDrawer({
               </div>
               <div className="lf-dossier-val">
                 <span>{lead.address || "Address unavailable"}</span>
-                {lead.address && (
-                  <a
-                    href={`https://maps.google.com/?q=${encodeURIComponent(
-                      `${lead.name} ${lead.address}`
-                    )}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="lf-external-link"
-                    title="View on Google Maps"
-                  >
+                {lead.address && <a href={`https://maps.google.com/?q=${encodeURIComponent(`${lead.name} ${lead.address}`)}`} target="_blank" rel="noreferrer" className="lf-external-link" title="View on Google Maps">
                     <ExternalLink size={12} />
-                  </a>
-                )}
+                  </a>}
               </div>
             </div>
 
@@ -152,29 +99,12 @@ export default function LeadDetailDrawer({
               </div>
               <div className="lf-dossier-val">
                 <span className="lf-mono">{lead.phone || "—"}</span>
-                {lead.phone && (
-                  <button
-                    type="button"
-                    className="lf-btn-icon-xs"
-                    onClick={() => handleCopy(lead.phone, "phone")}
-                    title="Copy phone"
-                  >
-                    {copiedKey === "phone" ? (
-                      <Check size={12} className="text-emerald" />
-                    ) : (
-                      <Copy size={12} />
-                    )}
-                  </button>
-                )}
-                {lead.phoneStatus && (
-                  <span
-                    className={`lf-badge-pill sm ${
-                      lead.phoneStatus === "valid" ? "green" : "muted"
-                    }`}
-                  >
+                {lead.phone && <button type="button" className="lf-btn-icon-xs" onClick={() => handleCopy(lead.phone, "phone")} title="Copy phone">
+                    {copiedKey === "phone" ? <Check size={12} className="text-emerald" /> : <Copy size={12} />}
+                  </button>}
+                {lead.phoneStatus && <span className={`lf-badge-pill sm ${["valid", "listed"].includes(lead.phoneStatus) ? "green" : "muted"}`}>
                     {lead.phoneStatus}
-                  </span>
-                )}
+                  </span>}
               </div>
             </div>
 
@@ -185,33 +115,12 @@ export default function LeadDetailDrawer({
               </div>
               <div className="lf-dossier-val">
                 <span className="lf-mono">{lead.email || "—"}</span>
-                {lead.email && (
-                  <button
-                    type="button"
-                    className="lf-btn-icon-xs"
-                    onClick={() => handleCopy(lead.email, "email")}
-                    title="Copy email"
-                  >
-                    {copiedKey === "email" ? (
-                      <Check size={12} className="text-emerald" />
-                    ) : (
-                      <Copy size={12} />
-                    )}
-                  </button>
-                )}
-                {lead.emailStatus && (
-                  <span
-                    className={`lf-badge-pill sm ${
-                      hasDeliverableEmail
-                        ? "green"
-                        : lead.emailStatus === "risky"
-                        ? "gold"
-                        : "red"
-                    }`}
-                  >
+                {lead.email && <button type="button" className="lf-btn-icon-xs" onClick={() => handleCopy(lead.email, "email")} title="Copy email">
+                    {copiedKey === "email" ? <Check size={12} className="text-emerald" /> : <Copy size={12} />}
+                  </button>}
+                {lead.emailStatus && <span className={`lf-badge-pill sm ${hasDeliverableEmail ? "green" : lead.emailStatus === "risky" ? "gold" : "red"}`}>
                     {lead.emailStatus}
-                  </span>
-                )}
+                  </span>}
               </div>
             </div>
 
@@ -221,19 +130,10 @@ export default function LeadDetailDrawer({
                 <span>Domain & Web Presence</span>
               </div>
               <div className="lf-dossier-val">
-                {safeUrl(lead.website) ? (
-                  <a
-                    href={safeUrl(lead.website)}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="lf-web-link"
-                  >
+                {safeUrl(lead.website) ? <a href={safeUrl(lead.website)} target="_blank" rel="noreferrer" className="lf-web-link">
                     <span>{lead.website}</span>
                     <ExternalLink size={12} />
-                  </a>
-                ) : (
-                  <span className="text-muted">No website registered</span>
-                )}
+                  </a> : <span className="text-muted">No website registered</span>}
               </div>
             </div>
           </div>
@@ -245,119 +145,70 @@ export default function LeadDetailDrawer({
                 <Sparkles size={16} className="text-amber" />
                 <span className="lf-pitch-title">DeepSeek AI B2B Cold Pitch</span>
               </div>
-              {lead.coldMailDraft && (
-                <span
-                  className={`lf-badge-pill sm ${
-                    isSent ? "green" : "gold"
-                  }`}
-                >
+              {lead.coldMailDraft && <span className={`lf-badge-pill sm ${isSent ? "green" : "gold"}`}>
                   {isSent ? "Dispatched" : "Pending Review"}
-                </span>
-              )}
+                </span>}
             </div>
 
-            {!lead.coldMailDraft ? (
-              <div className="lf-no-pitch-box">
+            {!lead.coldMailDraft ? <div className="lf-no-pitch-box">
                 <p>
                   No AI cold proposal has been drafted for this prospect yet. Generate a customized wholesale spice pitch tailored to their business niche and location.
                 </p>
-                <button
-                  type="button"
-                  className="lf-btn-primary"
-                  onClick={() => onGeneratePitch(lead)}
-                  disabled={isGeneratingPitch || !hasDeliverableEmail}
-                >
-                  {isGeneratingPitch ? (
-                    <>
+                <button type="button" className="lf-btn-primary" onClick={() => onGeneratePitch(lead)} disabled={isGeneratingPitch || !hasDeliverableEmail || !canDraft}>
+                  {isGeneratingPitch ? <>
                       <Loader2 size={15} className="spin" />
                       <span>Synthesizing Proposal with DeepSeek...</span>
-                    </>
-                  ) : (
-                    <>
+                    </> : <>
                       <Sparkles size={15} />
                       <span>Generate AI Cold Pitch</span>
-                    </>
-                  )}
+                    </>}
                 </button>
-                {!hasDeliverableEmail && (
-                  <span className="lf-field-warning">
+                {!hasDeliverableEmail && <span className="lf-field-warning">
                     * Requires deliverable verified email to generate outreach.
-                  </span>
-                )}
-              </div>
-            ) : (
-              <div className="lf-pitch-content-wrap">
+                  </span>}
+              </div> : <div className="lf-pitch-content-wrap">
                 {/* Subject Line */}
                 <div className="lf-pitch-field">
                   <div className="lf-field-label-row">
                     <label>Subject Line</label>
-                    <button
-                      type="button"
-                      className="lf-btn-ghost-sm"
-                      onClick={() => handleCopy(subject, "subject")}
-                    >
-                      {copiedKey === "subject" ? (
-                        <>
+                    <button type="button" className="lf-btn-ghost-sm" onClick={() => handleCopy(subject, "subject")}>
+                      {copiedKey === "subject" ? <>
                           <Check size={11} className="text-emerald" />
                           <span className="text-emerald">Copied</span>
-                        </>
-                      ) : (
-                        <>
+                        </> : <>
                           <Copy size={11} />
                           <span>Copy</span>
-                        </>
-                      )}
+                        </>}
                     </button>
                   </div>
-                  <input
-                    type="text"
-                    className="lf-input"
-                    value={subject}
-                    onChange={(e) => {
-                      setSubject(e.target.value);
-                      setIsEditing(true);
-                    }}
-                    disabled={isSent}
-                  />
+                  <input type="text" className="lf-input" value={subject} onChange={e => {
+                setSubject(e.target.value);
+                setIsEditing(true);
+              }} disabled={isSent || !canDraft} />
                 </div>
 
                 {/* Email Body */}
                 <div className="lf-pitch-field">
                   <div className="lf-field-label-row">
                     <label>Personalized Body (Direct Origin Specification)</label>
-                    <button
-                      type="button"
-                      className="lf-btn-ghost-sm"
-                      onClick={() => handleCopy(body, "body")}
-                    >
-                      {copiedKey === "body" ? (
-                        <>
+                    <button type="button" className="lf-btn-ghost-sm" onClick={() => handleCopy(body, "body")}>
+                      {copiedKey === "body" ? <>
                           <Check size={11} className="text-emerald" />
                           <span className="text-emerald">Copied</span>
-                        </>
-                      ) : (
-                        <>
+                        </> : <>
                           <Copy size={11} />
                           <span>Copy</span>
-                        </>
-                      )}
+                        </>}
                     </button>
                   </div>
-                  <textarea
-                    className="lf-textarea"
-                    rows={8}
-                    value={body}
-                    onChange={(e) => {
-                      setBody(e.target.value);
-                      setIsEditing(true);
-                    }}
-                    disabled={isSent}
-                  />
+                  <textarea className="lf-textarea" rows={8} value={body} onChange={e => {
+                setBody(e.target.value);
+                setIsEditing(true);
+              }} disabled={isSent || !canDraft} />
                 </div>
 
                 {/* Confirm Dispatch Protection Box */}
-                {confirmSend && (
-                  <div className="lf-confirm-box lf-animate-fade">
+                {confirmSend && <div className="lf-confirm-box lf-animate-fade">
                     <div className="lf-confirm-title">
                       <ShieldCheck size={16} className="text-amber" />
                       <span>Outbound Dispatch Confirmation</span>
@@ -366,72 +217,39 @@ export default function LeadDetailDrawer({
                       Are you sure you want to dispatch this email from <code>{mailboxAddress}</code> to <strong>{lead.email}</strong>?
                     </p>
                     <div className="lf-confirm-actions">
-                      <button
-                        type="button"
-                        className="lf-btn-primary gold sm"
-                        onClick={handleSend}
-                        disabled={isSendingPitch}
-                      >
-                        {isSendingPitch ? (
-                          <Loader2 size={13} className="spin" />
-                        ) : (
-                          <Send size={13} />
-                        )}
+                      <button type="button" className="lf-btn-primary gold sm" onClick={handleSend} disabled={isSendingPitch || !canSend}>
+                        {isSendingPitch ? <Loader2 size={13} className="spin" /> : <Send size={13} />}
                         <span>Confirm & Dispatch</span>
                       </button>
-                      <button
-                        type="button"
-                        className="lf-btn-secondary sm"
-                        onClick={() => setConfirmSend(false)}
-                      >
+                      <button type="button" className="lf-btn-secondary sm" onClick={() => setConfirmSend(false)}>
                         Cancel
                       </button>
                     </div>
-                  </div>
-                )}
+                  </div>}
 
                 {/* Actions */}
                 <div className="lf-pitch-actions-row">
-                  {isEditing && !isSent && (
-                    <button
-                      type="button"
-                      className="lf-btn-secondary sm"
-                      onClick={handleSave}
-                      disabled={isSavingDraft}
-                    >
+                  {isEditing && !isSent && <button type="button" className="lf-btn-secondary sm" onClick={handleSave} disabled={isSavingDraft || !canDraft}>
                       {isSavingDraft ? <Loader2 size={13} className="spin" /> : <Check size={13} />}
                       <span>Save Draft Changes</span>
-                    </button>
-                  )}
+                    </button>}
 
-                  {!isSent && isLive && !confirmSend && (
-                    <button
-                      type="button"
-                      className="lf-btn-primary sm"
-                      onClick={() => setConfirmSend(true)}
-                    >
+                  {!isSent && isLive && !confirmSend && <button type="button" className="lf-btn-primary sm" disabled={!canSend} onClick={() => setConfirmSend(true)}>
                       <Send size={14} />
                       <span>Review & Send Email</span>
-                    </button>
-                  )}
+                    </button>}
 
-                  {!isLive && (
-                    <span className="lf-badge-pill gold">
+                  {!isLive && <span className="lf-badge-pill gold">
                       {lead.source === "simulated" ? "Simulation Mode" : "Source Unconfirmed"} &bull; Real dispatch blocked
-                    </span>
-                  )}
+                    </span>}
 
-                  {isSent && (
-                    <span className="lf-badge-pill green">
+                  {isSent && <span className="lf-badge-pill green">
                       <CheckCircle2 size={13} /> Dispatched on {lead.coldMailDraft?.sentAt || "Today"}
-                    </span>
-                  )}
+                    </span>}
                 </div>
-              </div>
-            )}
+              </div>}
           </div>
         </div>
       </div>
-    </div>
-  );
+    </div>;
 }

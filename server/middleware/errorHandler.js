@@ -9,5 +9,5 @@ export function globalErrorHandler(err, req, res, next) {
   const message = status >= 500 ? 'The server could not complete this request.' :
     err.type === 'entity.parse.failed' ? 'Request body must be valid JSON.' :
     err.type === 'entity.too.large' ? 'Request body is too large.' : err.message || 'Request failed.';
-  return res.status(status).json({ error: message });
+  return res.status(status).json({ error: message, ...(err.code==='SUBSCRIPTION_ACCESS_BLOCKED'?{code:err.code}:{}) });
 }

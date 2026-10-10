@@ -1,34 +1,11 @@
 import config from '../config/env.js';
-import {
-  getTodayDateString,
-  loadDailyUsage,
-  saveDailyUsage,
-  loadLeadsHistory,
-  saveLeadsHistory,
-  loadSeenPlaces,
-  saveSeenPlaces,
-  loadOutreachHistory,
-  saveOutreachHistory,
-  withStorageOperationLock,
-  withOutreachHistoryLock,
-} from './storageService.js';
+import {assertTenantActive} from './tenantService.js';
+import { fetchWebsitePage } from './websiteService.js';
+import { userUsage, consumeUserLead, audit, findUser, publicUser } from './accessService.js';
+import { getTodayDateString, loadDailyUsage, saveDailyUsage, loadLeadsHistory, saveLeadsHistory, loadSeenPlaces, saveSeenPlaces, loadOutreachHistory, saveOutreachHistory, withStorageOperationLock, withOutreachHistoryLock } from './storageService.js';
 import { generateColdEmail } from './deepseekService.js';
-
-const PREFIXES = [
-  'Global', 'Royal', 'Apex', 'Pinnacle', 'Aroma', 'Golden', 'Pacific', 'Atlantic',
-  'Orient', 'Crown', 'Sterling', 'Continental', 'Prime', 'Star', 'Sun', 'Vanguard',
-  'Heritage', 'Direct', 'United', 'Universal', 'Everest', 'Summit', 'Zenith', 'Crest',
-  'Bayside', 'Harbor', 'Central', 'Metro', 'Federal', 'Imperial'
-];
-
-const SUFFIXES = [
-  'Traders', 'Exports', 'Imports', '& Sons', 'Spice Co.', 'Trading House',
-  'International', 'Merchants', 'Global', 'Enterprises', 'Holdings', 'Logistics',
-  'Supplies', 'Commodities', 'Partners', 'Distribution', 'Agro', 'Foods',
-  'Spices', 'Flavors', 'Network', 'Ventures', 'Group', 'Syndicate', 'Solutions',
-  'Corp', 'LLC', 'GmbH', 'Co. KG', 'Ltd.'
-];
-
+const PREFIXES = ['Global', 'Royal', 'Apex', 'Pinnacle', 'Aroma', 'Golden', 'Pacific', 'Atlantic', 'Orient', 'Crown', 'Sterling', 'Continental', 'Prime', 'Star', 'Sun', 'Vanguard', 'Heritage', 'Direct', 'United', 'Universal', 'Everest', 'Summit', 'Zenith', 'Crest', 'Bayside', 'Harbor', 'Central', 'Metro', 'Federal', 'Imperial'];
+const SUFFIXES = ['Traders', 'Exports', 'Imports', '& Sons', 'Spice Co.', 'Trading House', 'International', 'Merchants', 'Global', 'Enterprises', 'Holdings', 'Logistics', 'Supplies', 'Commodities', 'Partners', 'Distribution', 'Agro', 'Foods', 'Spices', 'Flavors', 'Network', 'Ventures', 'Group', 'Syndicate', 'Solutions', 'Corp', 'LLC', 'GmbH', 'Co. KG', 'Ltd.'];
 export function extractDomain(websiteUrl) {
   if (!websiteUrl || typeof websiteUrl !== 'string') return null;
   try {
@@ -51,18 +28,24 @@ export function isPlaceDuplicate(place, seenMap = {}, existingLeads = [], curren
   if (placeId && seenMap[placeId]) {
     return true;
   }
-
   const website = place.websiteUri || place.website;
   const domain = extractDomain(website);
   const cleanName = (place.displayName?.text || place.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-
+  const address = (place.formattedAddress || place.address || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const sameName = (other, otherId, otherDomain) => {
+    const otherName = (other.displayName?.text || other.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (!cleanName || cleanName !== otherName) return false;
+    const otherAddress = (other.formattedAddress || other.address || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (address && otherAddress) return address === otherAddress;
+    return !(placeId && otherId) && !(domain && otherDomain);
+  };
   if (!domain && !cleanName && !placeId) return false;
 
   // Check against seenPlaces
   for (const [id, details] of Object.entries(seenMap)) {
     if (placeId && id === placeId) return true;
     if (domain && details.domain && details.domain.toLowerCase() === domain.toLowerCase()) return true;
-    if (cleanName && details.name && details.name.toLowerCase().replace(/[^a-z0-9]/g, '') === cleanName) return true;
+    if (sameName(details, details.id || id, details.domain)) return true;
   }
 
   // Check against existing leads history
@@ -70,7 +53,7 @@ export function isPlaceDuplicate(place, seenMap = {}, existingLeads = [], curren
     if (lead.id && placeId && lead.id === placeId) return true;
     const leadDomain = extractDomain(lead.website);
     if (domain && leadDomain && leadDomain.toLowerCase() === domain.toLowerCase()) return true;
-    if (cleanName && lead.name && lead.name.toLowerCase().replace(/[^a-z0-9]/g, '') === cleanName) return true;
+    if (sameName(lead, lead.id, leadDomain)) return true;
   }
 
   // Check against current batch
@@ -81,25 +64,20 @@ export function isPlaceDuplicate(place, seenMap = {}, existingLeads = [], curren
     const leadName = (lead.displayName?.text || lead.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
     if (cleanName && leadName && leadName === cleanName) return true;
   }
-
   return false;
 }
-
 export function generateSimulatedLeads(businessType, city, country, count, seenMap = {}, existingLeads = []) {
   const firstWord = businessType ? businessType.split(' ')[0] : 'Spice';
   const capFirstWord = firstWord.charAt(0).toUpperCase() + firstWord.slice(1).toLowerCase();
   const capCity = city.charAt(0).toUpperCase() + city.slice(1).toLowerCase();
   const capCountry = country.charAt(0).toUpperCase() + country.slice(1).toLowerCase();
   const today = getTodayDateString();
-
   const simulated = [];
   let attempts = 0;
-
   while (simulated.length < count && attempts < count * 20) {
     attempts++;
     const prefix = PREFIXES[Math.floor(Math.random() * PREFIXES.length)];
     const suffix = SUFFIXES[Math.floor(Math.random() * SUFFIXES.length)];
-
     let compName = `${capCity} ${capFirstWord} ${suffix}`;
     if (attempts > 15) {
       compName = `${prefix} ${capCity} ${capFirstWord} ${suffix}`;
@@ -107,25 +85,20 @@ export function generateSimulatedLeads(businessType, city, country, count, seenM
     if (attempts > 60) {
       compName = `${prefix} ${capCity} ${capFirstWord} ${suffix} ${Math.floor(attempts / 2)}`;
     }
-
     const cleanName = compName.toLowerCase().replace(/[^a-z0-9]/g, '');
     const dom = `${cleanName}.com`;
-
     const candidate = {
       id: `sim-${cleanName}`,
       name: compName,
-      website: `https://${dom}`,
+      website: `https://${dom}`
     };
-
     if (isPlaceDuplicate(candidate, seenMap, existingLeads, simulated)) {
       continue;
     }
-
     const pValid = Math.random() < 0.8;
     const rMail = Math.random();
     const eStat = rMail < 0.65 ? 'deliverable' : rMail < 0.85 ? 'risky' : 'not_found';
     const index = simulated.length + 1;
-
     simulated.push({
       id: `sim-${cleanName}`,
       name: compName,
@@ -133,72 +106,64 @@ export function generateSimulatedLeads(businessType, city, country, count, seenM
       city: capCity,
       country: capCountry,
       businessType: businessType || 'Spice Importer',
-      phone: pValid
-        ? `+91 ${Math.floor(70000 + Math.random() * 29999)} ${Math.floor(10000 + Math.random() * 79999)}`
-        : '—',
+      phone: pValid ? `+91 ${Math.floor(70000 + Math.random() * 29999)} ${Math.floor(10000 + Math.random() * 79999)}` : '—',
       phoneStatus: pValid ? 'valid' : 'invalid',
       email: eStat !== 'not_found' ? `contact@${dom}` : '—',
       emailStatus: eStat,
       website: `https://${dom}`,
       foundAt: today,
-      source: 'simulated',
+      source: 'simulated'
     });
   }
   return simulated;
 }
-
 export async function searchPlaces(query, neededCount = 20, seenMap = {}, existingLeads = []) {
   const url = 'https://places.googleapis.com/v1/places:searchText';
   const headers = {
     'Content-Type': 'application/json',
     'X-Goog-Api-Key': config.GOOGLE_API_KEY,
-    'X-Goog-FieldMask':
-      'places.id,places.displayName,places.formattedAddress,places.websiteUri,places.nationalPhoneNumber,nextPageToken',
+    'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.websiteUri,places.nationalPhoneNumber,nextPageToken'
   };
-
   const newUniquePlaces = [];
   let duplicatesSkipped = 0;
   let providerError = null;
   let pageToken = null;
+  let pagesFetched = 0;
+  let candidatesReturned = 0;
   const MAX_PAGES = 3;
-
   for (let pageNum = 0; pageNum < MAX_PAGES; pageNum++) {
     if (newUniquePlaces.length >= neededCount) break;
-
     const body = {
       textQuery: query,
-      pageSize: 20,
+      pageSize: 20
     };
     if (pageToken) {
       body.pageToken = pageToken;
     }
-
     try {
       const response = await fetch(url, {
         method: 'POST',
         headers,
         body: JSON.stringify(body),
-        signal: AbortSignal.timeout(10000),
+        signal: AbortSignal.timeout(10000)
       });
-
       if (response.status === 403) {
         const errJson = await response.json().catch(() => ({}));
         const msg = errJson.error?.message || 'Permission Denied';
-        console.warn(`[Google Places API Error 403]: ${msg}`);
+        console.warn("[Google Places API denied the request]");
         providerError = `Google Places denied the request: ${msg}`;
         break;
       }
-
       if (!response.ok) {
         console.warn(`[Google Places API Error ${response.status}]`);
         providerError = `Google Places returned HTTP ${response.status}`;
         break;
       }
-
       const data = await response.json();
+      pagesFetched++;
       const places = Array.isArray(data.places) ? data.places : [];
+      candidatesReturned += places.length;
       if (places.length === 0) break;
-
       for (const place of places) {
         if (isPlaceDuplicate(place, seenMap, existingLeads, newUniquePlaces)) {
           duplicatesSkipped++;
@@ -207,48 +172,24 @@ export async function searchPlaces(query, neededCount = 20, seenMap = {}, existi
           if (newUniquePlaces.length >= neededCount) break;
         }
       }
-
       pageToken = data.nextPageToken;
       if (!pageToken || newUniquePlaces.length >= neededCount) break;
-
-      await new Promise((r) => setTimeout(r, 1000));
+      await new Promise(r => setTimeout(r, 1000));
     } catch (e) {
       console.warn(`[Google Places API Request Error]: ${e.message}`);
       providerError = `Google Places request failed: ${e.message}`;
       break;
     }
   }
-
   return {
     places: newUniquePlaces.slice(0, neededCount),
     duplicatesSkipped,
     providerError,
+    pagesFetched,
+    candidatesReturned
   };
 }
-
-const SOCIAL_AND_DIRECTORY_DOMAINS = new Set([
-  'facebook.com',
-  'instagram.com',
-  'twitter.com',
-  'x.com',
-  'linkedin.com',
-  'youtube.com',
-  'tiktok.com',
-  'yelp.com',
-  'tripadvisor.com',
-  'google.com',
-  'maps.google.com',
-  'linktr.ee',
-  'ubereats.com',
-  'doordash.com',
-  'grubhub.com',
-  'deliveroo.com',
-  'zomato.com',
-  'swiggy.com',
-  'apple.com',
-  'whatsapp.com',
-]);
-
+const SOCIAL_AND_DIRECTORY_DOMAINS = new Set(['facebook.com', 'instagram.com', 'twitter.com', 'x.com', 'linkedin.com', 'youtube.com', 'tiktok.com', 'yelp.com', 'tripadvisor.com', 'google.com', 'maps.google.com', 'linktr.ee', 'ubereats.com', 'doordash.com', 'grubhub.com', 'deliveroo.com', 'zomato.com', 'swiggy.com', 'apple.com', 'whatsapp.com']);
 export function isSocialOrDirectoryDomain(domain) {
   if (!domain || typeof domain !== 'string') return false;
   const d = domain.toLowerCase().replace(/^www\./, '').trim();
@@ -257,28 +198,24 @@ export function isSocialOrDirectoryDomain(domain) {
   }
   return false;
 }
-
-let hunterQuotaExceeded = false;
-
-export function isHunterQuotaExceeded() {
-  return hunterQuotaExceeded;
-}
-
-export function resetHunterQuotaState() {
-  hunterQuotaExceeded = false;
-}
-
+const hunterCooldowns = new Map();
+export function isHunterQuotaExceeded() {return (hunterCooldowns.get(config.HUNTER_API_KEY) || 0)>Date.now();}
+export function resetHunterQuotaState() {hunterCooldowns.clear();}
+function pauseHunter(key) {hunterCooldowns.set(key,Date.now()+60000);}
 export async function findEmails(domain) {
+  const key=config.HUNTER_API_KEY;
+
   if (!domain || !config.HUNTER_API_KEY) return [];
   if (isSocialOrDirectoryDomain(domain)) return [];
-  if (hunterQuotaExceeded) return [];
-
+  if (isHunterQuotaExceeded()) return [];
   const url = `https://api.hunter.io/v2/domain-search?domain=${encodeURIComponent(domain)}&api_key=${encodeURIComponent(config.HUNTER_API_KEY)}&limit=3`;
   try {
-    const response = await fetch(url, { signal: AbortSignal.timeout(10000) });
+    const response = await fetch(url, {
+      signal: AbortSignal.timeout(10000)
+    });
     if (response.status === 429) {
-      hunterQuotaExceeded = true;
-      console.warn('[Hunter.io Quota Exceeded]: Hunter.io monthly limit reached (HTTP 429). Activating website email scraper fallback.');
+      pauseHunter(key);
+      console.warn('[Hunter.io rate limited]: pausing Hunter requests for one minute.');
       return [];
     }
     if (!response.ok) {
@@ -292,14 +229,17 @@ export async function findEmails(domain) {
     return [];
   }
 }
-
 export async function verifyEmail(email) {
-  if (!email || !config.HUNTER_API_KEY || hunterQuotaExceeded) return 'unknown';
+  const key=config.HUNTER_API_KEY;
+
+  if (!email || !config.HUNTER_API_KEY || isHunterQuotaExceeded()) return 'unknown';
   const url = `https://api.hunter.io/v2/email-verifier?email=${encodeURIComponent(email)}&api_key=${encodeURIComponent(config.HUNTER_API_KEY)}`;
   try {
-    const response = await fetch(url, { signal: AbortSignal.timeout(10000) });
+    const response = await fetch(url, {
+      signal: AbortSignal.timeout(10000)
+    });
     if (response.status === 429) {
-      hunterQuotaExceeded = true;
+      pauseHunter(key);
       return 'unknown';
     }
     if (!response.ok) return 'unknown';
@@ -309,11 +249,11 @@ export async function verifyEmail(email) {
     return 'unknown';
   }
 }
-
-export async function scrapeEmailsFromWebsite(websiteUrl, domain) {
+export async function scrapeEmailsFromWebsite(websiteUrl, domain, {
+  fetchPage = fetchWebsitePage
+} = {}) {
   const targetDomain = domain || extractDomain(websiteUrl);
   if (isSocialOrDirectoryDomain(targetDomain)) return [];
-
   let baseUrl = websiteUrl;
   if (!baseUrl && targetDomain) {
     baseUrl = `https://${targetDomain}`;
@@ -322,38 +262,21 @@ export async function scrapeEmailsFromWebsite(websiteUrl, domain) {
   if (!baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) {
     baseUrl = `https://${baseUrl}`;
   }
-
   let origin;
   try {
     origin = new URL(baseUrl).origin;
   } catch {
     return [];
   }
-
   const urlsToTry = [origin, `${origin}/contact`, `${origin}/contact-us`, `${origin}/about`];
   const foundEmails = new Set();
   const emailRegex = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g;
   const IGNORED_EXTENSIONS = /\.(png|jpe?g|gif|svg|webp|css|js|woff2?|ttf|eot|ico|pdf|zip)$/i;
-  const IGNORED_DOMAINS = new Set([
-    'sentry.io', 'wixpress.com', 'example.com', 'domain.com', 'email.com',
-    'yourdomain.com', 'schema.org', 'wordpress.org', 'cloudflare.com', 'googleapis.com',
-    'gravatar.com', 'github.com', 'google.com'
-  ]);
-
+  const IGNORED_DOMAINS = new Set(['sentry.io', 'wixpress.com', 'example.com', 'domain.com', 'email.com', 'yourdomain.com', 'schema.org', 'wordpress.org', 'cloudflare.com', 'googleapis.com', 'gravatar.com', 'github.com', 'google.com']);
   for (const pageUrl of urlsToTry) {
     try {
-      const resp = await fetch(pageUrl, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        },
-        signal: AbortSignal.timeout(5000),
-      });
-      if (!resp.ok) continue;
-      const cType = resp.headers.get('content-type') || '';
-      if (!cType.includes('text/html') && !cType.includes('application/xhtml')) continue;
-
-      const html = await resp.text();
+      const html = await fetchPage(pageUrl);
+      if (!html) continue;
       // 1. Mailto links
       const mailtoMatches = [...html.matchAll(/mailto:([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/gi)];
       for (const m of mailtoMatches) {
@@ -373,16 +296,13 @@ export async function scrapeEmailsFromWebsite(websiteUrl, domain) {
           if (!IGNORED_DOMAINS.has(dom)) foundEmails.add(mail);
         }
       }
-
       if (foundEmails.size > 0) break;
     } catch {
       // Continue to next URL
     }
   }
-
   const list = Array.from(foundEmails);
   if (list.length === 0) return [];
-
   return list.sort((a, b) => {
     const aMatch = targetDomain && a.endsWith(`@${targetDomain}`) ? 1 : 0;
     const bMatch = targetDomain && b.endsWith(`@${targetDomain}`) ? 1 : 0;
@@ -391,37 +311,32 @@ export async function scrapeEmailsFromWebsite(websiteUrl, domain) {
     const aPrio = priority.some(p => a.startsWith(p)) ? 1 : 0;
     const bPrio = priority.some(p => b.startsWith(p)) ? 1 : 0;
     return bPrio - aPrio;
-  }).map(value => ({ value, source: 'website' }));
+  }).map(value => ({
+    value,
+    source: 'website'
+  }));
 }
-
 export async function executeLeadSearch(options) {
   return withStorageOperationLock('lead-search', () => runLeadSearch(options));
 }
-
-async function runLeadSearch({ businessType, city, country, requestedCount = 20, mode = 'live' }) {
-  const cleanType = (businessType || '').trim();
-  const cleanCity = (city || '').trim();
-  const cleanCountry = (country || '').trim();
-  const count = requestedCount == null || requestedCount === '' ? 20 : Number(requestedCount);
-
-  if (!cleanType || !cleanCity || !cleanCountry) {
-    const err = new Error('Business type, city, and country are required.');
-    err.statusCode = 400;
-    throw err;
+async function runLeadSearch({
+  businessType,
+  city,
+  country,
+  requestedCount = 20,
+  mode = 'live',
+  actor = null,
+  autoDraft = false,
+  onProgress = () => {}
+}) {
+  const {cleanType,cleanCity,cleanCountry,count}=validateSearchInput({businessType,city,country,requestedCount,mode,autoDraft});
+  if (actor && !['legacy-admin', 'local-development'].includes(actor.id)) {
+    const current = findUser(actor.id);
+    if (!current?.active || !publicUser(current).permissions.includes('discover')) throw Object.assign(new Error('Discovery access was revoked.'), {
+      statusCode: 403
+    });
+    actor = publicUser(current);
   }
-
-  if (!Number.isInteger(count) || count < 1 || count > 50) {
-    const err = new Error('Number to find must be between 1 and 50.');
-    err.statusCode = 400;
-    throw err;
-  }
-
-  if (!['live', 'simulated'].includes(mode)) {
-    const err = new Error('Search mode must be live or simulated.');
-    err.statusCode = 400;
-    throw err;
-  }
-
   // Simulation mode is strictly gated to development/test environment or explicit SIMULATION_MODE=true
   if (mode === 'simulated') {
     const env = process.env.NODE_ENV || config.NODE_ENV || 'development';
@@ -446,28 +361,55 @@ async function runLeadSearch({ businessType, city, country, requestedCount = 20,
       throw err;
     }
   }
-
-  const { date: today, count: usedTodayInit } = loadDailyUsage();
+  const {
+    date: today,
+    count: usedTodayInit
+  } = loadDailyUsage();
   let usedToday = usedTodayInit;
+  assertTenantActive();
   const remaining = Math.max(0, config.DAILY_LEAD_LIMIT - usedToday);
-
   if (remaining <= 0) {
     const err = new Error(`Daily limit of ${config.DAILY_LEAD_LIMIT} reached for today.`);
     err.statusCode = 429;
     throw err;
   }
-
-  const fetchCount = Math.min(count, remaining);
+  const userRemaining = actor && !['legacy-admin', 'local-development'].includes(actor.id) ? Math.max(0, actor.dailyLeadLimit - userUsage(actor.id)) : remaining;
+  if (userRemaining <= 0) throw Object.assign(new Error('Your daily discovery quota is exhausted.'), {
+    statusCode: 429
+  });
+  const fetchCount = Math.min(count, remaining, userRemaining);
+  const warnings = [];
+  if (fetchCount < count) warnings.push('Request reduced to ' + fetchCount + ' by the remaining workspace or account quota.');
+  let pagesFetched = 0,
+    candidatesReturned = 0;
   const query = `${cleanType} in ${cleanCity}, ${cleanCountry}`;
-
   const seenMap = loadSeenPlaces();
   const history = loadLeadsHistory();
   const existingLeads = history.leads || [];
-
   const processedLeads = [];
   let duplicatesSkipped = 0;
-  let isLiveMode = false;
-
+  onProgress({
+    stage: 'searching',
+    processed: 0,
+    target: fetchCount,
+    query
+  });
+  const consumeQuota = () => {
+    const usage = loadDailyUsage();
+    assertTenantActive();
+    if (usage.count >= config.DAILY_LEAD_LIMIT) return false;
+    if (actor && !['legacy-admin', 'local-development'].includes(actor.id)) {
+      const current = findUser(actor.id);
+      if (!current?.active || !publicUser(current).permissions.includes('discover')) throw Object.assign(new Error('Discovery access was revoked. Completed leads remain saved.'), {
+        statusCode: 403
+      });
+      if (userUsage(actor.id) >= current.daily_lead_limit) return false;
+    }
+    saveDailyUsage(usage.date, usage.count + 1);
+    consumeUserLead(actor?.id);
+    usedToday = usage.count + 1;
+    return true;
+  };
   // Execute Live APIs
   if (mode === 'live') {
     const searchRes = await searchPlaces(query, fetchCount, seenMap, existingLeads);
@@ -476,14 +418,17 @@ async function runLeadSearch({ businessType, city, country, requestedCount = 20,
       err.statusCode = 502;
       throw err;
     }
+    if (searchRes.providerError) warnings.push(searchRes.providerError);
+    pagesFetched = searchRes.pagesFetched;
+    candidatesReturned = searchRes.candidatesReturned;
     const places = searchRes.places || [];
     duplicatesSkipped = searchRes.duplicatesSkipped || 0;
-
     if (places && places.length > 0) {
-      isLiveMode = true;
       for (let idx = 0; idx < places.length; idx++) {
-        if (usedToday >= config.DAILY_LEAD_LIMIT) break;
-
+        if (!consumeQuota()) {
+          warnings.push("Discovery stopped at the current quota.");
+          break;
+        }
         const place = places[idx];
         const placeId = place.id || `live-${Date.now()}-${idx}`;
         const name = place.displayName?.text || `${cleanCity} ${cleanType} ${idx + 1}`;
@@ -491,51 +436,31 @@ async function runLeadSearch({ businessType, city, country, requestedCount = 20,
         const phone = place.nationalPhoneNumber || '—';
         const website = place.websiteUri || '';
         const domain = extractDomain(website);
-
-        usedToday += 1;
-        saveDailyUsage(today, usedToday);
-
         let email = '—';
         let emailStatus = 'not_found';
-
         if (domain || website) {
           let emails = [];
           if (domain && !isSocialOrDirectoryDomain(domain)) {
             emails = await findEmails(domain);
             if (emails.length > 0) {
-              await new Promise((r) => setTimeout(r, 400));
+              await new Promise(r => setTimeout(r, 400));
             }
           }
-
           if (emails.length === 0 && (website || domain)) {
             const scraped = await scrapeEmailsFromWebsite(website, domain);
             if (scraped.length > 0) {
               emails = scraped;
             }
           }
-
-          const bestEmailItem = emails.find((item) => typeof item?.value === 'string' && item.value.includes('@'));
+          const bestEmailItem = emails.find(item => typeof item?.value === 'string' && item.value.includes('@'));
           const bestEmail = bestEmailItem?.value;
           if (bestEmail) {
-            let status = 'unknown';
-            if (bestEmailItem.source === 'website') {
-              status = 'deliverable';
-            } else {
-              status = await verifyEmail(bestEmail);
-              await new Promise((r) => setTimeout(r, 400));
-            }
+            const status = await verifyEmail(bestEmail);
             email = bestEmail;
-            emailStatus =
-              status === 'valid' || status === 'deliverable'
-                ? 'deliverable'
-                : status === 'accept_all' || status === 'webmail'
-                ? 'risky'
-                : status === 'invalid' ? 'invalid' : 'deliverable';
+            emailStatus = status === 'valid' || status === 'deliverable' ? 'deliverable' : ['accept_all', 'webmail', 'risky'].includes(status) ? 'risky' : status === 'invalid' ? 'invalid' : 'unknown';
           }
         }
-
-        const phoneStatus = phone && phone !== '—' ? 'valid' : 'invalid';
-
+        const phoneStatus = phone && phone !== '—' ? 'listed' : 'not_found';
         const leadObj = {
           id: placeId,
           name,
@@ -550,16 +475,22 @@ async function runLeadSearch({ businessType, city, country, requestedCount = 20,
           website: website || (domain ? `https://${domain}` : '#'),
           foundAt: today,
           source: 'live',
+          discoveredBy: actor?.id || null,
+          emailVerification: emailStatus === 'deliverable' ? {
+            provider: 'hunter',
+            status: 'valid',
+            verifiedAt: new Date().toISOString()
+          } : null
         };
 
         // Generate AI Cold Email draft if deliverable
-        if (emailStatus === 'deliverable' || emailStatus === 'valid') {
+        if (autoDraft && (emailStatus === 'deliverable' || emailStatus === 'valid')) {
           const draft = await generateColdEmail(leadObj);
           leadObj.coldMailDraft = {
             subject: draft.subject,
             body: draft.body,
             status: 'pending_review',
-            generatedAt: today,
+            generatedAt: today
           };
         }
 
@@ -573,10 +504,21 @@ async function runLeadSearch({ businessType, city, country, requestedCount = 20,
           domain,
           email,
           emailStatus,
-          foundAt: today,
+          foundAt: today
         };
-
         processedLeads.push(leadObj);
+        // Persist each completed lead so a long batch survives request disconnects or restart.
+        saveLeadsHistory({
+          ...loadLeadsHistory(),
+          leads: [...loadLeadsHistory().leads, leadObj]
+        });
+        saveSeenPlaces(seenMap);
+        onProgress({
+          stage: 'enriching',
+          processed: processedLeads.length,
+          target: fetchCount,
+          query
+        });
       }
     }
   }
@@ -585,20 +527,18 @@ async function runLeadSearch({ businessType, city, country, requestedCount = 20,
   if (mode === 'simulated') {
     const simLeads = generateSimulatedLeads(cleanType, cleanCity, cleanCountry, fetchCount, seenMap, existingLeads);
     for (const lead of simLeads) {
-      if (usedToday >= config.DAILY_LEAD_LIMIT) break;
-      usedToday += 1;
-      saveDailyUsage(today, usedToday);
-
+      if (!consumeQuota()) break;
       if (lead.emailStatus === 'deliverable' || lead.emailStatus === 'valid') {
-        const draft = await generateColdEmail(lead, { useAI: false });
+        const draft = await generateColdEmail(lead, {
+          useAI: false
+        });
         lead.coldMailDraft = {
           subject: draft.subject,
           body: draft.body,
           status: 'pending_review',
-          generatedAt: today,
+          generatedAt: today
         };
       }
-
       seenMap[lead.id] = {
         id: lead.id,
         name: lead.name,
@@ -608,26 +548,35 @@ async function runLeadSearch({ businessType, city, country, requestedCount = 20,
         domain: extractDomain(lead.website),
         email: lead.email,
         emailStatus: lead.emailStatus,
-        foundAt: today,
+        foundAt: today
       };
-
       processedLeads.push(lead);
     }
   }
+  if (processedLeads.length < fetchCount && mode === 'live') warnings.push('Google returned fewer new businesses than requested; duplicates and provider result limits can reduce the batch.');
 
   // Persist seenPlaces
   saveSeenPlaces(seenMap);
 
   // Persist to history
-  const updatedLeads = [...existingLeads, ...processedLeads];
-  const searches = history.searches || [];
+  const currentHistory = loadLeadsHistory();
+  const updatedLeads = [...new Map([...currentHistory.leads, ...processedLeads].map(lead => [lead.id, lead])).values()];
+  const searches = currentHistory.searches || [];
   const newSearchRecord = {
     id: Date.now(),
     query: `${cleanType} · ${cleanCity}, ${cleanCountry}`,
     count: processedLeads.length,
     duplicatesSkipped,
+    requestedCount: count,
+    pagesFetched,
+    candidatesReturned,
+    warnings,
+    businessType: cleanType,
+    city: cleanCity,
+    country: cleanCountry,
+    actor: actor?.id || null,
     date: today,
-    mode: isLiveMode ? 'live' : 'simulated',
+    mode
   };
   searches.unshift(newSearchRecord);
   history.leads = updatedLeads;
@@ -639,7 +588,7 @@ async function runLeadSearch({ businessType, city, country, requestedCount = 20,
     const outreachHistory = loadOutreachHistory();
     for (const lead of processedLeads) {
       if (lead.coldMailDraft) {
-        const existingIdx = outreachHistory.findIndex((o) => o.leadId === lead.id || o.recipient === lead.email);
+        const existingIdx = outreachHistory.findIndex(o => o.leadId === lead.id || o.recipient === lead.email);
         const outreachRecord = {
           id: `outreach-${lead.id}`,
           leadId: lead.id,
@@ -651,7 +600,7 @@ async function runLeadSearch({ businessType, city, country, requestedCount = 20,
           subject: lead.coldMailDraft.subject,
           body: lead.coldMailDraft.body,
           status: 'pending_review',
-          createdAt: today,
+          createdAt: today
         };
         if (existingIdx >= 0) {
           // A concurrent review or send must never be reset to pending.
@@ -663,17 +612,62 @@ async function runLeadSearch({ businessType, city, country, requestedCount = 20,
     }
     saveOutreachHistory(outreachHistory);
   });
-
+  audit(actor?.id, 'leads.searched', query, {
+    requested: count,
+    saved: processedLeads.length,
+    mode,
+    pagesFetched,
+    duplicatesSkipped
+  });
   return {
+    requestedCount: count,
+    effectiveCount: fetchCount,
+    pagesFetched,
+    candidatesReturned,
+    warnings,
     leads: processedLeads,
     count: processedLeads.length,
     duplicatesSkipped,
-    mode: isLiveMode ? 'live' : 'simulated',
+    mode,
     usage: {
-      date: today,
-      count: usedToday,
-      remaining: Math.max(0, config.DAILY_LEAD_LIMIT - usedToday),
-    },
+      ...loadDailyUsage(),
+      remaining: Math.max(0, config.DAILY_LEAD_LIMIT - loadDailyUsage().count)
+    }
   };
 }
 
+export function validateSearchInput({businessType,city,country,requestedCount=20,mode='live',autoDraft=false}={}) {
+  for (const [label, value] of Object.entries({
+    businessType,
+    city,
+    country
+  })) {
+    if (typeof value !== 'string' || value.length > 200 || /[\u0000-\u001f]/.test(value)) throw Object.assign(new Error(label + ' must be text up to 200 characters.'), {
+      statusCode: 400
+    });
+  }
+  if (typeof autoDraft !== 'boolean') throw Object.assign(new Error('autoDraft must be boolean.'), {
+    statusCode: 400
+  });
+  const cleanType = businessType.trim();
+  const cleanCity = city.trim();
+  const cleanCountry = country.trim();
+  const count = requestedCount == null || requestedCount === '' ? 20 : Number(requestedCount);
+  if (!cleanType || !cleanCity || !cleanCountry) {
+    const err = new Error('Business type, city, and country are required.');
+    err.statusCode = 400;
+    throw err;
+  }
+  if (!Number.isInteger(count) || count < 1 || count > 60) {
+    const err = new Error('Number to find must be between 1 and 60.');
+    err.statusCode = 400;
+    throw err;
+  }
+  if (!['live', 'simulated'].includes(mode)) {
+    const err = new Error('Search mode must be live or simulated.');
+    err.statusCode = 400;
+    throw err;
+  }
+
+return {cleanType,cleanCity,cleanCountry,count};
+}

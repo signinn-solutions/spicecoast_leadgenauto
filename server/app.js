@@ -3,19 +3,18 @@ import cors from 'cors';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
-
 import config from './config/env.js';
 import apiRoutes from './routes/apiRoutes.js';
-import webhookRoutes from './routes/webhookRoutes.js';
+import adminRoutes from './routes/adminRoutes.js';
+import platformRoutes from './routes/platformRoutes.js';
+import {requireTenantWorkspace,tenantWebhook} from './middleware/tenantAccess.js';
 import { authRoutes, requireDashboardAuth } from './middleware/dashboardAuth.js';
 import { handleWebhook } from './controllers/mailboxController.js';
 import { notFoundHandler, globalErrorHandler } from './middleware/errorHandler.js';
-
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const rootDir = path.resolve(__dirname, '..');
 const distPath = path.join(rootDir, 'dist');
-
 const app = express();
 
 // Trust proxy for reverse proxy / hosting setups (Hostinger / Nginx / Cloudflare)
@@ -29,7 +28,7 @@ app.use((req, res, next) => {
 });
 
 // CORS Configuration
-const rawOrigins = (config.CORS_ORIGIN || '*').split(',').map((o) => o.trim());
+const rawOrigins = (config.CORS_ORIGIN || '*').split(',').map(o => o.trim());
 const allowedOrigins = new Set(rawOrigins);
 for (const origin of rawOrigins) {
   if (origin.startsWith('http://localhost:')) {
@@ -38,7 +37,6 @@ for (const origin of rawOrigins) {
     allowedOrigins.add(origin.replace('http://127.0.0.1:', 'http://localhost:'));
   }
 }
-
 function checkOrigin(origin) {
   if (!origin || allowedOrigins.has('*') || allowedOrigins.has(origin)) {
     return true;
@@ -50,10 +48,7 @@ function checkOrigin(origin) {
         for (const allowed of allowedOrigins) {
           try {
             const allowedUrl = new URL(allowed);
-            if (
-              ['localhost', '127.0.0.1', '[::1]'].includes(allowedUrl.hostname) &&
-              allowedUrl.port === parsed.port
-            ) {
+            if (['localhost', '127.0.0.1', '[::1]'].includes(allowedUrl.hostname) && allowedUrl.port === parsed.port) {
               return true;
             }
           } catch {}
@@ -63,25 +58,27 @@ function checkOrigin(origin) {
   }
   return false;
 }
-
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      if (checkOrigin(origin)) {
-        callback(null, true);
-      } else {
-        const err = new Error('CORS policy: Not allowed by CORS');
-        err.statusCode = 403;
-        callback(err);
-      }
-    },
-    credentials: true,
-  })
-);
+app.use(cors({
+  origin: (origin, callback) => {
+    if (checkOrigin(origin)) {
+      callback(null, true);
+    } else {
+      const err = new Error('CORS policy: Not allowed by CORS');
+      err.statusCode = 403;
+      callback(err);
+    }
+  },
+  credentials: true
+}));
 
 // Request body parsing
-app.use(express.json({ limit: '256kb' }));
-app.use(express.urlencoded({ extended: false, limit: '256kb' }));
+app.use(express.json({
+  limit: '256kb'
+}));
+app.use(express.urlencoded({
+  extended: false,
+  limit: '256kb'
+}));
 
 // Health check endpoint
 app.get('/health', (req, res) => {
@@ -90,22 +87,26 @@ app.get('/health', (req, res) => {
     service: 'SpiceCoast Automation & Mailbox API',
     environment: config.NODE_ENV,
     timestamp: new Date().toISOString(),
-    uptime: process.uptime(),
+    uptime: process.uptime()
   });
 });
 
 // Mount Routes
-app.use('/', webhookRoutes); // /webhook
-app.post('/api/webhook', handleWebhook); // Both webhook paths use their own bearer authentication.
+app.post('/webhook/:tenantId', tenantWebhook, handleWebhook);
+app.get('/webhook', (req,res)=>res.json({status:'ok',method:'POST'}));
+app.post('/webhook', tenantWebhook, handleWebhook); // Legacy SpiceCoast endpoint
+app.post('/api/webhook', tenantWebhook, handleWebhook); // Both webhook paths use their own bearer authentication.
 app.use('/api/auth', authRoutes);
-app.use('/api', requireDashboardAuth, apiRoutes);  // /api/*
+app.use('/api/platform', requireDashboardAuth, platformRoutes);
+app.use('/api/admin', requireDashboardAuth, requireTenantWorkspace, adminRoutes);
+app.use('/api', requireDashboardAuth, requireTenantWorkspace, apiRoutes); // /api/*
 
 // Serve React production build (dist/) if present
 if (fs.existsSync(distPath)) {
   app.use(express.static(distPath));
   app.use((req, res, next) => {
     // Avoid intercepting API/webhook 404s
-    if (req.path.startsWith('/api') || req.path === '/webhook' || req.path === '/health') {
+    if (req.path.startsWith('/api') || req.path.startsWith('/webhook') || req.path === '/health') {
       return next();
     }
     if (req.method === 'GET' && req.accepts('html')) {
@@ -118,5 +119,4 @@ if (fs.existsSync(distPath)) {
 // Fallback 404 & Error Handlers
 app.use(notFoundHandler);
 app.use(globalErrorHandler);
-
 export default app;

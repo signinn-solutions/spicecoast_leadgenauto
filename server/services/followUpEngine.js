@@ -1,13 +1,6 @@
 import config from '../config/env.js';
 import { LIFECYCLE_CONFIG } from '../config/mailLifecycleConfig.js';
-import {
-  loadOutreachHistory,
-  saveOutreachHistory,
-  loadMailboxHistory,
-  saveMailboxHistory,
-  loadLeadsHistory,
-  withOutreachHistoryLock,
-} from './storageService.js';
+import { loadOutreachHistory, saveOutreachHistory, loadMailboxHistory, saveMailboxHistory, loadLeadsHistory, withOutreachHistoryLock, withMailboxHistoryLock } from './storageService.js';
 import { computeLeadEngagementScore } from './lifecycleScoringService.js';
 
 /**
@@ -35,32 +28,33 @@ function daysElapsed(pastDate, now = new Date()) {
 export function generateFollowUpDraft(lead, turn = 1) {
   const company = lead.company || lead.leadName || 'your team';
   const name = lead.leadName || 'Valued Partner';
+  if(config.TENANT_ID && config.TENANT_ID!=='spicecoast') return {
+    id:'draft-followup-'+turn+'-'+(lead.id || lead.leadId),turn,
+    subject:turn===1?(String(lead.subject || 'Business introduction').startsWith('Re:')?lead.subject:'Re: '+(lead.subject || 'Business introduction')):'Final follow-up: '+config.TENANT_NAME,
+    body:'Hello '+name+',\n\n'+(turn===1?'Following up on our earlier introduction. Would you be interested in continuing the conversation?':'Checking in one final time. If the timing is not right, no problem; we will close this conversation for now.')+'\n\nRegards,\n'+config.TENANT_NAME+' Team\n'+config.SENDER_MAILBOX,generatedAt:new Date().toISOString()
+  };
 
   if (turn === 1) {
     const originalSubject = lead.subject || 'Direct Origin Spices Partnership';
-    const subject = originalSubject.startsWith('Re:')
-      ? originalSubject
-      : `Re: ${originalSubject}`;
-
+    const subject = originalSubject.startsWith('Re:') ? originalSubject : `Re: ${originalSubject}`;
     const body = `Dear ${name},
 
 Following up on our earlier note regarding export-grade direct origin spices from Kerala, India.
 
-We are currently locking in container allocations for this harvest season — particularly Malabar Black Pepper (Garbled 550GL), Alleppey Green Cardamom (8mm Extra Bold), and High-Curcumin Alleppey Turmeric.
+We can discuss current availability and specifications for Malabar Black Pepper (Garbled 550GL), Alleppey Green Cardamom (8mm Extra Bold), and High-Curcumin Alleppey Turmeric.
 
-Could we share our harvest specification sheet and CIF export price list for ${company}'s review?
+Would you like our export team to prepare product specifications and pricing for ${company}'s review?
 
 Warm regards,
 The SpiceCoast Export Team
 The Spice Coast | Cochin, Kerala, India
 ${config.SENDER_MAILBOX}`;
-
     return {
       id: `draft-followup-1-${lead.id || lead.leadId}`,
       turn: 1,
       subject,
       body,
-      generatedAt: new Date().toISOString(),
+      generatedAt: new Date().toISOString()
     };
   }
 
@@ -76,13 +70,12 @@ Best regards,
 The SpiceCoast Export Team
 The Spice Coast | Cochin, Kerala, India
 ${config.SENDER_MAILBOX}`;
-
   return {
     id: `draft-followup-2-${lead.id || lead.leadId}`,
     turn: 2,
     subject,
     body,
-    generatedAt: new Date().toISOString(),
+    generatedAt: new Date().toISOString()
   };
 }
 
@@ -99,17 +92,19 @@ function formatDateString(date) {
  * Synchronizes lifecycle statuses, evaluates follow-up timers, scores hot leads,
  * and compiles the 4 dashboard views + analytics summary.
  */
-export async function runLifecycleCheck() {
+export async function runLifecycleCheck({persist=true}={}) {
+  return withMailboxHistoryLock(() => withOutreachHistoryLock(()=>runLifecycleCheckUnlocked(persist)));
+}
+async function runLifecycleCheckUnlocked(persist) {
   const outreachList = loadOutreachHistory();
   const mailboxMessages = loadMailboxHistory();
   const leadsHistory = loadLeadsHistory();
-
   const now = new Date();
   const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
   // Index inbound messages by normalized sender email
   const inboundBySender = new Map();
-  for (const msg of mailboxMessages) {
+  for (const msg of mailboxMessages.filter(m => m.source !== 'simulated' && !['ignored', 'suppressed'].includes(m.status))) {
     const senderKey = (msg.sender || '').trim().toLowerCase();
     if (!senderKey) continue;
     if (!inboundBySender.has(senderKey)) {
@@ -122,7 +117,6 @@ export async function runLifecycleCheck() {
   let outreachChanged = false;
   const processedLeads = [];
   const processedEmails = new Set();
-
   for (const record of outreachList) {
     const recipientKey = (record.recipient || '').trim().toLowerCase();
     if (recipientKey) processedEmails.add(recipientKey);
@@ -142,29 +136,23 @@ export async function runLifecycleCheck() {
         outreachChanged = true;
       }
     }
-
     const inboundsForLead = recipientKey ? inboundBySender.get(recipientKey) || [] : [];
-    const outboundsForLead = [
-      {
-        type: 'initial_outreach',
-        subject: record.subject,
-        body: record.body,
-        sentAt: record.sentAt || record.first_contacted_at,
-      },
-      ...(Array.isArray(record.sent_followups) ? record.sent_followups : []),
-    ];
+    const outboundsForLead = [{
+      type: 'initial_outreach',
+      subject: record.subject,
+      body: record.body,
+      sentAt: record.sentAt || record.first_contacted_at
+    }, ...(Array.isArray(record.sent_followups) ? record.sent_followups : [])];
 
     // Calculate score
     const scoreResult = await computeLeadEngagementScore(record, inboundsForLead, outboundsForLead);
 
     // Only process lifecycle transitions if the initial cold mail was actually sent
-    if (record.status !== 'pending_review' && record.first_contacted_at) {
+    if (record.source !== 'simulated' && record.status !== 'pending_review' && record.first_contacted_at) {
       const daysSinceFirst = daysElapsed(record.first_contacted_at, now);
       const daysSinceLast = daysElapsed(record.last_contacted_at, now);
-
       let nextStatus = record.status;
       let nextFollowUpDate = null;
-
       if (inboundsForLead.length > 0) {
         // Lead has replied!
         if (scoreResult.isHot) {
@@ -210,40 +198,31 @@ export async function runLifecycleCheck() {
           nextStatus = 'followed_up';
         }
       }
-
       if (record.status !== nextStatus) {
         record.status = nextStatus;
         outreachChanged = true;
       }
-
       record.days_since_first_contact = daysSinceFirst;
       record.days_since_last_contact = daysSinceLast;
       record.next_follow_up_date = nextFollowUpDate;
       record.score_result = scoreResult;
       record.inbound_messages = inboundsForLead;
       record.outbound_messages = outboundsForLead;
-
       processedLeads.push(record);
     }
   }
 
   // Also include organic inbound inquiries that did not originate from a cold outreach draft
-  for (const msg of mailboxMessages) {
+  for (const msg of mailboxMessages.filter(m => m.source !== 'simulated' && !['ignored', 'suppressed'].includes(m.status))) {
     const senderKey = (msg.sender || '').trim().toLowerCase();
     if (!senderKey || processedEmails.has(senderKey)) continue;
 
     // Direct inbound inquiry lead
-    const scoreResult = await computeLeadEngagementScore(
-      {
-        first_contacted_at: msg.receivedAt,
-        company: msg.metadata?.buyerCompany || msg.senderName || senderKey.split('@')[0],
-      },
-      [msg],
-      []
-    );
-
+    const scoreResult = await computeLeadEngagementScore({
+      directInbound: true,
+      company: msg.metadata?.buyerCompany || msg.senderName || senderKey.split('@')[0]
+    }, [msg], []);
     const syntheticStatus = scoreResult.isHot ? 'hot' : 'replied';
-
     const directLead = {
       id: `inbound-${msg.id}`,
       leadId: null,
@@ -264,38 +243,29 @@ export async function runLifecycleCheck() {
       score_result: scoreResult,
       inbound_messages: [msg],
       outbound_messages: [],
-      directInboundMessage: msg,
+      directInboundMessage: msg
     };
-
     processedEmails.add(senderKey);
     processedLeads.push(directLead);
   }
-
-  if (outreachChanged) {
+  if (outreachChanged && persist) {
     saveOutreachHistory(outreachList);
   }
-  saveMailboxHistory(mailboxMessages);
+  if(persist) saveMailboxHistory(mailboxMessages);
 
   // Segment leads into the four tabs
-  const sentLeads = processedLeads.filter(
-    (l) => l.status === 'sent' || l.status === 'followed_up'
-  );
-
-  const repliedLeads = processedLeads.filter((l) => l.status === 'replied');
-
-  const followUpQueue = processedLeads.filter((l) => l.status === 'follow_up_due');
+  const sentLeads = processedLeads.filter(l => l.status === 'sent' || l.status === 'followed_up');
+  const repliedLeads = processedLeads.filter(l => l.status === 'replied');
+  const followUpQueue = processedLeads.filter(l => l.status === 'follow_up_due');
 
   // Hot Leads: sorted highest-score first
-  const hotLeads = processedLeads
-    .filter((l) => l.status === 'hot')
-    .sort((a, b) => (b.score_result?.score || 0) - (a.score_result?.score || 0));
-
-  const closedLeads = processedLeads.filter((l) => l.status === 'closed_no_response');
+  const hotLeads = processedLeads.filter(l => l.status === 'hot').sort((a, b) => (b.score_result?.score || 0) - (a.score_result?.score || 0));
+  const closedLeads = processedLeads.filter(l => l.status === 'closed_no_response');
 
   // Compute analytics summary
   // 1. Total sent this week
   let totalSentThisWeek = 0;
-  for (const lead of processedLeads) {
+  for (const lead of processedLeads.filter(l => !l.directInboundMessage)) {
     if (lead.first_contacted_at && new Date(lead.first_contacted_at) >= sevenDaysAgo) {
       totalSentThisWeek += 1;
     }
@@ -309,11 +279,10 @@ export async function runLifecycleCheck() {
   }
 
   // 2. Reply rate %
-  const totalContacted = processedLeads.length;
-  const totalRepliedOrHot = repliedLeads.length + hotLeads.length;
-  const replyRatePercent =
-    totalContacted > 0 ? Math.round((totalRepliedOrHot / totalContacted) * 100) : 0;
-
+  const contacted = processedLeads.filter(l => !l.directInboundMessage);
+  const totalContacted = contacted.length;
+  const totalRepliedOrHot = contacted.filter(l => ['replied', 'hot'].includes(l.status)).length;
+  const replyRatePercent = totalContacted > 0 ? Math.round(totalRepliedOrHot / totalContacted * 100) : 0;
   return {
     analytics: {
       totalSentThisWeek,
@@ -321,16 +290,16 @@ export async function runLifecycleCheck() {
       hotLeadsCount: hotLeads.length,
       followUpDueCount: followUpQueue.length,
       closedNoResponseCount: closedLeads.length,
-      totalContacted,
+      totalContacted
     },
     tabs: {
       sent: sentLeads,
       replied: repliedLeads,
       followUpQueue,
       hotLeads,
-      closed: closedLeads,
+      closed: closedLeads
     },
-    config: LIFECYCLE_CONFIG,
+    config: LIFECYCLE_CONFIG
   };
 }
 
@@ -338,40 +307,42 @@ export async function runLifecycleCheck() {
  * Dispatches an approved follow-up email, updates lead tracking,
  * and moves status to "followed_up".
  */
-export async function dispatchFollowUpEmail(leadId, { subject, body, to }) {
+export async function dispatchFollowUpEmail(leadId, {
+  actor,
+  subject,
+  body,
+  to
+}) {
   return withOutreachHistoryLock(async () => {
     const outreachList = loadOutreachHistory();
-    const item = outreachList.find(
-      (o) => o.id === leadId || (o.leadId && `outreach-${o.leadId}` === leadId) || o.leadId === leadId
-    );
-
+    const item = outreachList.find(o => o.id === leadId || o.leadId && `outreach-${o.leadId}` === leadId || o.leadId === leadId);
     if (!item) {
       throw new Error('Outreach record not found for follow-up.');
     }
-
     if (item.status !== 'follow_up_due') {
       throw new Error(`Lead is in "${item.status}" status, not "follow_up_due".`);
     }
-
-    const recipient = to || item.recipient;
+    if (to !== undefined && (typeof to !== 'string' || to !== item.recipient)) throw new Error('Recipient does not match saved follow-up.');
+    const savedLead = loadLeadsHistory().leads.find(l => l.id === item.leadId);
+    if (item.source === 'simulated' || !savedLead || savedLead.source !== 'live' || savedLead.email !== item.recipient || !['deliverable', 'valid'].includes(savedLead.emailStatus)) throw new Error('A saved, verified live lead is required for follow-up.');
+    const recipient = item.recipient;
+    const finalSubject = subject ?? item.follow_up_draft?.subject;
+    const finalBody = body ?? item.follow_up_draft?.body;
     if (!recipient) {
       throw new Error('Missing recipient email for follow-up.');
     }
-
-    const { sendEmail } = await import('./mailService.js');
-    const sendResult = await sendEmail(
-      recipient,
-      subject || item.follow_up_draft?.subject || 'Following up on Spice Partnership',
-      body || item.follow_up_draft?.body || '',
-      { reply: true }
-    );
-
+    const {
+      sendEmail
+    } = await import('./mailService.js');
+    const sendResult = await sendEmail(recipient, finalSubject, finalBody, {
+      reply: true,
+      actor,
+      dispatchKey: 'followup:' + item.id + ':' + (item.follow_up_count + 1)
+    });
     if (sendResult?.status === 'simulated') {
       throw new Error('Email transport is not configured. Message was not sent.');
     }
-
-    const d = new Date();
-    const sentDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
+    const sentDate = new Date().toISOString();
 
     // Update timestamps and lifecycle state
     item.status = 'followed_up';
@@ -384,20 +355,18 @@ export async function dispatchFollowUpEmail(leadId, { subject, body, to }) {
     }
     item.sent_followups.push({
       turn: item.follow_up_count,
-      subject: subject || item.follow_up_draft?.subject,
-      body: body || item.follow_up_draft?.body,
-      sentAt: sentDate,
+      subject: finalSubject,
+      body: finalBody,
+      sentAt: sentDate
     });
-
     saveOutreachHistory(outreachList);
-
     return {
       success: true,
       status: 'followed_up',
       leadId: item.id,
       sentAt: sentDate,
       turn: item.follow_up_count,
-      result: sendResult,
+      result: sendResult
     };
   });
 }
@@ -408,27 +377,19 @@ export async function dispatchFollowUpEmail(leadId, { subject, body, to }) {
 export async function reopenClosedLead(leadId) {
   return withOutreachHistoryLock(async () => {
     const outreachList = loadOutreachHistory();
-    const item = outreachList.find(
-      (o) => o.id === leadId || (o.leadId && `outreach-${o.leadId}` === leadId) || o.leadId === leadId
-    );
-
+    const item = outreachList.find(o => o.id === leadId || o.leadId && `outreach-${o.leadId}` === leadId || o.leadId === leadId);
     if (!item) {
       throw new Error('Outreach record not found.');
     }
-
-    const d = new Date();
-    const nowStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
-
+    const nowStr = new Date().toISOString();
     item.status = 'follow_up_due';
     item.last_contacted_at = nowStr;
     item.manually_reopened = true;
     item.follow_up_draft = generateFollowUpDraft(item, (item.follow_up_count || 0) + 1);
-
     saveOutreachHistory(outreachList);
-
     return {
       success: true,
-      lead: item,
+      lead: item
     };
   });
 }

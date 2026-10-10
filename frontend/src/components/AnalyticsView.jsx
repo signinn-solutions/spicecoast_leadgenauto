@@ -1,52 +1,46 @@
 import React, { Suspense, lazy } from "react";
-import {
-  BarChart3,
-  Globe,
-  Search,
-  CheckCircle2,
-  AlertCircle,
-  MapPin,
-  TrendingUp,
-  ArrowRight,
-  Database,
-  Users,
-} from "lucide-react";
-
+import { BarChart3, Globe, Search, CheckCircle2, AlertCircle, MapPin, TrendingUp, ArrowRight, Database, Users } from "lucide-react";
 const AnalyticsChart = lazy(() => import("../AnalyticsChart.jsx"));
-
 export default function AnalyticsView({
+  canDiscover=true,
   allLeads = [],
   outreachList = [],
   mailboxMessages = [],
   searchHistory = [],
-  onRerunSearch,
+  onRerunSearch
 }) {
-  const isLiveLead = (lead) => lead.source === "live";
+  const isLiveLead = lead => lead.source === "live";
   const liveLeads = allLeads.filter(isLiveLead);
-
-  const deliverable = liveLeads.filter(
-    (l) => l.emailStatus === "deliverable" || l.emailStatus === "valid"
-  ).length;
-  const risky = liveLeads.filter(
-    (l) => l.emailStatus === "risky" || l.emailStatus === "accept_all"
-  ).length;
-  const notFound = liveLeads.filter(
-    (l) => l.emailStatus === "not_found" || l.emailStatus === "invalid"
-  ).length;
-  const simulatedCount = allLeads.filter((lead) => lead.source === "simulated").length;
+  const deliverable = liveLeads.filter(l => l.emailStatus === "deliverable" || l.emailStatus === "valid").length;
+  const risky = liveLeads.filter(l => l.emailStatus === "risky" || l.emailStatus === "accept_all").length;
+  const notFound = liveLeads.filter(l => l.emailStatus === "not_found" || l.emailStatus === "invalid").length;
+  const simulatedCount = allLeads.filter(lead => lead.source === "simulated").length;
   const unconfirmedCount = allLeads.length - liveLeads.length - simulatedCount;
-
-  const chartData = [
-    { name: "Deliverable", value: deliverable, color: "#10b981" },
-    { name: "Risky / Accept All", value: risky, color: "#f59e0b" },
-    { name: "Not Found", value: notFound, color: "#ef4444" },
-    { name: "Simulation", value: simulatedCount, color: "#71717a" },
-    { name: "Unconfirmed", value: unconfirmedCount, color: "#64748b" },
-  ];
+  const chartData = [{
+    name: "Deliverable",
+    value: deliverable,
+    color: "#10b981"
+  }, {
+    name: "Risky / Accept All",
+    value: risky,
+    color: "#f59e0b"
+  }, {
+    name: "Not Found",
+    value: notFound,
+    color: "#ef4444"
+  }, {
+    name: "Simulation",
+    value: simulatedCount,
+    color: "#71717a"
+  }, {
+    name: "Unconfirmed",
+    value: unconfirmedCount,
+    color: "#64748b"
+  }];
 
   // Group leads by country
   const countryCounts = {};
-  allLeads.forEach((lead) => {
+  allLeads.forEach(lead => {
     let country = lead.country;
     if (!country && lead.address) {
       const parts = lead.address.split(",");
@@ -55,13 +49,8 @@ export default function AnalyticsView({
     country = country || "International";
     countryCounts[country] = (countryCounts[country] || 0) + 1;
   });
-
-  const sortedCountries = Object.entries(countryCounts)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 6);
-
-  return (
-    <div className="lf-view-container lf-animate-fade">
+  const sortedCountries = Object.entries(countryCounts).sort((a, b) => b[1] - a[1]).slice(0, 6);
+  return <div className="lf-view-container lf-animate-fade">
       {/* Top Banner */}
       <div className="lf-section-header">
         <div>
@@ -110,17 +99,15 @@ export default function AnalyticsView({
             </div>
           </div>
 
-          {allLeads.length === 0 ? (
-            <div className="lf-empty-state">
+          {allLeads.length === 0 ? <div className="lf-empty-state">
               <p>No lead data available to chart. Run a discovery search first.</p>
-            </div>
-          ) : (
-            <div style={{ padding: "10px 0" }}>
+            </div> : <div style={{
+          padding: "10px 0"
+        }}>
               <Suspense fallback={<div className="lf-loading">Loading chart…</div>}>
                 <AnalyticsChart data={chartData} />
               </Suspense>
-            </div>
-          )}
+            </div>}
         </section>
 
         {/* Top Geographic Trade Markets */}
@@ -133,16 +120,12 @@ export default function AnalyticsView({
             <Globe size={18} className="text-amber" />
           </div>
 
-          {sortedCountries.length === 0 ? (
-            <div className="lf-empty-state">
+          {sortedCountries.length === 0 ? <div className="lf-empty-state">
               <p>No geographic data logged yet.</p>
-            </div>
-          ) : (
-            <div className="lf-geo-list">
+            </div> : <div className="lf-geo-list">
               {sortedCountries.map(([countryName, count], idx) => {
-                const percent = Math.round((count / allLeads.length) * 100);
-                return (
-                  <div key={idx} className="lf-geo-item">
+            const percent = Math.round(count / allLeads.length * 100);
+            return <div key={idx} className="lf-geo-item">
                     <div className="lf-geo-item-top">
                       <span className="lf-geo-name">{countryName}</span>
                       <span className="lf-geo-count lf-mono">
@@ -150,21 +133,20 @@ export default function AnalyticsView({
                       </span>
                     </div>
                     <div className="lf-meter-bar">
-                      <div
-                        className="lf-meter-fill amber"
-                        style={{ width: `${percent}%` }}
-                      />
+                      <div className="lf-meter-fill amber" style={{
+                  width: `${percent}%`
+                }} />
                     </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+                  </div>;
+          })}
+            </div>}
         </section>
       </div>
 
       {/* Historical Searches Table */}
-      <section className="lf-panel" style={{ marginTop: 24 }}>
+      <section className="lf-panel" style={{
+      marginTop: 24
+    }}>
         <div className="lf-panel-header">
           <div>
             <h3 className="lf-panel-title">Historical Discovery Queries</h3>
@@ -175,14 +157,10 @@ export default function AnalyticsView({
           <Search size={18} className="text-muted" />
         </div>
 
-        {searchHistory.length === 0 ? (
-          <div className="lf-empty-state">
+        {searchHistory.length === 0 ? <div className="lf-empty-state">
             <p>Your search history logs will appear here after discovery runs.</p>
-          </div>
-        ) : (
-          <div className="lf-history-list">
-            {searchHistory.slice(0, 10).map((h) => (
-              <div key={h.id} className="lf-history-row">
+          </div> : <div className="lf-history-list">
+            {searchHistory.slice(0, 10).map(h => <div key={h.id} className="lf-history-row">
                 <div className="lf-history-query-box">
                   <Search size={14} className="text-amber" />
                   <span className="lf-history-query">{h.query}</span>
@@ -195,20 +173,13 @@ export default function AnalyticsView({
                   <span className="lf-history-date lf-mono">
                     {new Date(h.date).toLocaleDateString()}
                   </span>
-                  <button
-                    type="button"
-                    className="lf-btn-secondary xs"
-                    onClick={() => onRerunSearch(h.query)}
-                  >
+                  <button type="button" className="lf-btn-secondary xs" disabled={!canDiscover} onClick={() => onRerunSearch(h)}>
                     <span>Re-run</span>
                     <ArrowRight size={11} />
                   </button>
                 </div>
-              </div>
-            ))}
-          </div>
-        )}
+              </div>)}
+          </div>}
       </section>
-    </div>
-  );
+    </div>;
 }

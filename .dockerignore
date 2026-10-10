@@ -27,3 +27,6 @@ Thumbs.db
 spicecoast.sqlite*
 *.pyc
 __pycache__
+
+.local
+.21st

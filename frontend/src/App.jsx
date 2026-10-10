@@ -13,8 +13,11 @@ import SystemHealthView from "./components/SystemHealthView.jsx";
 import Toast from "./components/Toast.jsx";
 import { Loader2 } from "lucide-react";
 import { apiFetch as fetch } from './api.js';
-
-export default function LeadFinderApp({ onLogout }) {
+export default function LeadFinderApp({
+  onLogout,
+  user
+}) {
+  const can = permission => Boolean(user?.permissions?.includes(permission));
   // Navigation & Shell State
   const [activeView, setActiveView] = useState("dashboard"); // dashboard, search, results, outreach, mailbox, analytics, health
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
@@ -30,20 +33,27 @@ export default function LeadFinderApp({ onLogout }) {
   const [allLeads, setAllLeads] = useState([]);
   const [currentResults, setCurrentResults] = useState([]);
   const [searchHistory, setSearchHistory] = useState([]);
-  const [leadUsage, setLeadUsage] = useState({ date: "", count: 0, limit: 50 });
+  const [discoveryJobs, setDiscoveryJobs] = useState([]);
+  const [leadUsage, setLeadUsage] = useState({
+    date: "",
+    count: 0,
+    limit: 50
+  });
   const [serverStatus, setServerStatus] = useState({});
 
   // Discovery Form State
-  const [businessType, setBusinessType] = useState("Spice Importer & Wholesaler");
+  const [businessType, setBusinessType] = useState(user?.tenant?.id === "spicecoast" ? "Spice Importer & Wholesaler" : "Business buyer");
   const [city, setCity] = useState("Hamburg");
   const [country, setCountry] = useState("Germany");
   const [count, setCount] = useState(15);
   const [searching, setSearching] = useState(false);
   const [lastSearchInfo, setLastSearchInfo] = useState(null);
+  const [searchProgress, setSearchProgress] = useState(null);
+  const [autoDraft, setAutoDraft] = useState(false);
 
   // Mailbox & Outreach State
   const [mailboxStatus, setMailboxStatus] = useState({
-    mailbox: "sales@thespicecoast.com",
+    mailbox: "",
     auto_send: false,
     daily_limit: 30,
     used_today: 0,
@@ -51,7 +61,7 @@ export default function LeadFinderApp({ onLogout }) {
     has_deepseek_key: false,
     has_hostinger_token: false,
     has_webhook_token: false,
-    deepseek_model: "deepseek-chat",
+    deepseek_model: "deepseek-chat"
   });
   const [mailboxMessages, setMailboxMessages] = useState([]);
   const [outreachList, setOutreachList] = useState([]);
@@ -63,7 +73,7 @@ export default function LeadFinderApp({ onLogout }) {
   const [outreachQueueLeads, setOutreachQueueLeads] = useState([]);
 
   // Navigate selected leads to Outreach Studio
-  const handleSendToOutreach = (selectedLeads) => {
+  const handleSendToOutreach = selectedLeads => {
     setOutreachQueueLeads(selectedLeads);
     setActiveView("outreach");
   };
@@ -82,7 +92,9 @@ export default function LeadFinderApp({ onLogout }) {
   // The server returns today's usage in its own local date; avoid a UTC day rollover.
   const localNow = new Date();
   const todayStr = leadUsage.date || `${localNow.getFullYear()}-${String(localNow.getMonth() + 1).padStart(2, "0")}-${String(localNow.getDate()).padStart(2, "0")}`;
-  const remainingLeads = Math.max(0, (leadUsage.limit ?? 50) - (leadUsage.count ?? 0));
+  const workspaceRemaining = Math.max(0, (leadUsage.limit ?? 50) - (leadUsage.count ?? 0));
+  const accountRemaining = serverStatus.user_usage && !['local-development', 'legacy-admin'].includes(user?.id) ? Math.max(0, serverStatus.user_usage.limit - serverStatus.user_usage.count) : workspaceRemaining;
+  const remainingLeads = Math.min(workspaceRemaining, accountRemaining);
 
   // Primary Data Fetch
   const fetchAllData = useCallback((isSilent = false) => {
@@ -90,25 +102,36 @@ export default function LeadFinderApp({ onLogout }) {
     if (!isSilent) setIsRefreshing(true);
     const request = (async () => {
       try {
-        const urls = ["/api/status", "/api/leads", "/api/mailbox/status", "/api/mailbox/messages", "/api/mailbox/outreach", "/api/mailbox/lifecycle"];
-        const responses = await Promise.all(urls.map((url) => fetch(url, { signal: AbortSignal.timeout(10000) })));
-        const failed = responses.find((response) => !response.ok);
+        const urls = ["/api/status", "/api/leads", "/api/mailbox/status", "/api/mailbox/messages", "/api/mailbox/outreach", "/api/mailbox/lifecycle", "/api/search/jobs"];
+        const responses = await Promise.all(urls.map(url => fetch(url, {
+          signal: AbortSignal.timeout(10000)
+        })));
+        const failed = responses.find(response => !response.ok);
         if (failed) throw new Error(`API returned HTTP ${failed.status}.`);
-        const [statusData, leadsData, mailboxData, messagesData, outreachData, lifecycleData] = await Promise.all(responses.map((response) => response.json()));
+        const [statusData, leadsData, mailboxData, messagesData, outreachData, lifecycleData, jobsData] = await Promise.all(responses.map(response => response.json()));
         setServerOnline(true);
         lastFetchErrorRef.current = false;
         setServerStatus(statusData);
-        setLeadUsage({ date: statusData.date, count: statusData.count, limit: statusData.limit });
+        setLeadUsage({
+          date: statusData.date,
+          count: statusData.count,
+          limit: statusData.limit
+        });
         setAllLeads(leadsData.all_leads || []);
         setSearchHistory(leadsData.search_history || []);
         setMailboxStatus(mailboxData);
         setMailboxMessages(messagesData.messages || []);
         setOutreachList(outreachData.outreach || []);
         setMailLifecycle(lifecycleData);
+        setDiscoveryJobs(jobsData.jobs || []);
       } catch (error) {
         setServerOnline(false);
         if (!isSilent || !lastFetchErrorRef.current) {
-          setNotice({ type: "error", title: "Connection Error", text: `Unable to refresh SpiceCoast data: ${error.message}` });
+          setNotice({
+            type: "error",
+            title: "Connection Error",
+            text: `Unable to refresh SpiceCoast data: ${error.message}`
+          });
         }
         lastFetchErrorRef.current = true;
       } finally {
@@ -117,7 +140,9 @@ export default function LeadFinderApp({ onLogout }) {
       }
     })();
     refreshPromiseRef.current = request;
-    request.finally(() => { if (refreshPromiseRef.current === request) refreshPromiseRef.current = null; });
+    request.finally(() => {
+      if (refreshPromiseRef.current === request) refreshPromiseRef.current = null;
+    });
     return request;
   }, []);
 
@@ -135,17 +160,72 @@ export default function LeadFinderApp({ onLogout }) {
       if (active) timer = setTimeout(poll, 4000);
     };
     timer = setTimeout(poll, 4000);
-    return () => { active = false; clearTimeout(timer); };
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
   }, [fetchAllData]);
-
+  const handleVerifyEmail = async lead => {
+    if (!can('draft')) return;
+    try {
+      const res = await fetch('/api/leads/verify-email', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          leadId: lead.id
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setNotice({
+        type: 'success',
+        title: 'Verification complete',
+        text: data.lead.emailStatus
+      });
+      await fetchAllData(true);
+    } catch (e) {
+      setNotice({
+        type: 'error',
+        title: 'Verification failed',
+        text: e.message
+      });
+    }
+  };
+  const handleDraftReply = async message => {
+    if (!can('draft')) return;
+    try {
+      const res = await fetch('/api/mailbox/draft-reply', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          id: message.id
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      await fetchAllData(true);
+      return true;
+    } catch (e) {
+      setNotice({
+        type: 'error',
+        title: 'Draft failed',
+        text: e.message
+      });
+      return false;
+    }
+  };
   // Lead Discovery Search Handler
-  const handleSearch = async (e) => {
+  const handleSearch = async e => {
     if (e && e.preventDefault) e.preventDefault();
     if (!businessType.trim() || !city.trim() || !country.trim()) {
       setNotice({
         type: "warning",
         title: "Incomplete Query",
-        text: "Please provide a business niche, city, and country.",
+        text: "Please provide a business niche, city, and country."
       });
       return;
     }
@@ -153,62 +233,83 @@ export default function LeadFinderApp({ onLogout }) {
       setNotice({
         type: "warning",
         title: "Daily Quota Exceeded",
-        text: `Requested ${count} leads, but only ${remainingLeads} quota slots remain today.`,
+        text: `Requested ${count} leads, but only ${remainingLeads} quota slots remain today.`
       });
       return;
     }
-
+    if (!can("discover")) return;
+    const searchInput = {
+      business_type: businessType.trim(),
+      city: city.trim(),
+      country: country.trim(),
+      count,
+      mode: "live",
+      background: true,
+      request_id: crypto.randomUUID(),
+      auto_draft: autoDraft
+    };
     setSearching(true);
+    setLastSearchInfo(null);
     try {
       const response = await fetch("/api/search", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          business_type: businessType.trim(),
-          city: city.trim(),
-          country: country.trim(),
-          count,
-          mode: "live",
-        }),
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(searchInput)
       });
-
       if (response.ok) {
-        const data = await response.json();
+        let data = await response.json();
+        if (response.status === 202) {
+          let job = data.job;
+          while (['queued', 'running'].includes(job.status)) {
+            setSearchProgress(job.progress);
+            await new Promise(resolve => setTimeout(resolve, 1200));
+            const jobRes = await fetch('/api/search/jobs/' + job.id, {
+              signal: AbortSignal.timeout(10000)
+            });
+            const jobData = await jobRes.json();
+            if (!jobRes.ok) throw new Error(jobData.error || 'Could not check the search. Saved leads remain in CRM.');
+            job = jobData.job;
+          }
+          if (job.status !== 'complete') throw new Error(job.error || 'Search did not complete.');
+          data = job.result;
+        }
         const leads = data.leads || [];
         if (data.usage) {
-          setLeadUsage((prev) => ({
+          setLeadUsage(prev => ({
             ...prev,
             date: data.usage.date,
-            count: data.usage.count,
+            count: data.usage.count
           }));
         }
 
         // Deduplicate into allLeads
         const seenKeys = new Set();
-        const newAll = [...leads, ...allLeads].filter((lead) => {
-          const key =
-            lead.id ||
-            (lead.name ? lead.name.toLowerCase().replace(/[^a-z0-9]/g, "") : null);
+        const newAll = [...leads, ...allLeads].filter(lead => {
+          const key = lead.id || (lead.name ? lead.name.toLowerCase().replace(/[^a-z0-9]/g, "") : null);
           if (!key || seenKeys.has(key)) return false;
           seenKeys.add(key);
           return true;
         });
-
         setAllLeads(newAll);
         setCurrentResults(leads);
         setLastSearchInfo({
           count: leads.length,
           duplicatesSkipped: data.duplicatesSkipped || 0,
           mode: data.mode,
+          requested: searchInput.count,
+          pagesFetched: data.pagesFetched,
+          warnings: data.warnings || [],
+          query: searchInput.business_type + " in " + searchInput.city + ", " + searchInput.country
         });
 
         // Accurate success notice (fixed copy-paste bug from legacy code!)
         setNotice({
           type: "success",
           title: "Discovery Complete",
-          text: `Harvested ${leads.length} new unique lead(s) for ${city}, ${country}.`,
+          text: `Saved ${leads.length} new unique lead(s) for ${searchInput.city}, ${searchInput.country}. ${data.warnings?.join(" ") || ""}`
         });
-
         fetchAllData(true);
       } else {
         const err = await response.json().catch(() => ({}));
@@ -218,10 +319,11 @@ export default function LeadFinderApp({ onLogout }) {
       setNotice({
         type: "error",
         title: "Search Failed",
-        text: err.message,
+        text: err.message
       });
     } finally {
       setSearching(false);
+      setSearchProgress(null);
     }
   };
 
@@ -234,7 +336,15 @@ export default function LeadFinderApp({ onLogout }) {
   };
 
   // 1-Click Re-run historical query
-  const handleRerunSearch = (queryStr) => {
+  const handleRerunSearch = record => {
+    if (record && typeof record === "object" && record.businessType) {
+      setBusinessType(record.businessType);
+      setCity(record.city);
+      setCountry(record.country);
+      setActiveView("search");
+      return;
+    }
+    const queryStr = typeof record === "string" ? record : record?.query || "";
     const parts = queryStr.split(" · ");
     if (parts[0]) setBusinessType(parts[0]);
     if (parts[1]) {
@@ -246,21 +356,22 @@ export default function LeadFinderApp({ onLogout }) {
   };
 
   // AI Cold Pitch Generation Handler
-  const handleGeneratePitch = async (lead) => {
+  const handleGeneratePitch = async lead => {
     if (!lead || !lead.email) {
       setNotice({
         type: "warning",
         title: "Missing Email",
-        text: "Cannot generate outreach proposal without a verified executive email address.",
+        text: "Cannot generate outreach proposal without a verified executive email address."
       });
       return;
     }
-
     setGeneratingDraftId(lead.id);
     try {
       const res = await fetch("/api/leads/generate-coldmail", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json"
+        },
         body: JSON.stringify({
           leadId: lead.id,
           name: lead.name,
@@ -268,32 +379,33 @@ export default function LeadFinderApp({ onLogout }) {
           city: lead.city || city,
           country: lead.country || country,
           businessType: lead.businessType || businessType,
-          address: lead.address,
-        }),
+          address: lead.address
+        })
       });
-
       if (res.ok) {
         const data = await res.json();
         const draft = data.draft;
 
         // Update lead in memory without mutating a React state object.
-        setAllLeads((prev) =>
-          prev.map((l) => (l.id === lead.id ? { ...l, coldMailDraft: draft } : l))
-        );
-        setCurrentResults((prev) =>
-          prev.map((l) => (l.id === lead.id ? { ...l, coldMailDraft: draft } : l))
-        );
-
+        setAllLeads(prev => prev.map(l => l.id === lead.id ? {
+          ...l,
+          coldMailDraft: draft
+        } : l));
+        setCurrentResults(prev => prev.map(l => l.id === lead.id ? {
+          ...l,
+          coldMailDraft: draft
+        } : l));
         if (selectedLead && selectedLead.id === lead.id) {
-          setSelectedLead((prev) => ({ ...prev, coldMailDraft: draft }));
+          setSelectedLead(prev => ({
+            ...prev,
+            coldMailDraft: draft
+          }));
         }
-
         setNotice({
           type: "success",
           title: "Draft Prepared",
-          text: `Outreach draft prepared for ${lead.name}. Review it before sending.`,
+          text: `Outreach draft prepared for ${lead.name}. Review it before sending.`
         });
-
         fetchAllData(true);
       } else {
         const err = await res.json().catch(() => ({}));
@@ -303,7 +415,7 @@ export default function LeadFinderApp({ onLogout }) {
       setNotice({
         type: "error",
         title: "Synthesis Error",
-        text: err.message,
+        text: err.message
       });
     } finally {
       setGeneratingDraftId(null);
@@ -316,50 +428,54 @@ export default function LeadFinderApp({ onLogout }) {
     try {
       const res = await fetch("/api/mailbox/update-draft", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json"
+        },
         body: JSON.stringify({
           id: `outreach-${leadId}`,
           subject,
-          body,
-        }),
+          body
+        })
       });
-
       if (res.ok) {
         // Update in memory
-        setAllLeads((prev) =>
-          prev.map((l) =>
-            l.id === leadId
-              ? {
-                  ...l,
-                  coldMailDraft: { ...l.coldMailDraft, subject, body },
-                }
-              : l
-          )
-        );
-        setCurrentResults((prev) =>
-          prev.map((l) =>
-            l.id === leadId
-              ? {
-                  ...l,
-                  coldMailDraft: { ...l.coldMailDraft, subject, body },
-                }
-              : l
-          )
-        );
+        setAllLeads(prev => prev.map(l => l.id === leadId ? {
+          ...l,
+          coldMailDraft: {
+            ...l.coldMailDraft,
+            subject,
+            body
+          }
+        } : l));
+        setCurrentResults(prev => prev.map(l => l.id === leadId ? {
+          ...l,
+          coldMailDraft: {
+            ...l.coldMailDraft,
+            subject,
+            body
+          }
+        } : l));
         if (selectedLead && selectedLead.id === leadId) {
-          setSelectedLead((prev) => ({
+          setSelectedLead(prev => ({
             ...prev,
-            coldMailDraft: { ...prev.coldMailDraft, subject, body },
+            coldMailDraft: {
+              ...prev.coldMailDraft,
+              subject,
+              body
+            }
           }));
         }
         if (activeReviewDraft && activeReviewDraft.leadId === leadId) {
-          setActiveReviewDraft((prev) => ({ ...prev, subject, body }));
+          setActiveReviewDraft(prev => ({
+            ...prev,
+            subject,
+            body
+          }));
         }
-
         setNotice({
           type: "success",
           title: "Draft Saved",
-          text: "Cold outreach draft changes preserved in database.",
+          text: "Cold outreach draft changes preserved in database."
         });
         fetchAllData(true);
         return true;
@@ -371,7 +487,7 @@ export default function LeadFinderApp({ onLogout }) {
       setNotice({
         type: "error",
         title: "Save Failed",
-        text: err.message,
+        text: err.message
       });
       return false;
     } finally {
@@ -385,54 +501,53 @@ export default function LeadFinderApp({ onLogout }) {
     try {
       const res = await fetch("/api/mailbox/send-coldmail", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json"
+        },
         body: JSON.stringify({
           id: `outreach-${leadId}`,
           to: toEmail,
           subject,
-          body,
-        }),
+          body
+        })
       });
-
       if (res.ok) {
         const sentDate = new Date().toISOString().slice(0, 10);
         // Mark sent
-        setAllLeads((prev) =>
-          prev.map((l) =>
-            l.id === leadId
-              ? {
-                  ...l,
-                  coldMailDraft: { ...l.coldMailDraft, status: "sent", sentAt: sentDate },
-                }
-              : l
-          )
-        );
-        setCurrentResults((prev) =>
-          prev.map((l) =>
-            l.id === leadId
-              ? {
-                  ...l,
-                  coldMailDraft: { ...l.coldMailDraft, status: "sent", sentAt: sentDate },
-                }
-              : l
-          )
-        );
+        setAllLeads(prev => prev.map(l => l.id === leadId ? {
+          ...l,
+          coldMailDraft: {
+            ...l.coldMailDraft,
+            status: "sent",
+            sentAt: sentDate
+          }
+        } : l));
+        setCurrentResults(prev => prev.map(l => l.id === leadId ? {
+          ...l,
+          coldMailDraft: {
+            ...l.coldMailDraft,
+            status: "sent",
+            sentAt: sentDate
+          }
+        } : l));
         if (selectedLead && selectedLead.id === leadId) {
-          setSelectedLead((prev) => ({
+          setSelectedLead(prev => ({
             ...prev,
-            coldMailDraft: { ...prev.coldMailDraft, status: "sent", sentAt: sentDate },
+            coldMailDraft: {
+              ...prev.coldMailDraft,
+              status: "sent",
+              sentAt: sentDate
+            }
           }));
         }
         if (activeReviewDraft) {
           setActiveReviewDraft(null);
         }
-
         setNotice({
           type: "success",
           title: "Outreach Dispatched",
-          text: `Email dispatched to ${toEmail} via Hostinger API.`,
+          text: `Email accepted by the configured provider for ${toEmail}.`
         });
-
         fetchAllData(true);
       } else {
         const err = await res.json().catch(() => ({}));
@@ -442,7 +557,7 @@ export default function LeadFinderApp({ onLogout }) {
       setNotice({
         type: "error",
         title: "Dispatch Blocked",
-        text: err.message,
+        text: err.message
       });
     } finally {
       setIsSendingPitchId(null);
@@ -450,32 +565,31 @@ export default function LeadFinderApp({ onLogout }) {
   };
 
   // Send Inbound Mailbox Reply
-  const handleSendMailboxReply = async (msg) => {
+  const handleSendMailboxReply = async msg => {
     setIsSendingReplyId(msg.id);
     try {
       const res = await fetch("/api/mailbox/send-draft", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json"
+        },
         body: JSON.stringify({
           id: msg.id,
           to: msg.sender,
           subject: msg.subject,
-          reply: msg.draftReply,
-        }),
+          reply: msg.draftReply
+        })
       });
-
       if (res.ok) {
-        setMailboxMessages((prev) =>
-          prev.map((m) =>
-            m.id === msg.id
-              ? { ...m, status: "sent", sentAt: new Date().toLocaleTimeString() }
-              : m
-          )
-        );
+        setMailboxMessages(prev => prev.map(m => m.id === msg.id ? {
+          ...m,
+          status: "sent",
+          sentAt: new Date().toLocaleTimeString()
+        } : m));
         setNotice({
           type: "success",
           title: "Reply Dispatched",
-          text: `Response sent to ${msg.sender}.`,
+          text: `Response sent to ${msg.sender}.`
         });
         fetchAllData(true);
       } else {
@@ -486,7 +600,7 @@ export default function LeadFinderApp({ onLogout }) {
       setNotice({
         type: "error",
         title: "Reply Failed",
-        text: err.message,
+        text: err.message
       });
     } finally {
       setIsSendingReplyId(null);
@@ -494,24 +608,25 @@ export default function LeadFinderApp({ onLogout }) {
   };
 
   // Inbound Webhook Simulator Handler
-  const handleSimulateInbound = async (payload) => {
+  const handleSimulateInbound = async payload => {
     setIsSimulatingInbound(true);
     try {
       const res = await fetch("/api/mailbox/test-incoming", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(payload)
       });
-
       if (res.ok) {
         const data = await res.json();
         if (data.message) {
-          setMailboxMessages((prev) => [data.message, ...prev]);
+          setMailboxMessages(prev => [data.message, ...prev]);
         }
         setNotice({
           type: "success",
           title: "Inbound Processed",
-          text: `Test inquiry from ${payload.from_name || payload.from || "the sample sender"} was drafted.`,
+          text: `Test inquiry from ${payload.from_name || payload.from || "the sample sender"} was drafted.`
         });
         fetchAllData(true);
       } else {
@@ -522,7 +637,7 @@ export default function LeadFinderApp({ onLogout }) {
       setNotice({
         type: "error",
         title: "Simulation Error",
-        text: err.message,
+        text: err.message
       });
     } finally {
       setIsSimulatingInbound(false);
@@ -530,20 +645,30 @@ export default function LeadFinderApp({ onLogout }) {
   };
 
   // Dispatch Reviewed Follow-Up Email
-  const handleSendFollowUp = async (leadId, { subject, body, to }) => {
+  const handleSendFollowUp = async (leadId, {
+    subject,
+    body,
+    to
+  }) => {
     setIsSendingFollowUpId(leadId);
     try {
       const res = await fetch("/api/mailbox/send-followup", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ leadId, subject, body, to }),
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          leadId,
+          subject,
+          body,
+          to
+        })
       });
-
       if (res.ok) {
         setNotice({
           type: "success",
           title: "Follow-Up Dispatched",
-          text: `Follow-up email dispatched to ${to}.`,
+          text: `Follow-up email dispatched to ${to}.`
         });
         fetchAllData(true);
         return true;
@@ -555,7 +680,7 @@ export default function LeadFinderApp({ onLogout }) {
       setNotice({
         type: "error",
         title: "Dispatch Failed",
-        text: err.message,
+        text: err.message
       });
       return false;
     } finally {
@@ -564,19 +689,27 @@ export default function LeadFinderApp({ onLogout }) {
   };
 
   // Update Follow-Up Draft Subject/Body
-  const handleUpdateFollowUpDraft = async (leadId, { subject, body }) => {
+  const handleUpdateFollowUpDraft = async (leadId, {
+    subject,
+    body
+  }) => {
     try {
       const res = await fetch("/api/mailbox/update-followup-draft", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ leadId, subject, body }),
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          leadId,
+          subject,
+          body
+        })
       });
-
       if (res.ok) {
         setNotice({
           type: "success",
           title: "Follow-Up Draft Saved",
-          text: "Changes saved to follow-up draft.",
+          text: "Changes saved to follow-up draft."
         });
         fetchAllData(true);
         return true;
@@ -588,26 +721,29 @@ export default function LeadFinderApp({ onLogout }) {
       setNotice({
         type: "error",
         title: "Save Failed",
-        text: err.message,
+        text: err.message
       });
       return false;
     }
   };
 
   // Reopen Closed Lead
-  const handleReopenLead = async (leadId) => {
+  const handleReopenLead = async leadId => {
     try {
       const res = await fetch("/api/mailbox/reopen-lead", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ leadId }),
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          leadId
+        })
       });
-
       if (res.ok) {
         setNotice({
           type: "success",
           title: "Lead Reopened",
-          text: "Lead has been restored and queued for follow-up.",
+          text: "Lead has been restored and queued for follow-up."
         });
         fetchAllData(true);
         return true;
@@ -619,7 +755,7 @@ export default function LeadFinderApp({ onLogout }) {
       setNotice({
         type: "error",
         title: "Reopen Failed",
-        text: err.message,
+        text: err.message
       });
       return false;
     }
@@ -632,25 +768,32 @@ export default function LeadFinderApp({ onLogout }) {
     try {
       const res = await fetch("/api/mailbox/toggle-autosend", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ auto_send: nextState }),
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          auto_send: nextState
+        })
       });
-
       if (res.ok) {
-        setMailboxStatus((prev) => ({ ...prev, auto_send: nextState }));
+        setMailboxStatus(prev => ({
+          ...prev,
+          auto_send: nextState
+        }));
         setNotice({
           type: "success",
           title: nextState ? "Auto-Send Activated" : "Review-First Mode",
-          text: nextState
-            ? "Autonomous dispatch enabled for inbound inquiries."
-            : "All replies require operator confirmation before sending.",
+          text: nextState ? "Autonomous dispatch enabled for inbound inquiries." : "All replies require company admin review before sending."
         });
+      } else {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Auto-send setting could not be changed.");
       }
     } catch (err) {
       setNotice({
         type: "error",
         title: "Setting Error",
-        text: "Could not update auto-send mode.",
+        text: err.message
       });
     } finally {
       setIsTogglingAutoSend(false);
@@ -658,17 +801,21 @@ export default function LeadFinderApp({ onLogout }) {
   };
 
   // Copy Webhook URL to clipboard
-  const handleCopyWebhook = async (url) => {
+  const handleCopyWebhook = async url => {
     try {
       await navigator.clipboard.writeText(url);
       setNotice({
         type: "success",
         title: "URL Copied",
-        text: "Inbound webhook endpoint copied to clipboard.",
+        text: "Inbound webhook endpoint copied to clipboard."
       });
       return true;
     } catch {
-      setNotice({ type: "error", title: "Copy Failed", text: "Could not copy the webhook URL. Copy it manually from this page." });
+      setNotice({
+        type: "error",
+        title: "Copy Failed",
+        text: "Could not copy the webhook URL. Copy it manually from this page."
+      });
       return false;
     }
   };
@@ -676,35 +823,17 @@ export default function LeadFinderApp({ onLogout }) {
   // Export CSV Handler
   const handleExportCSV = (leadsToExport = allLeads) => {
     if (!leadsToExport.length) return;
-    const headers = [
-      "Company Name",
-      "Source",
-      "Address",
-      "Phone",
-      "Phone Status",
-      "Email",
-      "Email Status",
-      "Website",
-      "Date Found",
-    ];
-    const rows = leadsToExport.map((l) => [
-      l.name || "",
-      l.source || "unknown",
-      l.address || "",
-      l.phone || "",
-      l.source !== "simulated" ? l.phoneStatus || "" : "simulated",
-      l.email || "",
-      l.source !== "simulated" ? l.emailStatus || "" : "simulated",
-      l.website || "",
-      l.foundAt || "",
-    ]);
-    const quote = (val) => {
+    const headers = ["Company Name", "Source", "Address", "Phone", "Phone Status", "Email", "Email Status", "Website", "Date Found"];
+    const rows = leadsToExport.map(l => [l.name || "", l.source || "unknown", l.address || "", l.phone || "", l.source !== "simulated" ? l.phoneStatus || "" : "simulated", l.email || "", l.source !== "simulated" ? l.emailStatus || "" : "simulated", l.website || "", l.foundAt || ""]);
+    const quote = val => {
       const value = String(val ?? "");
       const safe = /^[\s\u0000-\u001f]*[=+\-@]/u.test(value) || /^[\u0000-\u001f]/u.test(value) ? `'${value}` : value;
       return `"${safe.replaceAll('"', '""')}"`;
     };
-    const csv = [headers, ...rows].map((row) => row.map(quote).join(",")).join("\r\n");
-    const blob = new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" });
+    const csv = [headers, ...rows].map(row => row.map(quote).join(",")).join("\r\n");
+    const blob = new Blob(["\uFEFF", csv], {
+      type: "text/csv;charset=utf-8"
+    });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
@@ -713,218 +842,78 @@ export default function LeadFinderApp({ onLogout }) {
     link.click();
     document.body.removeChild(link);
     setTimeout(() => URL.revokeObjectURL(url), 0);
-
     setNotice({
       type: "success",
       title: "CSV Exported",
-      text: `Exported ${leadsToExport.length} lead record(s) to CSV.`,
+      text: `Exported ${leadsToExport.length} lead record(s) to CSV.`
     });
   };
-
   if (loading) {
-    return (
-      <div className="lf-loading-screen">
+    return <div className="lf-loading-screen">
         <div className="lf-loading-card">
           <Loader2 size={32} className="spin text-amber" />
-          <h2 className="lf-loading-title">Initializing SpiceCoast Lead Engine</h2>
+          <h2 className="lf-loading-title">Loading {user?.tenant?.name || "your workspace"}</h2>
           <p className="lf-loading-subtitle">
-            Connecting to SQLite persistence & verifying API endpoints...
+            Loading leads and mailbox…
           </p>
         </div>
-      </div>
-    );
+      </div>;
   }
-
-  const isLiveOutreach = (item) => {
+  const isLiveOutreach = item => {
     if (item.source !== "live") return false;
-    const found = allLeads.find((l) => l.id === item.leadId);
+    const found = allLeads.find(l => l.id === item.leadId);
     return found?.source === "live";
   };
-
-  const pendingOutreachCount = outreachList.filter(
-    (o) => o.status === "pending_review" && isLiveOutreach(o)
-  ).length;
-
-  return (
-    <div className="lf-app-shell">
+  const pendingOutreachCount = outreachList.filter(o => o.status === "pending_review" && isLiveOutreach(o)).length;
+  return <div className="lf-app-shell">
       {/* Toast Notification */}
       <Toast notice={notice} onClose={() => setNotice(null)} />
 
       {/* Modern SaaS Sidebar */}
-      <Sidebar
-        activeView={activeView}
-        onSelectView={setActiveView}
-        isMobileOpen={isMobileSidebarOpen}
-        onCloseMobile={() => setIsMobileSidebarOpen(false)}
-        isCollapsed={isSidebarCollapsed}
-        onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-        leadsCount={allLeads.length}
-        pendingOutreachCount={pendingOutreachCount}
-        inboxCount={mailboxMessages.length}
-        serverOnline={serverOnline}
-        leadUsage={leadUsage}
-        replyUsage={{
-          count: mailboxStatus.used_today || 0,
-          limit: mailboxStatus.daily_limit || 30,
-        }}
-      />
+      <Sidebar tenantName={user?.tenant?.name || "Workspace"} activeView={activeView} canDiscover={can("discover")} onSelectView={setActiveView} isMobileOpen={isMobileSidebarOpen} onCloseMobile={() => setIsMobileSidebarOpen(false)} isCollapsed={isSidebarCollapsed} onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)} leadsCount={allLeads.length} pendingOutreachCount={pendingOutreachCount} inboxCount={mailboxMessages.length} serverOnline={serverOnline} leadUsage={leadUsage} replyUsage={{
+      count: mailboxStatus.used_today || 0,
+      limit: mailboxStatus.daily_limit ?? 30
+    }} />
 
       {/* Main Layout Area */}
       <div className={`lf-layout-wrap ${isSidebarCollapsed ? "sidebar-collapsed" : ""}`}>
         {/* Header */}
-        <Header
-          onLogout={onLogout}
-          activeView={activeView}
-          onOpenMobileSidebar={() => setIsMobileSidebarOpen(true)}
-          onRefresh={() => fetchAllData(false)}
-          isRefreshing={isRefreshing}
-          mailboxStatus={mailboxStatus}
-          onToggleAutoSend={handleToggleAutoSend}
-          isTogglingAutoSend={isTogglingAutoSend}
-          onCopyWebhook={handleCopyWebhook}
-        />
+        <Header user={user} canAutomate={can("automation")} onLogout={onLogout} activeView={activeView} onOpenMobileSidebar={() => setIsMobileSidebarOpen(true)} onRefresh={() => fetchAllData(false)} isRefreshing={isRefreshing} mailboxStatus={mailboxStatus} onToggleAutoSend={handleToggleAutoSend} isTogglingAutoSend={isTogglingAutoSend} onCopyWebhook={handleCopyWebhook} />
 
         {/* View Router */}
         <main className="lf-main-content">
-          {activeView === "dashboard" && (
-            <DashboardView
-              allLeads={allLeads}
-              outreachList={outreachList}
-              mailboxMessages={mailboxMessages}
-              searchHistory={searchHistory}
-              leadUsage={leadUsage}
-              onNavigate={setActiveView}
-              onSelectLead={setSelectedLead}
-              onQuickSearch={handleQuickSearch}
-            />
-          )}
+          {(serverStatus.subscription || user?.tenant?.subscription) && <div className="lf-company-status" role="status">{(serverStatus.subscription || user.tenant.subscription).plan?.name} · {(serverStatus.subscription || user.tenant.subscription).phase} · {(serverStatus.subscription || user.tenant.subscription).endsAt ? "Access ends " + new Date((serverStatus.subscription || user.tenant.subscription).endsAt).toLocaleDateString("en-IN",{timeZone:"Asia/Kolkata"}) : "No expiry configured"} · Subscription managed by Signinn</div>}
+          {activeView === "dashboard" && <DashboardView canDiscover={can("discover")} allLeads={allLeads} outreachList={outreachList} mailboxMessages={mailboxMessages} searchHistory={searchHistory} leadUsage={leadUsage} onNavigate={setActiveView} onSelectLead={setSelectedLead} onQuickSearch={handleQuickSearch} />}
 
-          {activeView === "search" && (
-            <DiscoveryView
-              businessType={businessType}
-              setBusinessType={setBusinessType}
-              city={city}
-              setCity={setCity}
-              country={country}
-              setCountry={setCountry}
-              count={count}
-              setCount={setCount}
-              searching={searching}
-              onSearch={handleSearch}
-              leadLimit={leadUsage.limit || 50}
-              remainingLeads={remainingLeads}
-              lastSearchInfo={lastSearchInfo}
-              onViewResults={() => setActiveView("results")}
-            />
-          )}
+          {activeView === "search" && <DiscoveryView jobs={discoveryJobs} onRestoreBatch={job => {
+          setCurrentResults(job.result?.leads || []);
+          setActiveView("results");
+        }} canDiscover={can("discover")} autoDraft={autoDraft} setAutoDraft={setAutoDraft} searchProgress={searchProgress} businessType={businessType} setBusinessType={setBusinessType} city={city} setCity={setCity} country={country} setCountry={setCountry} count={count} setCount={setCount} searching={searching} onSearch={handleSearch} leadLimit={leadUsage.limit ?? 50} remainingLeads={remainingLeads} lastSearchInfo={lastSearchInfo} onViewResults={() => setActiveView("results")} />}
 
-          {activeView === "results" && (
-            <LeadsView
-              allLeads={allLeads}
-              currentResults={currentResults}
-              onSelectLead={setSelectedLead}
-              onGeneratePitch={handleGeneratePitch}
-              generatingDraftId={generatingDraftId}
-              onExportCSV={handleExportCSV}
-              onSendToOutreach={handleSendToOutreach}
-            />
-          )}
+          {activeView === "results" && <LeadsView canDraft={can("draft")} allLeads={allLeads} currentResults={currentResults} onSelectLead={setSelectedLead} onVerifyEmail={handleVerifyEmail} onGeneratePitch={handleGeneratePitch} generatingDraftId={generatingDraftId} onExportCSV={handleExportCSV} onSendToOutreach={handleSendToOutreach} />}
 
-          {activeView === "outreach" && (
-            <OutreachView
-              outreachList={outreachList}
-              allLeads={allLeads}
-              onOpenReviewModal={(item) =>
-                setActiveReviewDraft({
-                  leadId: item.leadId,
-                  company: item.company || item.leadName,
-                  recipient: item.recipient,
-                  subject: item.subject,
-                  body: item.body,
-                  status: item.status,
-                  source: isLiveOutreach(item) ? "live" : "simulated",
-                })
-              }
-              onQuickSend={(item) =>
-                handleSendPitch(item.leadId, item.recipient, item.subject, item.body)
-              }
-              isSendingId={isSendingPitchId}
-              onRefresh={() => fetchAllData(false)}
-              queueLeads={outreachQueueLeads}
-              onClearQueue={() => setOutreachQueueLeads([])}
-              onGeneratePitch={handleGeneratePitch}
-              onSaveDraft={handleSaveDraft}
-            />
-          )}
+          {activeView === "outreach" && <OutreachView canSend={can("send")} canDraft={can("draft")} outreachList={outreachList} allLeads={allLeads} onOpenReviewModal={item => setActiveReviewDraft({
+          leadId: item.leadId,
+          company: item.company || item.leadName,
+          recipient: item.recipient,
+          subject: item.subject,
+          body: item.body,
+          status: item.status,
+          source: isLiveOutreach(item) ? "live" : "simulated"
+        })} onQuickSend={item => handleSendPitch(item.leadId, item.recipient, item.subject, item.body)} isSendingId={isSendingPitchId} onRefresh={() => fetchAllData(false)} queueLeads={outreachQueueLeads} onClearQueue={() => setOutreachQueueLeads([])} onGeneratePitch={handleGeneratePitch} onSaveDraft={handleSaveDraft} />}
 
-          {activeView === "mailbox" && (
-            <MailboxView
-              mailboxStatus={mailboxStatus}
-              mailLifecycle={mailLifecycle}
-              mailboxMessages={mailboxMessages}
-              onRefresh={() => fetchAllData(false)}
-              isRefreshing={isRefreshing}
-              onSendReply={handleSendMailboxReply}
-              isSendingReplyId={isSendingReplyId}
-              onSendFollowUp={handleSendFollowUp}
-              isSendingFollowUpId={isSendingFollowUpId}
-              onUpdateFollowUpDraft={handleUpdateFollowUpDraft}
-              onReopenLead={handleReopenLead}
-              onSimulateInbound={handleSimulateInbound}
-              isSimulating={isSimulatingInbound}
-            />
-          )}
+          {activeView === "mailbox" && <MailboxView canSend={can("send")} canDraft={can("draft")} onDraftReply={handleDraftReply} mailboxStatus={mailboxStatus} mailLifecycle={mailLifecycle} mailboxMessages={mailboxMessages} onRefresh={() => fetchAllData(false)} isRefreshing={isRefreshing} onSendReply={handleSendMailboxReply} isSendingReplyId={isSendingReplyId} onSendFollowUp={handleSendFollowUp} isSendingFollowUpId={isSendingFollowUpId} onUpdateFollowUpDraft={handleUpdateFollowUpDraft} onReopenLead={handleReopenLead} onSimulateInbound={handleSimulateInbound} isSimulating={isSimulatingInbound} />}
 
-          {activeView === "analytics" && (
-            <AnalyticsView
-              allLeads={allLeads}
-              outreachList={outreachList}
-              mailboxMessages={mailboxMessages}
-              searchHistory={searchHistory}
-              onRerunSearch={handleRerunSearch}
-            />
-          )}
+          {activeView === "analytics" && <AnalyticsView canDiscover={can("discover")} allLeads={allLeads} outreachList={outreachList} mailboxMessages={mailboxMessages} searchHistory={searchHistory} onRerunSearch={handleRerunSearch} />}
 
-          {activeView === "health" && (
-            <SystemHealthView
-              serverStatus={serverStatus}
-              mailboxStatus={mailboxStatus}
-              allLeads={allLeads}
-              outreachList={outreachList}
-              mailboxMessages={mailboxMessages}
-              onCopyWebhook={handleCopyWebhook}
-            />
-          )}
+          {activeView === "health" && <SystemHealthView webhookPath={user?.tenant?.webhookPath || "/webhook"} serverStatus={serverStatus} mailboxStatus={mailboxStatus} allLeads={allLeads} outreachList={outreachList} mailboxMessages={mailboxMessages} onCopyWebhook={handleCopyWebhook} />}
         </main>
       </div>
 
       {/* Slide-over Lead Detail Drawer */}
-      {selectedLead && (
-        <LeadDetailDrawer
-          lead={selectedLead}
-          onClose={() => setSelectedLead(null)}
-          onGeneratePitch={handleGeneratePitch}
-          isGeneratingPitch={generatingDraftId === selectedLead.id}
-          onSaveDraft={handleSaveDraft}
-          isSavingDraft={isSavingDraft}
-          onSendPitch={handleSendPitch}
-          isSendingPitch={isSendingPitchId === selectedLead.id}
-          mailboxAddress={mailboxStatus.mailbox}
-        />
-      )}
+      {selectedLead && <LeadDetailDrawer canSend={can("send")} canDraft={can("draft")} lead={selectedLead} onClose={() => setSelectedLead(null)} onGeneratePitch={handleGeneratePitch} isGeneratingPitch={generatingDraftId === selectedLead.id} onSaveDraft={handleSaveDraft} isSavingDraft={isSavingDraft} onSendPitch={handleSendPitch} isSendingPitch={isSendingPitchId === selectedLead.id} mailboxAddress={mailboxStatus.mailbox} />}
 
       {/* Cold Mail Review Modal */}
-      {activeReviewDraft && (
-        <ColdMailModal
-          modalData={activeReviewDraft}
-          onClose={() => setActiveReviewDraft(null)}
-          onSaveDraft={handleSaveDraft}
-          isSavingDraft={isSavingDraft}
-          onConfirmSend={handleSendPitch}
-          isSending={isSendingPitchId === activeReviewDraft.leadId}
-          mailboxAddress={mailboxStatus.mailbox}
-        />
-      )}
-    </div>
-  );
+      {activeReviewDraft && <ColdMailModal canSend={can("send")} canDraft={can("draft")} modalData={activeReviewDraft} onClose={() => setActiveReviewDraft(null)} onSaveDraft={handleSaveDraft} isSavingDraft={isSavingDraft} onConfirmSend={handleSendPitch} isSending={isSendingPitchId === activeReviewDraft.leadId} mailboxAddress={mailboxStatus.mailbox} />}
+    </div>;
 }

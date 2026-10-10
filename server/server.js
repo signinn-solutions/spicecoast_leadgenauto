@@ -1,10 +1,19 @@
 import app from './app.js';
+import {listTenants,runInTenant} from './services/tenantService.js';
+import {accessDatabase} from './services/accessService.js';
+import { validateRuntimeConfig } from './config/validateConfig.js';
+import { migrateVerification } from './services/verificationMigration.js';
+import { recoverSearchJobs } from './services/searchJobService.js';
+import { loadProviderSettings } from './services/integrationService.js';
 import config from './config/env.js';
 import { closeStorage, loadDailyUsage } from './services/storageService.js';
-
 function startServer(port) {
   // Detect inaccessible/corrupt storage before advertising a healthy server.
   loadDailyUsage();
+  loadProviderSettings();
+  validateRuntimeConfig();
+  accessDatabase();
+  for(const tenant of listTenants()) runInTenant(tenant.id,()=>{recoverSearchJobs();migrateVerification();},{allowSuspended:true});
   const server = app.listen(port, config.HOST, () => {
     console.log(`\n🌶️  SpiceCoast Express API Server running on http://${config.HOST}:${port}`);
     console.log(`📡  Health Check: http://${config.HOST}:${port}/health`);
@@ -13,8 +22,7 @@ function startServer(port) {
     console.log(`🤖  AI Model: ${config.DEEPSEEK_MODEL}`);
     console.log(`🌍  Environment: ${config.NODE_ENV}\n`);
   });
-
-  server.on('error', (err) => {
+  server.on('error', err => {
     if (err.code === 'EADDRINUSE') {
       console.warn(`⚠️  [Port Conflict] Port ${port} is occupied (e.g. by macOS AirPlay or another process).`);
       console.error(`[Port Conflict] Configured port ${port} is occupied. Set PORT to an available port.`);
@@ -42,8 +50,6 @@ function startServer(port) {
   };
   process.on('SIGTERM', shutdown);
   process.on('SIGINT', shutdown);
-
   return server;
 }
-
 startServer(config.PORT);

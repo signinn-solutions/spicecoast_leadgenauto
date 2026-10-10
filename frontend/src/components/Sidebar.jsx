@@ -1,24 +1,9 @@
 import React, { useEffect, useRef, useState } from "react";
 import useDialogFocus from "../hooks/useDialogFocus.js";
-import {
-  Compass,
-  Search,
-  Users,
-  Send,
-  Inbox,
-  BarChart3,
-  ShieldCheck,
-  PlusCircle,
-  ExternalLink,
-  ChevronLeft,
-  ChevronRight,
-  Sprout,
-  Activity,
-  Zap,
-  X,
-} from "lucide-react";
-
+import { Compass, Search, Users, Send, Inbox, BarChart3, ShieldCheck, PlusCircle, ExternalLink, ChevronLeft, ChevronRight, Sprout, Activity, Zap, X } from "lucide-react";
 export default function Sidebar({
+  tenantName = "Workspace",
+  canDiscover = true,
   activeView,
   onSelectView,
   isMobileOpen,
@@ -29,167 +14,107 @@ export default function Sidebar({
   pendingOutreachCount = 0,
   inboxCount = 0,
   serverOnline = true,
-  leadUsage = { count: 0, limit: 50 },
-  replyUsage = { count: 0, limit: 30 },
+  leadUsage = {
+    count: 0,
+    limit: 50
+  },
+  replyUsage = {
+    count: 0,
+    limit: 30
+  }
 }) {
   const sidebarRef = useRef(null);
-  const [isMobileViewport, setIsMobileViewport] = useState(() =>
-    window.matchMedia("(max-width: 768px)").matches
-  );
-
+  const [isMobileViewport, setIsMobileViewport] = useState(() => window.matchMedia("(max-width: 768px)").matches);
   useEffect(() => {
     const media = window.matchMedia("(max-width: 768px)");
     const syncViewport = () => setIsMobileViewport(media.matches);
     media.addEventListener("change", syncViewport);
     return () => media.removeEventListener("change", syncViewport);
   }, []);
-
   useEffect(() => {
     if (sidebarRef.current) sidebarRef.current.inert = isMobileViewport && !isMobileOpen;
   }, [isMobileViewport, isMobileOpen]);
-
   useDialogFocus(isMobileViewport && isMobileOpen, sidebarRef, onCloseMobile, ".lf-collapse-btn");
+  const leadPercent = leadUsage.limit>0?Math.min(100, Math.round((leadUsage.count || 0) / leadUsage.limit * 100)):0;
+  const replyPercent = replyUsage.limit>0?Math.min(100, Math.round((replyUsage.count || 0) / replyUsage.limit * 100)):0;
+  const navItems = [{
+    id: "dashboard",
+    label: "Overview",
+    icon: Compass,
+    badge: null,
+    desc: "Performance & pipeline"
+  }, {
+    id: "search",
+    label: "Prospector",
+    icon: Search,
+    badge: null,
+    desc: "Discovery & harvest"
+  }, {
+    id: "results",
+    label: "Leads CRM",
+    icon: Users,
+    badge: leadsCount > 0 ? leadsCount : null,
+    badgeType: "default",
+    desc: "Verified contacts & dossier"
+  }, {
+    id: "outreach",
+    label: "Outreach Studio",
+    icon: Send,
+    badge: pendingOutreachCount > 0 ? pendingOutreachCount : null,
+    badgeType: "gold",
+    desc: "AI cold pitches & dispatches"
+  }, {
+    id: "mailbox",
+    label: "Inbound Mailbox",
+    icon: Inbox,
+    badge: inboxCount > 0 ? inboxCount : null,
+    badgeType: "emerald",
+    desc: "Replies & procurement intent"
+  }, {
+    id: "analytics",
+    label: "Intelligence",
+    icon: BarChart3,
+    badge: null,
+    desc: "Deliverability & analytics"
+  }, {
+    id: "health",
+    label: "System Health",
+    icon: ShieldCheck,
+    badge: null,
+    desc: "Integrations & API quotas"
+  }].filter(item=>canDiscover || item.id!=="search");
+  return <>
+      {isMobileViewport && isMobileOpen && <div className="lf-sidebar-backdrop" onPointerDown={event => {
+      if (event.target === event.currentTarget) onCloseMobile?.();
+    }} aria-hidden="true" />}
 
-  const leadPercent = Math.min(
-    100,
-    Math.round(((leadUsage.count || 0) / (leadUsage.limit || 50)) * 100)
-  );
-  const replyPercent = Math.min(
-    100,
-    Math.round(((replyUsage.count || 0) / (replyUsage.limit || 30)) * 100)
-  );
-
-  const navItems = [
-    {
-      id: "dashboard",
-      label: "Overview",
-      icon: Compass,
-      badge: null,
-      desc: "Performance & pipeline",
-    },
-    {
-      id: "search",
-      label: "Prospector",
-      icon: Search,
-      badge: null,
-      desc: "Discovery & harvest",
-    },
-    {
-      id: "results",
-      label: "Leads CRM",
-      icon: Users,
-      badge: leadsCount > 0 ? leadsCount : null,
-      badgeType: "default",
-      desc: "Verified contacts & dossier",
-    },
-    {
-      id: "outreach",
-      label: "Outreach Studio",
-      icon: Send,
-      badge: pendingOutreachCount > 0 ? pendingOutreachCount : null,
-      badgeType: "gold",
-      desc: "AI cold pitches & dispatches",
-    },
-    {
-      id: "mailbox",
-      label: "Inbound Mailbox",
-      icon: Inbox,
-      badge: inboxCount > 0 ? inboxCount : null,
-      badgeType: "emerald",
-      desc: "Replies & procurement intent",
-    },
-    {
-      id: "analytics",
-      label: "Intelligence",
-      icon: BarChart3,
-      badge: null,
-      desc: "Deliverability & analytics",
-    },
-    {
-      id: "health",
-      label: "System Health",
-      icon: ShieldCheck,
-      badge: null,
-      desc: "Integrations & API quotas",
-    },
-  ];
-
-  return (
-    <>
-      {isMobileViewport && isMobileOpen && (
-        <div
-          className="lf-sidebar-backdrop"
-          onPointerDown={(event) => {
-            if (event.target === event.currentTarget) onCloseMobile?.();
-          }}
-          aria-hidden="true"
-        />
-      )}
-
-      <aside
-        ref={sidebarRef}
-        className={`lf-sidebar ${isCollapsed ? "collapsed" : ""} ${
-          isMobileOpen ? "mobile-open" : ""
-        }`}
-        aria-label="Application sidebar"
-        aria-hidden={isMobileViewport && !isMobileOpen ? true : undefined}
-        aria-modal={isMobileViewport && isMobileOpen ? true : undefined}
-        role={isMobileViewport && isMobileOpen ? "dialog" : undefined}
-        tabIndex={-1}
-      >
+      <aside ref={sidebarRef} className={`lf-sidebar ${isCollapsed ? "collapsed" : ""} ${isMobileOpen ? "mobile-open" : ""}`} aria-label="Application sidebar" aria-hidden={isMobileViewport && !isMobileOpen ? true : undefined} aria-modal={isMobileViewport && isMobileOpen ? true : undefined} role={isMobileViewport && isMobileOpen ? "dialog" : undefined} tabIndex={-1}>
         {/* Brand Header */}
         <div className="lf-sidebar-header">
-          <div
-            className="lf-brand-box"
-            onClick={() => {
-              onSelectView("dashboard");
-              if (onCloseMobile) onCloseMobile();
-            }}
-            role="button"
-            tabIndex={0}
-            aria-label="Go to overview"
-            onKeyDown={(event) => {
-              if (event.key === "Enter" || event.key === " ") {
-                event.preventDefault();
-                onSelectView("dashboard");
-                onCloseMobile?.();
-              }
-            }}
-          >
+          <button type="button" className="lf-brand-box" onClick={() => {
+          onSelectView("dashboard");
+          if (onCloseMobile) onCloseMobile();
+        }} aria-label="Go to overview">
             <div className="lf-brand-icon">
               <Sprout size={20} />
             </div>
-            {!isCollapsed && (
-              <div className="lf-brand-info">
-                <span className="lf-brand-title">SpiceCoast</span>
-                <span className="lf-brand-tagline">Lead Engine &bull; Pro</span>
-              </div>
-            )}
-          </div>
+            {!isCollapsed && <div className="lf-brand-info">
+                <span className="lf-brand-title">{tenantName}</span>
+                <span className="lf-brand-tagline">Signinn Leadgen</span>
+              </div>}
+          </button>
 
-          <button
-            type="button"
-            className="lf-collapse-btn"
-            onClick={isMobileViewport ? onCloseMobile : onToggleCollapse}
-            aria-label={isMobileViewport ? "Close menu" : isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-            title={isMobileViewport ? "Close menu" : isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-          >
+          <button type="button" className="lf-collapse-btn" onClick={isMobileViewport ? onCloseMobile : onToggleCollapse} aria-label={isMobileViewport ? "Close menu" : isCollapsed ? "Expand sidebar" : "Collapse sidebar"} title={isMobileViewport ? "Close menu" : isCollapsed ? "Expand sidebar" : "Collapse sidebar"}>
             {isMobileViewport ? <X size={15} /> : isCollapsed ? <ChevronRight size={15} /> : <ChevronLeft size={15} />}
           </button>
         </div>
 
         {/* Quick Launch Action */}
         <div className="lf-sidebar-cta">
-          <button
-            type="button"
-            className="lf-btn-new-discovery"
-            onClick={() => {
-              onSelectView("search");
-              if (onCloseMobile) onCloseMobile();
-            }}
-            title="Start new prospect discovery"
-            aria-label="New Discovery"
-          >
+          <button type="button" className="lf-btn-new-discovery" disabled={!canDiscover} onClick={() => {
+          onSelectView("search");
+          if (onCloseMobile) onCloseMobile();
+        }} title="Start new prospect discovery" aria-label="New Discovery">
             <PlusCircle size={16} />
             {!isCollapsed && <span>New Discovery</span>}
           </button>
@@ -198,45 +123,30 @@ export default function Sidebar({
         {/* Navigation Links */}
         <nav className="lf-sidebar-nav" aria-label="Main menu">
           <div className="lf-nav-group-label">{!isCollapsed && "WORKFLOW"}</div>
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = activeView === item.id;
-            return (
-              <button
-                key={item.id}
-                type="button"
-                className={`lf-nav-item ${isActive ? "active" : ""}`}
-                onClick={() => {
-                  onSelectView(item.id);
-                  if (onCloseMobile) onCloseMobile();
-                }}
-                aria-current={isActive ? "page" : undefined}
-                aria-label={item.label}
-                title={isCollapsed ? item.label : undefined}
-              >
+          {navItems.map(item => {
+          const Icon = item.icon;
+          const isActive = activeView === item.id;
+          return <button key={item.id} type="button" className={`lf-nav-item ${isActive ? "active" : ""}`} onClick={() => {
+            onSelectView(item.id);
+            if (onCloseMobile) onCloseMobile();
+          }} aria-current={isActive ? "page" : undefined} aria-label={item.label} title={isCollapsed ? item.label : undefined}>
                 <span className="lf-nav-item-icon">
                   <Icon size={18} />
                 </span>
-                {!isCollapsed && (
-                  <div className="lf-nav-item-content">
+                {!isCollapsed && <div className="lf-nav-item-content">
                     <span className="lf-nav-item-label">{item.label}</span>
                     <span className="lf-nav-item-desc">{item.desc}</span>
-                  </div>
-                )}
-                {!isCollapsed && item.badge !== null && (
-                  <span className={`lf-nav-badge ${item.badgeType || "default"}`}>
+                  </div>}
+                {!isCollapsed && item.badge !== null && <span className={`lf-nav-badge ${item.badgeType || "default"}`}>
                     {item.badge}
-                  </span>
-                )}
-              </button>
-            );
-          })}
+                  </span>}
+              </button>;
+        })}
         </nav>
 
         {/* Bottom Quota & Status Panel */}
         <div className="lf-sidebar-footer">
-          {!isCollapsed ? (
-            <div className="lf-quota-card">
+          {!isCollapsed ? <div className="lf-quota-card">
               <div className="lf-quota-header">
                 <span className="lf-quota-title">Daily Operations Quota</span>
                 <span className={`lf-status-pill ${serverOnline ? "online" : "offline"}`}>
@@ -254,10 +164,9 @@ export default function Sidebar({
                   </span>
                 </div>
                 <div className="lf-meter-bar">
-                  <div
-                    className="lf-meter-fill amber"
-                    style={{ width: `${leadPercent}%` }}
-                  />
+                  <div className="lf-meter-fill amber" style={{
+                width: `${leadPercent}%`
+              }} />
                 </div>
               </div>
 
@@ -270,29 +179,19 @@ export default function Sidebar({
                   </span>
                 </div>
                 <div className="lf-meter-bar">
-                  <div
-                    className="lf-meter-fill emerald"
-                    style={{ width: `${replyPercent}%` }}
-                  />
+                  <div className="lf-meter-fill emerald" style={{
+                width: `${replyPercent}%`
+              }} />
                 </div>
               </div>
 
               <div className="lf-footer-origin">
                 <span>Direct Sourcing &bull; Cochin, India</span>
               </div>
-            </div>
-          ) : (
-            <div
-              className={`lf-collapsed-status ${serverOnline ? "online" : "offline"}`}
-              title={`API: ${serverOnline ? "Online" : "Offline"} | Leads: ${
-                leadUsage.count
-              }/${leadUsage.limit}`}
-            >
+            </div> : <div className={`lf-collapsed-status ${serverOnline ? "online" : "offline"}`} title={`API: ${serverOnline ? "Online" : "Offline"} | Leads: ${leadUsage.count}/${leadUsage.limit}`}>
               <span className="lf-pulse-dot" />
-            </div>
-          )}
+            </div>}
         </div>
       </aside>
-    </>
-  );
+    </>;
 }
