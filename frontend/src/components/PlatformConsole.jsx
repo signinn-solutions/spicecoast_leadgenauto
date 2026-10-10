@@ -100,7 +100,7 @@ export default function PlatformConsole({
           setTab(id);
           setSelected(null);
           setSetup(null);
-        }}><Icon size={18} aria-hidden="true" /><span>{label}</span></button>)}</nav><div className="lf-platform-identity"><strong>{user.email}</strong><span>Platform super admin</span><button className="lf-btn-secondary sm" onClick={onLogout}><LogOut size={15} />Sign out</button></div></aside>
+        }}><Icon size={18} aria-hidden="true" /><span>{label}</span></button>)}</nav><div className="lf-platform-identity"><strong>{user.email}</strong><span>Platform super admin</span>{onLogout ? <button type="button" className="lf-btn-secondary sm" onClick={onLogout}><LogOut size={15} />Sign out</button> : <p className="lf-section-subtitle">Local development access. Create your first account with <code>npm run admin:setup -- admin@signinn.in</code>, then activate it and reload.</p>}</div></aside>
   <div className="lf-platform-main"><header className="lf-platform-header"><div><p className="lf-platform-eyebrow">SIGNINN CONTROL PANEL</p><h1>{tenant ? tenant.name + ' management' : navigation.find(n => n[0] === tab)?.[1]}</h1><p className="lf-section-subtitle">Manage customer workspaces, access, integrations and operational health.</p></div><button className="lf-btn-secondary" disabled={busy || !data && !error} onClick={() => action(async () => {})}><RefreshCw size={16} />Refresh</button></header>
    <main id="platform-content" tabIndex={-1} className="lf-platform-content" aria-busy={busy}>
     {error && <p className="lf-platform-alert error" role="alert">{error}</p>}{notice && <p className="lf-platform-alert success" role="status">{notice}</p>}

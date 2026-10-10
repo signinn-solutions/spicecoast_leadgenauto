@@ -30,6 +30,7 @@ test('React component render smoke checks cover 60-result controls, paginated ro
     export const plans=render(<PlanManager plans={[{id:'standard',name:'Standard',leadLimit:60,replyLimit:30,sendLimit:50,seatLimit:10}]}/>);
     export const subscription=render(<SubscriptionPanel tenant={{id:'spicecoast',subscription:{allowed:true,phase:'active',status:'active',openEnded:true,plan:{id:'standard',name:'Standard'}}}} plans={[]}/>);
     export const platform=render(<PlatformConsole user={{id:'admin',email:'admin@signinn.in',role:'super_admin'}}/>);
+    export const authenticatedPlatform=render(<PlatformConsole user={{id:"admin",email:"admin@signinn.in",role:"super_admin"}} onLogout={()=>{}}/>);
     export const crm=render(<LeadsView allLeads={leads} canDraft={false}/>);
     export const uncapped=render(<DiscoveryView businessType="spice importer" city="Hamburg" country="Germany" count={60} leadLimit={-1} remainingLeads={Infinity}/>);
     export const unlimitedPlans=render(<PlanManager plans={[{id:'uncapped',name:'Uncapped',leadLimit:-1,replyLimit:30,sendLimit:50,seatLimit:10}]}/>);
@@ -61,7 +62,7 @@ test('React component render smoke checks cover 60-result controls, paginated ro
   });
   const {
     published, evidence, health, uncapped, unlimitedPlans,
-    platform,
+    platform, authenticatedPlatform,
     customer,
     plans,
     subscription,
@@ -100,6 +101,9 @@ test('React component render smoke checks cover 60-result controls, paginated ro
   assert.match(platform,/Signinn Leadgen/);
   assert.match(platform,/Platform administration/);
   assert.match(platform,/Platform administrators/);
+  assert.doesNotMatch(platform,/Sign out/);
+  assert.match(platform,/Local development access/);
+  assert.match(authenticatedPlatform,/Sign out/);
   assert.doesNotMatch(platform,/Prospector|Leads CRM|Outreach Studio|Inbound Mailbox/);
   assert.doesNotMatch(admin,/<option value="super_admin"/);
   assert.match(admin,/<option value="company_admin"/);
