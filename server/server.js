@@ -1,6 +1,6 @@
 import app from './app.js';
 import {listTenants,runInTenant} from './services/tenantService.js';
-import {accessDatabase} from './services/accessService.js';
+import {accessDatabase, seedDefaultAccounts} from './services/accessService.js';
 import { validateRuntimeConfig } from './config/validateConfig.js';
 import { migrateVerification } from './services/verificationMigration.js';
 import { recoverSearchJobs } from './services/searchJobService.js';
@@ -13,6 +13,7 @@ function startServer(port) {
   loadProviderSettings();
   validateRuntimeConfig();
   accessDatabase();
+  seedDefaultAccounts();
   for(const tenant of listTenants()) runInTenant(tenant.id,()=>{recoverSearchJobs();migrateVerification();},{allowSuspended:true});
   const server = app.listen(port, config.HOST, () => {
     console.log(`\n🌶️  SpiceCoast Express API Server running on http://${config.HOST}:${port}`);

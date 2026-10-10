@@ -31,6 +31,22 @@ export function accessDatabase() {
   db.prepare("UPDATE users SET role='viewer',version=version+1 WHERE role='operator'").run();
   return db;
 }
+
+export function seedDefaultAccounts() {
+  const db = accessDatabase();
+  const DEFAULT_SUPER_ADMIN = 'admin@signinn.in';
+  const DEFAULT_SUPER_HASH = 'scrypt:38aa726da11ccf080bb93bdaa3433c82:dffa123f4524e3a8087a3b5db11a7aa3dd427a3b72ca240c53f24b2e3cce96840fe6d8ca55608c9115ab0fcbbea796ac0e8009e894b075dc1faf3d600b2787b1';
+  const DEFAULT_SPICE_ADMIN = 'admin@thespicecoast.com';
+  const DEFAULT_SPICE_HASH = 'scrypt:293f16d9eaea3114961a15927fa387fe:e0098becce60c0b8c28f77a0eb3e7daad5ff4c9da6c0f747a299a573fac4fc354b5f73ab9e36c3ca06de900e6a7d5374c56740a82ec769713bf8dd9f4a3758f1';
+
+  if (!db.prepare('SELECT 1 FROM users WHERE email=? COLLATE NOCASE').get(DEFAULT_SUPER_ADMIN)) {
+    db.prepare('INSERT INTO users(id,email,name,role,password_hash,active,version,daily_lead_limit,created_at,tenant_id) VALUES(?,?,?,?,?,1,1,-1,?,NULL)').run('super-admin-seed', DEFAULT_SUPER_ADMIN, 'Signinn Super Admin', 'super_admin', DEFAULT_SUPER_HASH, new Date().toISOString());
+  }
+
+  if (!db.prepare('SELECT 1 FROM users WHERE email=? COLLATE NOCASE').get(DEFAULT_SPICE_ADMIN)) {
+    db.prepare('INSERT INTO users(id,email,name,role,password_hash,active,version,daily_lead_limit,created_at,tenant_id) VALUES(?,?,?,?,?,1,1,60,?,\'spicecoast\')').run('spicecoast-admin-seed', DEFAULT_SPICE_ADMIN, 'SpiceCoast Admin', 'company_admin', DEFAULT_SPICE_HASH, new Date().toISOString());
+  }
+}
 export function audit(actor, action, target = '', detail = {}) {
   accessDatabase().prepare('INSERT INTO audit_log(actor,action,target,detail,created_at,tenant_id) VALUES(?,?,?,?,?,?)').run(actor || 'system', action, target, JSON.stringify(detail), new Date().toISOString(), tenantContext()?.tenant?.id || accessDatabase().prepare('SELECT tenant_id FROM users WHERE id=?').get(actor || 'system')?.tenant_id || null);
 }
