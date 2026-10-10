@@ -3,7 +3,7 @@ import config from '../config/env.js';
 import { startSearchJob, getSearchJob, recentSearchJobs } from '../services/searchJobService.js';
 import { userUsage } from '../services/accessService.js';
 import { loadDailyUsage, loadLeadsHistory, loadOutreachHistory, saveOutreachHistory, withOutreachHistoryLock, withStorageOperationLock, saveLeadsHistory } from '../services/storageService.js';
-import { executeLeadSearch, validateSearchInput, isHunterQuotaExceeded, verifyEmail } from '../services/leadFinderService.js';
+import { executeLeadSearch, validateSearchInput, isHunterQuotaExceeded, isHunterEnabled, verifyEmail } from '../services/leadFinderService.js';
 import { generateColdEmail } from '../services/deepseekService.js';
 export async function getStatus(req, res, next) {
   try {
@@ -11,20 +11,24 @@ export async function getStatus(req, res, next) {
       date: today,
       count: usedToday
     } = loadDailyUsage();
-    const remaining = Math.max(0, config.DAILY_LEAD_LIMIT - usedToday);
+    const remaining = config.DAILY_LEAD_LIMIT === -1 ? null : Math.max(0, config.DAILY_LEAD_LIMIT - usedToday);
     return res.status(200).json({
       date: today,
       count: usedToday,
       limit: config.DAILY_LEAD_LIMIT,
+      unlimited: config.DAILY_LEAD_LIMIT === -1,
       remaining,
       subscription: tenantContext()?.tenant?.subscription || null,
       has_google_key: Boolean(config.GOOGLE_API_KEY),
       has_hunter_key: Boolean(config.HUNTER_API_KEY),
+      hunter_enabled: isHunterEnabled(),
+      email_discovery: isHunterEnabled() ? 'website_then_hunter' : 'website',
       hunter_quota_exceeded: isHunterQuotaExceeded(),
       max_batch: 60,
       user_usage: req.dashboardSession?.user ? {
         count: userUsage(req.dashboardSession.user.id),
-        limit: req.dashboardSession.user.dailyLeadLimit
+        limit: req.dashboardSession.user.dailyLeadLimit,
+        unlimited: req.dashboardSession.user.dailyLeadLimit === -1
       } : null
     });
   } catch (err) {
@@ -200,8 +204,8 @@ export async function verifyLeadEmail(req, res, next) {
       if (!lead || lead.source !== 'live' || !lead.email?.includes('@')) return res.status(400).json({
         error: 'A saved live lead with an email is required.'
       });
-      if (!config.HUNTER_API_KEY) return res.status(503).json({
-        error: 'Configure Hunter before verifying email.'
+      if (!isHunterEnabled()) return res.status(503).json({
+        error: 'Signinn must enable Hunter and configure its key before verifying email. Published website addresses remain unverified.'
       });
       const status = await verifyEmail(lead.email);
       history = loadLeadsHistory();

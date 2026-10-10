@@ -17,7 +17,7 @@ if (!email) {
       email,
       name: 'Super administrator',
       role: 'super_admin',
-      dailyLeadLimit: 60
+      dailyLeadLimit: -1
     });
     console.log('One-time activation (24 hours). Open the app, then use this fragment on its URL:');
     console.log('#activate=' + setup.token + '&email=' + encodeURIComponent(email));

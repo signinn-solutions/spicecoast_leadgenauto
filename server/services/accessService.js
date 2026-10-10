@@ -15,7 +15,7 @@ export function accessDatabase() {
   db.exec(`CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY, email TEXT NOT NULL UNIQUE COLLATE NOCASE, name TEXT NOT NULL,
     role TEXT NOT NULL, active INTEGER NOT NULL DEFAULT 1, password_hash TEXT,
-    version INTEGER NOT NULL DEFAULT 1, daily_lead_limit INTEGER NOT NULL DEFAULT 60,
+    version INTEGER NOT NULL DEFAULT 1, daily_lead_limit INTEGER NOT NULL DEFAULT -1,
     setup_hash TEXT, setup_expires INTEGER, created_at TEXT NOT NULL, last_login_at TEXT
   );
   CREATE TABLE IF NOT EXISTS user_usage (user_id TEXT NOT NULL, date TEXT NOT NULL, count INTEGER NOT NULL, PRIMARY KEY(user_id,date));
@@ -90,8 +90,8 @@ function fields(input) {
   const name = typeof input.name === 'string' ? input.name.trim() : '';
   if (!name || name.length > 100) fail('Name must contain 1 to 100 characters.');
   if (!Object.hasOwn(ROLES, input.role)) fail('Choose a valid role.');
-  const limit = Number(input.dailyLeadLimit ?? 60);
-  if (!Number.isInteger(limit) || limit < 0 || limit > 10000) fail('Daily discovery limit must be between 0 and 10000.');
+  const limit = Number(input.dailyLeadLimit ?? -1);
+  if (!Number.isInteger(limit) || limit < -1 || limit > 10000) fail('Daily discovery limit must be -1 (unlimited), 0 (disabled), or between 1 and 10000.');
   return {
     email,
     name,

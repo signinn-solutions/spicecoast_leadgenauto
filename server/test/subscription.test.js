@@ -14,7 +14,7 @@ import { sendEmail } from '../services/mailService.js';
 import { generateColdEmail, extractMetadataAndDraftReply } from '../services/deepseekService.js';
 import { generateFollowUpDraft } from '../services/followUpEngine.js';
 let dir, original, server, realFetch;
-const keys = ['DB_PATH', 'DAILY_USAGE_FILE', 'REPLY_USAGE_FILE', 'LEADS_HISTORY_FILE', 'SEEN_PLACES_FILE', 'MAILBOX_HISTORY_FILE', 'OUTREACH_HISTORY_FILE', 'SETTINGS_ENCRYPTION_KEY', 'GOOGLE_API_KEY', 'HUNTER_API_KEY', 'DEEPSEEK_API_KEY', 'HOSTINGER_API_TOKEN', 'HOSTINGER_WEBHOOK_BEARER_TOKEN', 'HOSTINGER_MAILBOX_ID', 'HOSTINGER_SEND_ENDPOINT_OVERRIDE', 'SENDER_MAILBOX', 'SMTP_HOST', 'SMTP_USER', 'SMTP_PASS', 'ADMIN_EMAIL', 'ADMIN_PASSWORD_HASH', 'NODE_ENV', 'AUTO_SEND', 'BUSINESS_CONTEXT', 'LEAD_KEYWORDS', 'DAILY_LEAD_LIMIT', 'DAILY_REPLY_LIMIT', 'DAILY_SEND_LIMIT'];
+const keys = ['DB_PATH', 'DAILY_USAGE_FILE', 'REPLY_USAGE_FILE', 'LEADS_HISTORY_FILE', 'SEEN_PLACES_FILE', 'MAILBOX_HISTORY_FILE', 'OUTREACH_HISTORY_FILE', 'SETTINGS_ENCRYPTION_KEY', 'GOOGLE_API_KEY', 'HUNTER_API_KEY', 'HUNTER_ENABLED', 'DEEPSEEK_API_KEY', 'HOSTINGER_API_TOKEN', 'HOSTINGER_WEBHOOK_BEARER_TOKEN', 'HOSTINGER_MAILBOX_ID', 'HOSTINGER_SEND_ENDPOINT_OVERRIDE', 'SENDER_MAILBOX', 'SMTP_HOST', 'SMTP_USER', 'SMTP_PASS', 'ADMIN_EMAIL', 'ADMIN_PASSWORD_HASH', 'NODE_ENV', 'AUTO_SEND', 'BUSINESS_CONTEXT', 'LEAD_KEYWORDS', 'DAILY_LEAD_LIMIT', 'DAILY_REPLY_LIMIT', 'DAILY_SEND_LIMIT'];
 beforeEach(() => {
   original = Object.fromEntries(keys.map(k => [k, config[k]]));
   realFetch = globalThis.fetch;
@@ -25,6 +25,7 @@ beforeEach(() => {
     SETTINGS_ENCRYPTION_KEY: 'ab'.repeat(32),
     GOOGLE_API_KEY: 'legacy-google',
     HUNTER_API_KEY: 'legacy-hunter',
+    HUNTER_ENABLED: true,
     DEEPSEEK_API_KEY: '',
     HOSTINGER_API_TOKEN: '',
     HOSTINGER_WEBHOOK_BEARER_TOKEN: 'legacy-webhook',
@@ -408,7 +409,7 @@ test('Hunter cooldown remains attached to the provider key across concurrent ten
   resetHunterQuotaState();
   const t = newTenant();
   await runInTenant(t.id, () => saveProviderSettings({
-    HUNTER_API_KEY: 'key-b'
+    HUNTER_API_KEY: 'key-b', HUNTER_ENABLED: true
   }, 'platform'));
   globalThis.fetch = async () => ({
     ok: false,

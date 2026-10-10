@@ -1,6 +1,6 @@
 import config from '../config/env.js';
 import {assertTenantActive} from './tenantService.js';
-import { fetchWebsitePage } from './websiteService.js';
+import { crawlWebsiteContacts } from './contactCrawlerService.js';
 import { userUsage, consumeUserLead, audit, findUser, publicUser } from './accessService.js';
 import { getTodayDateString, loadDailyUsage, saveDailyUsage, loadLeadsHistory, saveLeadsHistory, loadSeenPlaces, saveSeenPlaces, loadOutreachHistory, saveOutreachHistory, withStorageOperationLock, withOutreachHistoryLock } from './storageService.js';
 import { generateColdEmail } from './deepseekService.js';
@@ -117,6 +117,13 @@ export function generateSimulatedLeads(businessType, city, country, count, seenM
   }
   return simulated;
 }
+function googleConnectionFailure(error) {
+  const codes = [error?.code, error?.cause?.code, ...(error?.cause?.errors || []).map(item=>item.code)];
+  if (codes.some(code=>['EACCES','EPERM'].includes(code))) return 'Google Places connection blocked: the server is denied outbound HTTPS access. Check its execution environment or firewall.';
+  if (codes.some(code=>['ENOTFOUND','EAI_AGAIN'].includes(code))) return 'Google Places connection failed: the server could not resolve places.googleapis.com. Check DNS and network access.';
+  if (error?.name === 'TimeoutError' || codes.some(code=>['ETIMEDOUT','UND_ERR_CONNECT_TIMEOUT'].includes(code))) return 'Google Places connection timed out. Check server internet access to places.googleapis.com on HTTPS port 443.';
+  return 'Google Places connection failed before a response was received. Check server network access; API authentication has not been confirmed.';
+}
 export async function searchPlaces(query, neededCount = 20, seenMap = {}, existingLeads = []) {
   const url = 'https://places.googleapis.com/v1/places:searchText';
   const headers = {
@@ -176,8 +183,8 @@ export async function searchPlaces(query, neededCount = 20, seenMap = {}, existi
       if (!pageToken || newUniquePlaces.length >= neededCount) break;
       await new Promise(r => setTimeout(r, 1000));
     } catch (e) {
-      console.warn(`[Google Places API Request Error]: ${e.message}`);
-      providerError = `Google Places request failed: ${e.message}`;
+      providerError = googleConnectionFailure(e);
+      console.warn('[Google Places connection error]: ' + providerError);
       break;
     }
   }
@@ -201,11 +208,12 @@ export function isSocialOrDirectoryDomain(domain) {
 const hunterCooldowns = new Map();
 export function isHunterQuotaExceeded() {return (hunterCooldowns.get(config.HUNTER_API_KEY) || 0)>Date.now();}
 export function resetHunterQuotaState() {hunterCooldowns.clear();}
-function pauseHunter(key) {hunterCooldowns.set(key,Date.now()+60000);}
+function pauseHunter(key, status) {hunterCooldowns.set(key,Date.now()+(status===402?3600000:60000));}
+export function isHunterEnabled() { return config.HUNTER_ENABLED === true && Boolean(config.HUNTER_API_KEY); }
 export async function findEmails(domain) {
   const key=config.HUNTER_API_KEY;
 
-  if (!domain || !config.HUNTER_API_KEY) return [];
+  if (!domain || !isHunterEnabled()) return [];
   if (isSocialOrDirectoryDomain(domain)) return [];
   if (isHunterQuotaExceeded()) return [];
   const url = `https://api.hunter.io/v2/domain-search?domain=${encodeURIComponent(domain)}&api_key=${encodeURIComponent(config.HUNTER_API_KEY)}&limit=3`;
@@ -213,9 +221,9 @@ export async function findEmails(domain) {
     const response = await fetch(url, {
       signal: AbortSignal.timeout(10000)
     });
-    if (response.status === 429) {
-      pauseHunter(key);
-      console.warn('[Hunter.io rate limited]: pausing Hunter requests for one minute.');
+    if ([402,429].includes(response.status)) {
+      pauseHunter(key,response.status);
+      console.warn('[Hunter.io rate limited]: pausing Hunter requests; website discovery remains active.');
       return [];
     }
     if (!response.ok) {
@@ -232,7 +240,7 @@ export async function findEmails(domain) {
 export async function verifyEmail(email) {
   const key=config.HUNTER_API_KEY;
 
-  if (!email || !config.HUNTER_API_KEY || isHunterQuotaExceeded()) return 'unknown';
+  if (!email || !isHunterEnabled() || isHunterQuotaExceeded()) return 'unknown';
   const url = `https://api.hunter.io/v2/email-verifier?email=${encodeURIComponent(email)}&api_key=${encodeURIComponent(config.HUNTER_API_KEY)}`;
   try {
     const response = await fetch(url, {
@@ -249,72 +257,13 @@ export async function verifyEmail(email) {
     return 'unknown';
   }
 }
-export async function scrapeEmailsFromWebsite(websiteUrl, domain, {
-  fetchPage = fetchWebsitePage
-} = {}) {
+export async function scrapeEmailsFromWebsite(websiteUrl, domain, options = {}) {
   const targetDomain = domain || extractDomain(websiteUrl);
-  if (isSocialOrDirectoryDomain(targetDomain)) return [];
-  let baseUrl = websiteUrl;
-  if (!baseUrl && targetDomain) {
-    baseUrl = `https://${targetDomain}`;
-  }
-  if (!baseUrl) return [];
-  if (!baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) {
-    baseUrl = `https://${baseUrl}`;
-  }
-  let origin;
-  try {
-    origin = new URL(baseUrl).origin;
-  } catch {
-    return [];
-  }
-  const urlsToTry = [origin, `${origin}/contact`, `${origin}/contact-us`, `${origin}/about`];
-  const foundEmails = new Set();
-  const emailRegex = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g;
-  const IGNORED_EXTENSIONS = /\.(png|jpe?g|gif|svg|webp|css|js|woff2?|ttf|eot|ico|pdf|zip)$/i;
-  const IGNORED_DOMAINS = new Set(['sentry.io', 'wixpress.com', 'example.com', 'domain.com', 'email.com', 'yourdomain.com', 'schema.org', 'wordpress.org', 'cloudflare.com', 'googleapis.com', 'gravatar.com', 'github.com', 'google.com']);
-  for (const pageUrl of urlsToTry) {
-    try {
-      const html = await fetchPage(pageUrl);
-      if (!html) continue;
-      // 1. Mailto links
-      const mailtoMatches = [...html.matchAll(/mailto:([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/gi)];
-      for (const m of mailtoMatches) {
-        const mail = m[1].toLowerCase().trim();
-        if (!IGNORED_EXTENSIONS.test(mail)) {
-          const dom = mail.split('@')[1];
-          if (!IGNORED_DOMAINS.has(dom)) foundEmails.add(mail);
-        }
-      }
-
-      // 2. Text matches
-      const textMatches = html.match(emailRegex) || [];
-      for (const raw of textMatches) {
-        const mail = raw.toLowerCase().trim();
-        if (!IGNORED_EXTENSIONS.test(mail)) {
-          const dom = mail.split('@')[1];
-          if (!IGNORED_DOMAINS.has(dom)) foundEmails.add(mail);
-        }
-      }
-      if (foundEmails.size > 0) break;
-    } catch {
-      // Continue to next URL
-    }
-  }
-  const list = Array.from(foundEmails);
-  if (list.length === 0) return [];
-  return list.sort((a, b) => {
-    const aMatch = targetDomain && a.endsWith(`@${targetDomain}`) ? 1 : 0;
-    const bMatch = targetDomain && b.endsWith(`@${targetDomain}`) ? 1 : 0;
-    if (aMatch !== bMatch) return bMatch - aMatch;
-    const priority = ['info@', 'contact@', 'sales@', 'hello@', 'office@', 'enquiry@', 'support@'];
-    const aPrio = priority.some(p => a.startsWith(p)) ? 1 : 0;
-    const bPrio = priority.some(p => b.startsWith(p)) ? 1 : 0;
-    return bPrio - aPrio;
-  }).map(value => ({
-    value,
-    source: 'website'
-  }));
+  if (isSocialOrDirectoryDomain(targetDomain) || !websiteUrl && !targetDomain) return [];
+  // Legacy fetchPage injection remains available to isolated tests.
+  const crawlOptions = options.fetchPage ? {useCache:false,delayMs:0,fetchResource:async url=>url.endsWith('/robots.txt')?{status:404,body:''}:{status:200,body:await options.fetchPage(url),url,type:'text/html'}} : options;
+  const report = await crawlWebsiteContacts(websiteUrl || 'https://'+targetDomain, crawlOptions);
+  return report.emails;
 }
 export async function executeLeadSearch(options) {
   return withStorageOperationLock('lead-search', () => runLeadSearch(options));
@@ -348,18 +297,14 @@ async function runLeadSearch({
     }
   }
 
-  // Live search requires configured Google Places & Hunter.io API keys
+  // Google discovers businesses; website email discovery does not require Hunter.
   if (mode === 'live') {
     if (!config.GOOGLE_API_KEY) {
       const err = new Error('Google Places API key is not configured.');
       err.statusCode = 503;
       throw err;
     }
-    if (!config.HUNTER_API_KEY) {
-      const err = new Error('Hunter.io API key is not configured.');
-      err.statusCode = 503;
-      throw err;
-    }
+
   }
   const {
     date: today,
@@ -367,13 +312,13 @@ async function runLeadSearch({
   } = loadDailyUsage();
   let usedToday = usedTodayInit;
   assertTenantActive();
-  const remaining = Math.max(0, config.DAILY_LEAD_LIMIT - usedToday);
+  const remaining = config.DAILY_LEAD_LIMIT === -1 ? Infinity : Math.max(0, config.DAILY_LEAD_LIMIT - usedToday);
   if (remaining <= 0) {
     const err = new Error(`Daily limit of ${config.DAILY_LEAD_LIMIT} reached for today.`);
     err.statusCode = 429;
     throw err;
   }
-  const userRemaining = actor && !['legacy-admin', 'local-development'].includes(actor.id) ? Math.max(0, actor.dailyLeadLimit - userUsage(actor.id)) : remaining;
+  const userRemaining = actor && !['legacy-admin', 'local-development'].includes(actor.id) ? actor.dailyLeadLimit === -1 ? Infinity : Math.max(0, actor.dailyLeadLimit - userUsage(actor.id)) : remaining;
   if (userRemaining <= 0) throw Object.assign(new Error('Your daily discovery quota is exhausted.'), {
     statusCode: 429
   });
@@ -397,13 +342,13 @@ async function runLeadSearch({
   const consumeQuota = () => {
     const usage = loadDailyUsage();
     assertTenantActive();
-    if (usage.count >= config.DAILY_LEAD_LIMIT) return false;
+    if (config.DAILY_LEAD_LIMIT !== -1 && usage.count >= config.DAILY_LEAD_LIMIT) return false;
     if (actor && !['legacy-admin', 'local-development'].includes(actor.id)) {
       const current = findUser(actor.id);
       if (!current?.active || !publicUser(current).permissions.includes('discover')) throw Object.assign(new Error('Discovery access was revoked. Completed leads remain saved.'), {
         statusCode: 403
       });
-      if (userUsage(actor.id) >= current.daily_lead_limit) return false;
+      if (current.daily_lead_limit !== -1 && userUsage(actor.id) >= current.daily_lead_limit) return false;
     }
     saveDailyUsage(usage.date, usage.count + 1);
     consumeUserLead(actor?.id);
@@ -438,20 +383,13 @@ async function runLeadSearch({
         const domain = extractDomain(website);
         let email = '—';
         let emailStatus = 'not_found';
+        let emailCandidates = [];
         if (domain || website) {
-          let emails = [];
-          if (domain && !isSocialOrDirectoryDomain(domain)) {
-            emails = await findEmails(domain);
-            if (emails.length > 0) {
-              await new Promise(r => setTimeout(r, 400));
-            }
+          let emails = await scrapeEmailsFromWebsite(website, domain);
+          if (!emails.length && domain && !isSocialOrDirectoryDomain(domain)) {
+            emails = (await findEmails(domain)).map(item=>({...item,source:'hunter'}));
           }
-          if (emails.length === 0 && (website || domain)) {
-            const scraped = await scrapeEmailsFromWebsite(website, domain);
-            if (scraped.length > 0) {
-              emails = scraped;
-            }
-          }
+          emailCandidates = emails.slice(0,20);
           const bestEmailItem = emails.find(item => typeof item?.value === 'string' && item.value.includes('@'));
           const bestEmail = bestEmailItem?.value;
           if (bestEmail) {
@@ -472,6 +410,8 @@ async function runLeadSearch({
           phoneStatus,
           email,
           emailStatus,
+          emailCandidates,
+          emailDiscovery: emailCandidates.find(item=>item.value===email) || null,
           website: website || (domain ? `https://${domain}` : '#'),
           foundAt: today,
           source: 'live',
@@ -553,6 +493,8 @@ async function runLeadSearch({
       processedLeads.push(lead);
     }
   }
+  const unverifiedCount = processedLeads.filter(lead=>lead.source==='live' && lead.email?.includes('@') && lead.emailStatus==='unknown').length;
+  if (unverifiedCount) warnings.push(unverifiedCount+' email address(es) remain unverified. They can be reviewed and exported; cold outreach requires verification.');
   if (processedLeads.length < fetchCount && mode === 'live') warnings.push('Google returned fewer new businesses than requested; duplicates and provider result limits can reduce the batch.');
 
   // Persist seenPlaces
@@ -631,7 +573,9 @@ async function runLeadSearch({
     mode,
     usage: {
       ...loadDailyUsage(),
-      remaining: Math.max(0, config.DAILY_LEAD_LIMIT - loadDailyUsage().count)
+      limit: config.DAILY_LEAD_LIMIT,
+      unlimited: config.DAILY_LEAD_LIMIT === -1,
+      remaining: config.DAILY_LEAD_LIMIT === -1 ? null : Math.max(0, config.DAILY_LEAD_LIMIT - loadDailyUsage().count)
     }
   };
 }

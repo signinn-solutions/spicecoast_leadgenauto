@@ -37,7 +37,7 @@ export default function LeadFinderApp({
   const [leadUsage, setLeadUsage] = useState({
     date: "",
     count: 0,
-    limit: 50
+    limit: -1
   });
   const [serverStatus, setServerStatus] = useState({});
 
@@ -92,8 +92,8 @@ export default function LeadFinderApp({
   // The server returns today's usage in its own local date; avoid a UTC day rollover.
   const localNow = new Date();
   const todayStr = leadUsage.date || `${localNow.getFullYear()}-${String(localNow.getMonth() + 1).padStart(2, "0")}-${String(localNow.getDate()).padStart(2, "0")}`;
-  const workspaceRemaining = Math.max(0, (leadUsage.limit ?? 50) - (leadUsage.count ?? 0));
-  const accountRemaining = serverStatus.user_usage && !['local-development', 'legacy-admin'].includes(user?.id) ? Math.max(0, serverStatus.user_usage.limit - serverStatus.user_usage.count) : workspaceRemaining;
+  const workspaceRemaining = leadUsage.limit === -1 ? Infinity : Math.max(0, (leadUsage.limit ?? 0) - (leadUsage.count ?? 0));
+  const accountRemaining = serverStatus.user_usage && !['local-development', 'legacy-admin'].includes(user?.id) ? serverStatus.user_usage.limit === -1 ? Infinity : Math.max(0, serverStatus.user_usage.limit - serverStatus.user_usage.count) : workspaceRemaining;
   const remainingLeads = Math.min(workspaceRemaining, accountRemaining);
 
   // Primary Data Fetch
@@ -823,8 +823,8 @@ export default function LeadFinderApp({
   // Export CSV Handler
   const handleExportCSV = (leadsToExport = allLeads) => {
     if (!leadsToExport.length) return;
-    const headers = ["Company Name", "Source", "Address", "Phone", "Phone Status", "Email", "Email Status", "Website", "Date Found"];
-    const rows = leadsToExport.map(l => [l.name || "", l.source || "unknown", l.address || "", l.phone || "", l.source !== "simulated" ? l.phoneStatus || "" : "simulated", l.email || "", l.source !== "simulated" ? l.emailStatus || "" : "simulated", l.website || "", l.foundAt || ""]);
+    const headers = ["Company Name", "Source", "Address", "Phone", "Phone Status", "Email", "Email Status", "Email Discovery", "Email Source Page", "Website", "Date Found"];
+    const rows = leadsToExport.map(l => [l.name || "", l.source || "unknown", l.address || "", l.phone || "", l.source !== "simulated" ? l.phoneStatus || "" : "simulated", l.email || "", l.source !== "simulated" ? l.emailStatus || "" : "simulated", l.emailDiscovery?.source || "", l.emailDiscovery?.sourceUrl || "", l.website || "", l.foundAt || ""]);
     const quote = val => {
       const value = String(val ?? "");
       const safe = /^[\s\u0000-\u001f]*[=+\-@]/u.test(value) || /^[\u0000-\u001f]/u.test(value) ? `'${value}` : value;
@@ -888,9 +888,9 @@ export default function LeadFinderApp({
           {activeView === "search" && <DiscoveryView jobs={discoveryJobs} onRestoreBatch={job => {
           setCurrentResults(job.result?.leads || []);
           setActiveView("results");
-        }} canDiscover={can("discover")} autoDraft={autoDraft} setAutoDraft={setAutoDraft} searchProgress={searchProgress} businessType={businessType} setBusinessType={setBusinessType} city={city} setCity={setCity} country={country} setCountry={setCountry} count={count} setCount={setCount} searching={searching} onSearch={handleSearch} leadLimit={leadUsage.limit ?? 50} remainingLeads={remainingLeads} lastSearchInfo={lastSearchInfo} onViewResults={() => setActiveView("results")} />}
+        }} canDiscover={can("discover")} autoDraft={autoDraft} setAutoDraft={setAutoDraft} searchProgress={searchProgress} businessType={businessType} setBusinessType={setBusinessType} city={city} setCity={setCity} country={country} setCountry={setCountry} count={count} setCount={setCount} searching={searching} onSearch={handleSearch} remainingLeads={remainingLeads} lastSearchInfo={lastSearchInfo} onViewResults={() => setActiveView("results")} />}
 
-          {activeView === "results" && <LeadsView canDraft={can("draft")} allLeads={allLeads} currentResults={currentResults} onSelectLead={setSelectedLead} onVerifyEmail={handleVerifyEmail} onGeneratePitch={handleGeneratePitch} generatingDraftId={generatingDraftId} onExportCSV={handleExportCSV} onSendToOutreach={handleSendToOutreach} />}
+          {activeView === "results" && <LeadsView canDraft={can("draft")} allLeads={allLeads} currentResults={currentResults} onSelectLead={setSelectedLead} onVerifyEmail={serverStatus.hunter_enabled ? handleVerifyEmail : undefined} onGeneratePitch={handleGeneratePitch} generatingDraftId={generatingDraftId} onExportCSV={handleExportCSV} onSendToOutreach={handleSendToOutreach} />}
 
           {activeView === "outreach" && <OutreachView canSend={can("send")} canDraft={can("draft")} outreachList={outreachList} allLeads={allLeads} onOpenReviewModal={item => setActiveReviewDraft({
           leadId: item.leadId,

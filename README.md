@@ -24,7 +24,7 @@ If neither admin variable is set, development access is allowed only over a loop
 ## Existing workflow
 
 - **Overview:** lead counts, deliverability, saved drafts, and mailbox activity.
-- **Prospector:** search using Google Places and Hunter, or explicit simulation.
+- **Prospector:** search businesses using Google Places, then scrape published website contacts. Hunter fallback and verification are optional; explicit simulation is separate.
 - **Leads:** search/filter saved contacts, inspect details, export CSV, generate and edit drafts.
 - **Outreach:** review drafts and send only to saved, verified, live contacts within the outbound send limit.
 - **Mailbox:** review webhook inquiries and replies; the simulator never sends mail.
@@ -70,3 +70,5 @@ Tenant webhook POSTs use `/webhook/{tenantSlug}` and that tenant’s configured 
 `npm test` runs temporary-database tests with provider stubs; it does not send real mail or consume provider quotas. `npm run build` verifies the production frontend bundle. `npm audit` checks current registry advisories. The compatibility command `node server/test/test_endpoints.js` also uses isolated workflow tests.
 
 See [current subscription and logic audit](docs/SUBSCRIPTION_AND_LOGIC_AUDIT.md). Browser visual/mobile QA, an actual Docker build, live provider validation, and a deployment backup/restore exercise remain deployment checks; passing local tests does not prove those outcomes.
+
+Daily discovery is uncapped by default (`DAILY_LEAD_LIMIT=-1`). Signinn can set optional plan and account caps; `0` disables discovery. Google Text Search still returns at most 60 results per query. Mail quotas and crawler bounds remain enforced.

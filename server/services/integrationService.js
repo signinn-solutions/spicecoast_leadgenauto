@@ -14,6 +14,7 @@ export const INTEGRATION_FIELDS = {
     secret: true,
     label: 'Google Places API key'
   },
+  HUNTER_ENABLED: {boolean: true, label: 'Enable Hunter fallback and email verification (uses credits)'},
   HUNTER_API_KEY: {
     secret: true,
     label: 'Hunter API key'
@@ -61,9 +62,9 @@ export const INTEGRATION_FIELDS = {
   },
   DAILY_LEAD_LIMIT: {
     number: true,
-    min: 1,
+    min: -1,
     max: 10000,
-    label: 'Workspace daily discovery limit'
+    label: 'Workspace daily discovery limit (-1 unlimited, 0 disabled)'
   },
   DAILY_REPLY_LIMIT: {
     number: true,

@@ -20,6 +20,7 @@ export const baseConfig = {
   GOOGLE_API_KEY: process.env.GOOGLE_API_KEY || '',
   // Hunter.io API
   HUNTER_API_KEY: process.env.HUNTER_API_KEY || '',
+  HUNTER_ENABLED: process.env.HUNTER_ENABLED === 'true',
   // DeepSeek AI API
   DEEPSEEK_API_KEY: process.env.DEEPSEEK_API_KEY || '',
   DEEPSEEK_MODEL: process.env.DEEPSEEK_MODEL || 'deepseek-chat',
@@ -46,7 +47,7 @@ export const baseConfig = {
   LEAD_KEYWORDS: process.env.LEAD_KEYWORDS || '',
   // Automation Guardrails
   AUTO_SEND: (process.env.AUTO_SEND || 'false').toLowerCase() === 'true',
-  DAILY_LEAD_LIMIT: parseInt(process.env.DAILY_LEAD_LIMIT || process.env.DAILY_LIMIT || '60', 10),
+  DAILY_LEAD_LIMIT: parseInt(process.env.DAILY_LEAD_LIMIT || process.env.DAILY_LIMIT || '-1', 10),
   DAILY_REPLY_LIMIT: parseInt(process.env.DAILY_REPLY_LIMIT || '30', 10),
   // SQLite storage and preserved legacy JSON import sources
   DB_PATH: process.env.SPICECOAST_DB_PATH || path.join(rootDir, 'spicecoast.sqlite'),

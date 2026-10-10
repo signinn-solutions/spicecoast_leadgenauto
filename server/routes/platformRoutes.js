@@ -95,7 +95,7 @@ router.post('/tenants', (req, res, next) => {
         name: req.body.ownerName,
         email: req.body.ownerEmail,
         role: 'company_admin',
-        dailyLeadLimit: 60
+        dailyLeadLimit: -1
       }, actor), {
         allowSuspended: true
       });

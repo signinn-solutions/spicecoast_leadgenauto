@@ -44,6 +44,7 @@ export default function LeadsView({
       // Status pill match
       const hasEmail = isLiveLead(lead) && (lead.emailStatus === "deliverable" || lead.emailStatus === "valid");
       const hasPhone = isLiveLead(lead) && ["valid", "listed"].includes(lead.phoneStatus);
+      if (filterStatus === "published") return isLiveLead(lead) && lead.emailDiscovery?.source === "website";
       if (filterStatus === "deliverable") return hasEmail;
       if (filterStatus === "validPhone") return hasPhone;
       if (filterStatus === "both") return hasEmail && hasPhone;
@@ -89,6 +90,7 @@ export default function LeadsView({
     const liveOnly = baseList.filter(isLiveLead).length;
     return {
       total,
+      published: baseList.filter(l=>isLiveLead(l) && l.emailDiscovery?.source === "website").length,
       deliverable,
       validPhone,
       fullyVerified,
@@ -205,6 +207,7 @@ export default function LeadsView({
           <button type="button" className={`lf-filter-pill ${filterStatus === "all" ? "active" : ""}`} onClick={() => setFilterStatus("all")}>
             All ({counts.total})
           </button>
+          <button type="button" className={`lf-filter-pill ${filterStatus === "published" ? "active" : ""}`} onClick={() => setFilterStatus("published")}>Published emails <span>{counts.published}</span></button>
           <button type="button" className={`lf-filter-pill ${filterStatus === "deliverable" ? "active" : ""}`} onClick={() => setFilterStatus("deliverable")}>
             <CheckCircle2 size={12} className="text-emerald" />
             <span>Deliverable Emails ({counts.deliverable})</span>
@@ -350,7 +353,7 @@ export default function LeadsView({
                         <div className="lf-contact-status-row">
                           <span className={`lf-badge-pill sm ${hasDeliverable ? "green" : lead.emailStatus === "risky" ? "gold" : "muted"}`}>
                             {hasDeliverable ? <CheckCircle2 size={10} /> : lead.emailStatus === "risky" ? <AlertCircle size={10} /> : <XCircle size={10} />}
-                            <span>{isLiveLead(lead) ? lead.emailStatus || "Not found" : "Unverified"}</span>
+                            <span>{isLiveLead(lead) ? lead.emailStatus === "unknown" ? "Unverified" : lead.emailStatus || "Not found" : "Unverified"}</span>
                           </span>
                         </div>
                         <div className="lf-contact-val lf-mono">
@@ -360,7 +363,7 @@ export default function LeadsView({
                             </button>}
                         </div>
                       </div>
-                      {canDraft && isLiveLead(lead) && lead.email?.includes('@') && !hasDeliverable && <button className="lf-btn-secondary xs" onClick={() => onVerifyEmail?.(lead)}>Verify email</button>}
+                      {onVerifyEmail && canDraft && isLiveLead(lead) && lead.email?.includes('@') && !hasDeliverable && <button className="lf-btn-secondary xs" onClick={() => onVerifyEmail?.(lead)}>Verify email</button>}
                     </td>
 
                     {/* Cold Pitch Status / Trigger */}

@@ -35,15 +35,16 @@ export default function SystemHealthView({
         ? "Active API Key Configured"
         : "Missing key: live search unavailable",
     },
+    {name: "Website contact discovery", role: "Published emails from business websites", active: true, details: "Scraper-first discovery. Published addresses remain unverified until checked."},
     {
-      name: "Hunter.io API",
-      role: "Domain Executive Email Enrichment & MX Verification",
-      active: serverStatus.has_hunter_key && !serverStatus.hunter_quota_exceeded,
-      details: serverStatus.hunter_quota_exceeded
-        ? "Monthly search limit reached (Website scraper fallback active)"
+      name: "Hunter.io API (optional)",
+      role: "Email search fallback and mailbox verification",
+      active: serverStatus.hunter_enabled && !serverStatus.hunter_quota_exceeded,
+      details: !serverStatus.hunter_enabled ? "Disabled. Website discovery still works without Hunter." : serverStatus.hunter_quota_exceeded
+        ? "Hunter temporarily paused. Website discovery remains active."
         : serverStatus.has_hunter_key
         ? "Active API Key Configured"
-        : "Missing key (falls back to simulation)",
+        : "Missing optional key. Website discovery remains active.",
     },
     {
       name: `DeepSeek AI (${mailboxStatus.deepseek_model || "deepseek-chat"})`,

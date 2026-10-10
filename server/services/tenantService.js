@@ -97,6 +97,7 @@ export function runInTenant(id, operation, {
   if (t.id !== 'spicecoast') Object.assign(overrides, {
     GOOGLE_API_KEY: '',
     HUNTER_API_KEY: '',
+    HUNTER_ENABLED: false,
     DEEPSEEK_API_KEY: '',
     DEEPSEEK_MODEL: 'deepseek-chat',
     HOSTINGER_API_TOKEN: '',
@@ -110,7 +111,7 @@ export function runInTenant(id, operation, {
     SMTP_PASS: '',
     SMTP_SECURE: false,
     AUTO_SEND: false,
-    DAILY_LEAD_LIMIT: 60,
+    DAILY_LEAD_LIMIT: -1,
     DAILY_REPLY_LIMIT: 30,
     DAILY_SEND_LIMIT: 50,
     BUSINESS_CONTEXT: '',

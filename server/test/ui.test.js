@@ -10,6 +10,8 @@ test('React component render smoke checks cover 60-result controls, paginated ro
       contents: `
     import React from 'react';
     import {renderToStaticMarkup as render} from 'react-dom/server';
+    import LeadDetailDrawer from './frontend/src/components/LeadDetailDrawer.jsx';
+    import SystemHealthView from './frontend/src/components/SystemHealthView.jsx';
     import LeadsView from './frontend/src/components/LeadsView.jsx';
     import DiscoveryView from './frontend/src/components/DiscoveryView.jsx';
     import InboxView from './frontend/src/components/InboxView.jsx';
@@ -20,11 +22,17 @@ test('React component render smoke checks cover 60-result controls, paginated ro
     import SubscriptionPanel from './frontend/src/components/SubscriptionPanel.jsx';
     import ColdMailModal from './frontend/src/components/ColdMailModal.jsx';
     const leads=Array.from({length:60},(_,i)=>({id:'lead-'+i,name:'Business '+i,source:'live',email:'buyer'+i+'@example.test',emailStatus:'deliverable',phone:'123456',phoneStatus:'listed',foundAt:'2026-10-10'}));
+    const publicLead={id:'public',name:'Public contact',source:'live',email:'sales@spices.test',emailStatus:'unknown',emailDiscovery:{source:'website',sourceUrl:'https://spices.test/contact'},emailCandidates:[{value:'sales@spices.test'}]};
+    export const published=render(<LeadsView allLeads={[publicLead]} canDraft={true}/>);
+    export const evidence=render(<LeadDetailDrawer lead={publicLead} canDraft={true}/>);
+    export const health=render(<SystemHealthView serverStatus={{has_hunter_key:true,hunter_enabled:false}}/>);
     export const customer=render(<Sidebar tenantName="SpiceCoast" activeView="dashboard" canDiscover={false} leadUsage={{count:0,limit:0}} replyUsage={{count:0,limit:0}}/>);
     export const plans=render(<PlanManager plans={[{id:'standard',name:'Standard',leadLimit:60,replyLimit:30,sendLimit:50,seatLimit:10}]}/>);
     export const subscription=render(<SubscriptionPanel tenant={{id:'spicecoast',subscription:{allowed:true,phase:'active',status:'active',openEnded:true,plan:{id:'standard',name:'Standard'}}}} plans={[]}/>);
     export const platform=render(<PlatformConsole user={{id:'admin',email:'admin@signinn.in',role:'super_admin'}}/>);
     export const crm=render(<LeadsView allLeads={leads} canDraft={false}/>);
+    export const uncapped=render(<DiscoveryView businessType="spice importer" city="Hamburg" country="Germany" count={60} leadLimit={-1} remainingLeads={Infinity}/>);
+    export const unlimitedPlans=render(<PlanManager plans={[{id:'uncapped',name:'Uncapped',leadLimit:-1,replyLimit:30,sendLimit:50,seatLimit:10}]}/>);
     export const discovery=render(<DiscoveryView businessType="spice importer" city="Hamburg" country="Germany" count={60} leadLimit={60} remainingLeads={60}/>);
     export const inbox=render(<InboxView messages={[{id:'m1',sender:'buyer@example.test',subject:'Quote',status:'drafted',source:'webhook',draftReply:'Reply'}]} canSend={false} canDraft={true}/>);
     export const integrations=render(<AdminView currentUser={{id:'admin',email:'admin@signinn.in',role:'super_admin'}} activeTab="integrations" showHeader={false} showNavigation={false}/>);
@@ -48,10 +56,11 @@ test('React component render smoke checks cover 60-result controls, paginated ro
     exports: module.exports,
     require: createRequire(import.meta.url),
     console,
-    window: {matchMedia:()=>({matches:false})},
+    window: {location:{origin:'http://localhost:5100'},matchMedia:()=>({matches:false})},
     URL
   });
   const {
+    published, evidence, health, uncapped, unlimitedPlans,
     platform,
     customer,
     plans,
@@ -63,6 +72,14 @@ test('React component render smoke checks cover 60-result controls, paginated ro
     integrations,
     modal
   } = module.exports;
+  assert.doesNotMatch(uncapped,/Infinity|NaN/);
+  assert.match(unlimitedPlans,/>Unlimited</);
+  assert.match(published,/Published emails|Unverified/);
+  assert.doesNotMatch(published,/Verify email/);
+  assert.match(evidence,/View source page/);
+  assert.match(evidence,/Publication does not confirm mailbox delivery/);
+  assert.match(health,/Website discovery still works without Hunter/);
+  assert.doesNotMatch(health,/falls back to simulation/);
   assert.doesNotMatch(customer,/Administration|Tenant access|Prospector|NaN|Infinity/);
   assert.match(plans,/Save plan/);
   assert.match(subscription,/No expiry is configured/);

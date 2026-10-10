@@ -5,7 +5,7 @@ const emptyUser = {
   name: '',
   email: '',
   role: 'company_admin',
-  dailyLeadLimit: 60
+  dailyLeadLimit: -1
 };
 export default function AdminView({
   currentUser,
@@ -122,7 +122,7 @@ export default function AdminView({
               ...form,
               role: e.target.value
             })}>{roles.map(r => <option key={r} value={r}>{r.replaceAll('_', ' ')}</option>)}</select></label>
-        <label>Daily discoveries<input className="lf-input" disabled={busy || loading} type="number" min={0} max={10000} required value={form.dailyLeadLimit} onChange={e => setForm({
+        <label>Daily discoveries (-1 unlimited)<input className="lf-input" disabled={busy || loading} type="number" min={-1} max={10000} required value={form.dailyLeadLimit} onChange={e => setForm({
               ...form,
               dailyLeadLimit: Number(e.target.value)
             })} /></label>
@@ -150,7 +150,7 @@ export default function AdminView({
       }}><div className="lf-admin-form">{settings.fields.map(f => <label key={f.key}>{f.label}{f.secret && <span className="lf-section-subtitle"> — {f.configured ? 'configured' : 'missing'}</span>}{f.boolean ? <select disabled={busy || loading} className="lf-select" value={String(patch[f.key] ?? f.value)} onChange={e => setPatch({
               ...patch,
               [f.key]: e.target.value === 'true'
-            })}><option value="true">Yes</option><option value="false">No (STARTTLS)</option></select> : <input disabled={busy || loading} className="lf-input" type={f.secret ? 'password' : f.number ? 'number' : 'text'} autoComplete="off" min={f.min} max={f.max} value={patch[f.key] ?? (f.secret ? '' : f.value ?? '')} placeholder={f.secret ? 'Enter a replacement key' : ''} onChange={e => setPatch(prev => {
+            })}><option value="true">{f.key === 'HUNTER_ENABLED' ? 'Enabled (uses credits)' : 'Yes'}</option><option value="false">{f.key === 'SMTP_SECURE' ? 'No (STARTTLS)' : 'Disabled'}</option></select> : <input disabled={busy || loading} className="lf-input" type={f.secret ? 'password' : f.number ? 'number' : 'text'} autoComplete="off" min={f.min} max={f.max} value={patch[f.key] ?? (f.secret ? '' : f.value ?? '')} placeholder={f.secret ? 'Enter a replacement key' : ''} onChange={e => setPatch(prev => {
               const next = {
                 ...prev
               };
@@ -212,7 +212,7 @@ function UserRow({
     setLimit(user.dailyLeadLimit);
     setActive(user.active);
   }, [user.role, user.dailyLeadLimit, user.active]);
-  return <tr><td>{user.name}<br />{user.email}{user.id === currentId && ' (you)'}</td><td><select aria-label={'Role for ' + user.email} className="lf-select" value={role} disabled={busy || user.id === currentId} onChange={e => setRole(e.target.value)}>{roles.map(r => <option key={r} value={r}>{r}</option>)}</select></td><td><input aria-label={'Daily limit for ' + user.email} className="lf-input lf-small-input" type="number" min={0} max={10000} value={limit} disabled={busy} onChange={e => setLimit(Number(e.target.value))} /> / {user.usedToday}</td><td><label><input type="checkbox" checked={active} disabled={busy || user.id === currentId} onChange={e => setActive(e.target.checked)} /> Enabled</label><br />{user.activated ? 'Activated' : 'Awaiting activation'}</td><td><div className="lf-admin-actions"><button className="lf-btn-secondary sm" disabled={busy || role === user.role && limit === user.dailyLeadLimit && active === user.active} onClick={() => onSave({
+  return <tr><td>{user.name}<br />{user.email}{user.id === currentId && ' (you)'}</td><td><select aria-label={'Role for ' + user.email} className="lf-select" value={role} disabled={busy || user.id === currentId} onChange={e => setRole(e.target.value)}>{roles.map(r => <option key={r} value={r}>{r}</option>)}</select></td><td><input aria-label={'Daily discovery limit for ' + user.email + ' (-1 unlimited)'} className="lf-input lf-small-input" type="number" min={0} max={10000} value={limit} disabled={busy} onChange={e => setLimit(Number(e.target.value))} /> / {user.usedToday}</td><td><label><input type="checkbox" checked={active} disabled={busy || user.id === currentId} onChange={e => setActive(e.target.checked)} /> Enabled</label><br />{user.activated ? 'Activated' : 'Awaiting activation'}</td><td><div className="lf-admin-actions"><button className="lf-btn-secondary sm" disabled={busy || role === user.role && limit === user.dailyLeadLimit && active === user.active} onClick={() => onSave({
           role,
           dailyLeadLimit: limit,
           active

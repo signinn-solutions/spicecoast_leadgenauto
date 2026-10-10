@@ -118,8 +118,8 @@ export default function LeadDetailDrawer({
                 {lead.email && <button type="button" className="lf-btn-icon-xs" onClick={() => handleCopy(lead.email, "email")} title="Copy email">
                     {copiedKey === "email" ? <Check size={12} className="text-emerald" /> : <Copy size={12} />}
                   </button>}
-                {lead.emailStatus && <span className={`lf-badge-pill sm ${hasDeliverableEmail ? "green" : lead.emailStatus === "risky" ? "gold" : "red"}`}>
-                    {lead.emailStatus}
+                {lead.emailStatus && <span className={`lf-badge-pill sm ${hasDeliverableEmail ? "green" : ["risky", "unknown"].includes(lead.emailStatus) ? "gold" : "red"}`}>
+                    {lead.emailStatus === "unknown" ? "Unverified" : lead.emailStatus}
                   </span>}
               </div>
             </div>
@@ -138,6 +138,12 @@ export default function LeadDetailDrawer({
             </div>
           </div>
 
+          {lead.emailDiscovery && <section className="lf-panel" style={{padding:16, marginBottom:16}}>
+            <h3 className="lf-panel-title">Email evidence</h3>
+            <p className="lf-panel-desc">{lead.emailDiscovery.source === 'website' ? 'Published on the business website. Publication does not confirm mailbox delivery.' : 'Found by Hunter. Check the verification status before outreach.'}</p>
+            {safeUrl(lead.emailDiscovery.sourceUrl) && <a className="lf-web-link" href={safeUrl(lead.emailDiscovery.sourceUrl)} target="_blank" rel="noreferrer">View source page <ExternalLink size={12}/></a>}
+            {lead.emailCandidates?.length > 1 && <details><summary>Other discovered addresses ({lead.emailCandidates.length-1})</summary>{lead.emailCandidates.filter(item=>item.value !== lead.email).map(item=><p key={item.value} className="lf-mono">{item.value} {safeUrl(item.sourceUrl) && <a href={safeUrl(item.sourceUrl)} target="_blank" rel="noreferrer">Source</a>}</p>)}</details>}
+          </section>}
           {/* AI Cold Pitch Studio Box */}
           <div className="lf-drawer-pitch-box">
             <div className="lf-pitch-box-header">

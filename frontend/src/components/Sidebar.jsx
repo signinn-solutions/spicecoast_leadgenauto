@@ -16,7 +16,7 @@ export default function Sidebar({
   serverOnline = true,
   leadUsage = {
     count: 0,
-    limit: 50
+    limit: -1
   },
   replyUsage = {
     count: 0,
@@ -160,7 +160,7 @@ export default function Sidebar({
                 <div className="lf-meter-label">
                   <span>Lead Discovery</span>
                   <span className="lf-mono">
-                    {leadUsage.count}/{leadUsage.limit}
+                    {leadUsage.count} / {leadUsage.limit === -1 ? "No daily cap" : leadUsage.limit}
                   </span>
                 </div>
                 <div className="lf-meter-bar">
@@ -188,7 +188,7 @@ export default function Sidebar({
               <div className="lf-footer-origin">
                 <span>Direct Sourcing &bull; Cochin, India</span>
               </div>
-            </div> : <div className={`lf-collapsed-status ${serverOnline ? "online" : "offline"}`} title={`API: ${serverOnline ? "Online" : "Offline"} | Leads: ${leadUsage.count}/${leadUsage.limit}`}>
+            </div> : <div className={`lf-collapsed-status ${serverOnline ? "online" : "offline"}`} title={`API: ${serverOnline ? "Online" : "Offline"} | Leads: ${leadUsage.count}/${leadUsage.limit === -1 ? "No daily cap" : leadUsage.limit}`}>
               <span className="lf-pulse-dot" />
             </div>}
         </div>

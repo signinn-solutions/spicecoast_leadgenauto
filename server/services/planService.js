@@ -33,7 +33,7 @@ export function savePlan(id, input) {
     ...input
   };
   if (typeof p.name !== 'string' || !p.name.trim() || p.name.length > 100) fail('Enter a plan name up to 100 characters.');
-  for (const key of ['leadLimit', 'replyLimit', 'sendLimit', 'seatLimit']) if (!Number.isInteger(p[key]) || p[key] < (key === 'seatLimit' ? 1 : 0) || p[key] > (key === 'seatLimit' ? 1000 : 10000)) fail('Plan limits must be whole numbers in the allowed range.');
+  for (const key of ['leadLimit', 'replyLimit', 'sendLimit', 'seatLimit']) if (!Number.isInteger(p[key]) || p[key] < (key === 'seatLimit' ? 1 : key === 'leadLimit' ? -1 : 0) || p[key] > (key === 'seatLimit' ? 1000 : 10000)) fail('Plan limits must be whole numbers in the allowed range.');
   const store = db();
   if (id && store.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='users'").get() && store.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='tenants'").get()) {
     const over = store.prepare('SELECT t.name,count(u.id) AS seats FROM tenants t JOIN users u ON u.tenant_id=t.id AND u.active=1 WHERE t.plan_id=? GROUP BY t.id HAVING count(u.id)>?').get(id, p.seatLimit);

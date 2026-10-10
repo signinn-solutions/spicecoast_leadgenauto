@@ -28,30 +28,50 @@ export async function resolvePublicUrl(input, resolver = lookup) {
     address: addresses[0]
   };
 }
-export async function fetchWebsitePage(input, redirects = 0) {
+export async function fetchWebsiteResource(input, options = {}, redirects = 0) {
+  const {
+    signal,
+    allowUrl = () => true
+  } = options;
+  signal?.throwIfAborted();
+  if (!(await allowUrl(new URL(input)))) throw new Error('Website URL is outside crawl policy.');
+  const resolved = resolvePublicUrl(input);
   const {
     url,
     address
-  } = await resolvePublicUrl(input);
+  } = signal ? await new Promise((resolve, reject) => {
+    const aborted = () => reject(signal.reason);
+    signal.addEventListener('abort', aborted, {
+      once: true
+    });
+    resolved.then(resolve, reject).finally(() => signal.removeEventListener('abort', aborted));
+  }) : await resolved;
+  signal?.throwIfAborted();
   const result = await new Promise((resolve, reject) => {
     const client = url.protocol === 'https:' ? https : http;
     const req = client.get(url, {
+      signal,
       headers: {
-        'User-Agent': 'SpiceCoast contact discovery',
-        'Accept': 'text/html,application/xhtml+xml'
+        'User-Agent': 'SigninnContactBot/1.0',
+        Accept: 'text/html,application/xhtml+xml,text/plain'
       },
       lookup: (_host, options, callback) => callback(null, options?.all ? [address] : address.address, address.family)
     }, res => {
-      if ([301, 302, 303, 307, 308].includes(res.statusCode)) {
+      if ([301, 302, 303, 307, 308].includes(res.statusCode) && res.headers.location) {
         res.resume();
         return resolve({
           location: res.headers.location
         });
       }
       const type = res.headers['content-type'] || '';
-      if (res.statusCode !== 200 || !/(text\/html|application\/xhtml)/i.test(type)) {
+      if (res.statusCode !== 200 || !/(text\/html|application\/xhtml|text\/plain)/i.test(type)) {
         res.resume();
-        return resolve(null);
+        return resolve({
+          status: res.statusCode,
+          body: '',
+          url: url.href,
+          type
+        });
       }
       const chunks = [];
       let size = 0;
@@ -65,16 +85,23 @@ export async function fetchWebsitePage(input, redirects = 0) {
       });
       res.on('error', reject);
       res.on('end', () => resolve({
-        html: Buffer.concat(chunks).toString('utf8')
+        status: res.statusCode,
+        body: Buffer.concat(chunks).toString('utf8'),
+        url: url.href,
+        type
       }));
     });
     const timer = setTimeout(() => req.destroy(new Error('Website timed out.')), 5000);
     req.on('close', () => clearTimeout(timer));
     req.on('error', reject);
   });
-  if (result?.location) {
+  if (result.location) {
     if (redirects >= 3) throw new Error('Too many website redirects.');
-    return fetchWebsitePage(new URL(result.location, url).href, redirects + 1);
+    return fetchWebsiteResource(new URL(result.location, url).href, options, redirects + 1);
   }
-  return result?.html || '';
+  return result;
+}
+export async function fetchWebsitePage(input) {
+  const result = await fetchWebsiteResource(input);
+  return /(text\/html|application\/xhtml)/i.test(result.type) ? result.body : '';
 }

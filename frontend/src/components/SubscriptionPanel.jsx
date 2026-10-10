@@ -71,7 +71,7 @@ export default function SubscriptionPanel({
   });
   return <section className="lf-panel lf-admin-section"><div className="lf-section-header"><div><h2>Subscription and access</h2><p>Access: <strong>{subscription.allowed ? 'Enabled' : 'Blocked'}</strong> · {subscription.phase.replace('_', ' ')} · {subscription.plan?.name || 'No plan'}</p></div></div>
  {subscription.reason && <p role="status">{subscription.reason}</p>}{subscription.openEnded && <p className="lf-subscription-warning">No expiry is configured. This is an open-ended manual access grant, not a dated subscription.</p>}
- <div className="lf-platform-plan-summary">{subscription.plan && <span>{subscription.plan.leadLimit} leads/day · {subscription.plan.replyLimit} reply drafts/day · {subscription.plan.sendLimit} sends/day · {subscription.plan.seatLimit} user seats</span>}</div>
+ <div className="lf-platform-plan-summary">{subscription.plan && <span>{subscription.plan.leadLimit === -1 ? 'Unlimited daily discovery' : subscription.plan.leadLimit + ' leads/day'} · {subscription.plan.replyLimit} reply drafts/day · {subscription.plan.sendLimit} sends/day · {subscription.plan.seatLimit} user seats</span>}</div>
  <p>Signinn records payment externally, then activates or renews access here. No automatic payment collection.</p>{error && <p role="alert">{error}</p>}
  <form className="lf-admin-form" onSubmit={e => {
       e.preventDefault();

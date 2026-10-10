@@ -18,8 +18,7 @@ export default function DiscoveryView({
   setCount,
   searching,
   onSearch,
-  leadLimit = 50,
-  remainingLeads = 50,
+  remainingLeads = Infinity,
   lastSearchInfo,
   onViewResults
 }) {
@@ -49,12 +48,8 @@ export default function DiscoveryView({
         <div>
           <h2 className="lf-section-title">Lead Discovery & Prospecting Engine</h2>
           <p className="lf-section-subtitle">
-            Search live business listings with Google Places and find and verify email addresses with Hunter.io.
+            Find businesses with Google Places, then discover published emails on their websites. Hunter verification is optional.
           </p>
-        </div>
-        <div className="lf-quota-badge-top">
-          <span className="lf-quota-badge-label">Remaining Daily Quota:</span>
-          <span className="lf-quota-badge-val lf-mono">{remainingLeads} / {leadLimit}</span>
         </div>
       </div>
 
@@ -154,7 +149,7 @@ export default function DiscoveryView({
             </div>
           </div>
 
-          <p className="lf-section-subtitle">Up to 60 business listings across three Google pages. Duplicates, available matches and quotas may reduce results. Email addresses are not guaranteed.</p>
+          <p className="lf-section-subtitle">Google returns up to 60 business listings per query across three pages. Run different searches to discover more. Duplicates, available matches and quotas may reduce results. Email addresses are not guaranteed.</p>
           <label><input type="checkbox" checked={autoDraft} onChange={e => setAutoDraft?.(e.target.checked)} disabled={searching || !canDiscover} /> Prepare outreach drafts during discovery (slower)</label>
           {/* Action Row */}
           <div className="lf-form-action-row">
@@ -183,7 +178,7 @@ export default function DiscoveryView({
               </div>
               <div className="lf-radar-step active">
                 <span className="lf-radar-dot pulse" />
-                <span>Querying Google Places and Hunter.io APIs</span>
+                <span>Searching businesses and checking their websites</span>
               </div>
               <div className="lf-radar-step active">
                 <span className="lf-radar-dot pulse" />

@@ -16,7 +16,7 @@ import { dispatchFollowUpEmail, runLifecycleCheck } from '../services/followUpEn
 import { resolvePublicUrl, isPublicAddress } from '../services/websiteService.js';
 import { startSearchJob, getSearchJob } from '../services/searchJobService.js';
 let dir, original, realFetch, server;
-const keys = ['DB_PATH', 'DAILY_USAGE_FILE', 'REPLY_USAGE_FILE', 'LEADS_HISTORY_FILE', 'SEEN_PLACES_FILE', 'MAILBOX_HISTORY_FILE', 'OUTREACH_HISTORY_FILE', 'GOOGLE_API_KEY', 'HUNTER_API_KEY', 'DEEPSEEK_API_KEY', 'HOSTINGER_API_TOKEN', 'HOSTINGER_MAILBOX_ID', 'HOSTINGER_SEND_ENDPOINT_OVERRIDE', 'HOSTINGER_WEBHOOK_BEARER_TOKEN', 'SETTINGS_ENCRYPTION_KEY', 'DAILY_LEAD_LIMIT', 'DAILY_REPLY_LIMIT', 'DAILY_SEND_LIMIT', 'NODE_ENV', 'ADMIN_EMAIL', 'ADMIN_PASSWORD_HASH', 'SMTP_HOST', 'SMTP_USER', 'SMTP_PASS', 'SENDER_MAILBOX'];
+const keys = ['DB_PATH', 'DAILY_USAGE_FILE', 'REPLY_USAGE_FILE', 'LEADS_HISTORY_FILE', 'SEEN_PLACES_FILE', 'MAILBOX_HISTORY_FILE', 'OUTREACH_HISTORY_FILE', 'GOOGLE_API_KEY', 'HUNTER_API_KEY', 'HUNTER_ENABLED', 'DEEPSEEK_API_KEY', 'HOSTINGER_API_TOKEN', 'HOSTINGER_MAILBOX_ID', 'HOSTINGER_SEND_ENDPOINT_OVERRIDE', 'HOSTINGER_WEBHOOK_BEARER_TOKEN', 'SETTINGS_ENCRYPTION_KEY', 'DAILY_LEAD_LIMIT', 'DAILY_REPLY_LIMIT', 'DAILY_SEND_LIMIT', 'NODE_ENV', 'ADMIN_EMAIL', 'ADMIN_PASSWORD_HASH', 'SMTP_HOST', 'SMTP_USER', 'SMTP_PASS', 'SENDER_MAILBOX'];
 beforeEach(() => {
   dir = fs.mkdtempSync(path.join(os.tmpdir(), 'spicecoast-production-'));
   original = Object.fromEntries(keys.map(k => [k, config[k]]));
@@ -26,6 +26,7 @@ beforeEach(() => {
   Object.assign(config, {
     GOOGLE_API_KEY: 'google-test',
     HUNTER_API_KEY: 'hunter-test',
+    HUNTER_ENABLED: true,
     DEEPSEEK_API_KEY: '',
     HOSTINGER_API_TOKEN: 'hostinger-test',
     HOSTINGER_MAILBOX_ID: 'test-mailbox',
@@ -373,7 +374,7 @@ test('encrypted provider settings never return secrets and refresh after reload'
   assert.equal(config.HUNTER_API_KEY, 'private-new-hunter-key');
   assert.equal(config.DAILY_LEAD_LIMIT, 70);
   await assert.rejects(saveProviderSettings({
-    DAILY_LEAD_LIMIT: -1
+    DAILY_LEAD_LIMIT: -2
   }, 'admin'), {
     statusCode: 400
   });
@@ -779,4 +780,83 @@ test('negative replies do not become hot prospects and inbound inquiries do not 
   assert.equal(lifecycle.analytics.totalSentThisWeek, 0);
   assert.equal(lifecycle.analytics.totalContacted, 0);
   assert.equal(lifecycle.analytics.replyRatePercent, 0);
+});
+
+test('live discovery works with Hunter disabled and published emails stay unverified', async()=>{
+  const {crawlWebsiteContacts}=await import('../services/contactCrawlerService.js');
+  config.HUNTER_ENABLED=false;config.HUNTER_API_KEY='';
+  const site='https://spices.test/';
+  await crawlWebsiteContacts(site,{maxPages:1,delayMs:0,fetchResource:async url=>({status:url.endsWith('/robots.txt')?404:200,body:'sales@spices.test',url,type:'text/html'})});
+  const calls=[];globalThis.fetch=async(url)=>{calls.push(url);assert.match(url,/places:searchText/);return response({places:[{...place(999),websiteUri:site}]});};
+  const found=await executeLeadSearch({...options,requestedCount:1,autoDraft:true});
+  assert.equal(found.count,1);assert.equal(found.leads[0].email,'sales@spices.test');assert.equal(found.leads[0].emailStatus,'unknown');assert.equal(found.leads[0].emailVerification,null);assert.equal(found.leads[0].emailDiscovery.sourceUrl,site);assert.equal(loadOutreachHistory().length,0);assert.equal(calls.length,1);
+});
+test('a stored Hunter key never makes calls while the tenant switch is disabled',async()=>{
+  const {findEmails,verifyEmail}=await import('../services/leadFinderService.js');config.HUNTER_ENABLED=false;let count=0;globalThis.fetch=async()=>{count++;throw new Error('Disabled Hunter must not be called');};assert.deepEqual(await findEmails('spices.test'),[]);assert.equal(await verifyEmail('sales@spices.test'),'unknown');assert.equal(count,0);
+});
+
+test('scraper-first discovery avoids Hunter search and uses enabled verification only',async()=>{
+  const {crawlWebsiteContacts}=await import('../services/contactCrawlerService.js');
+  const site='https://spices.test/';
+  await crawlWebsiteContacts(site,{maxPages:1,delayMs:0,fetchResource:async url=>({status:url.endsWith('/robots.txt')?404:200,body:'sales@spices.test',url,type:'text/html'})});
+  const calls=[];globalThis.fetch=async url=>{calls.push(url);if(url.includes('places:searchText'))return response({places:[{...place(998),websiteUri:site}]});assert.match(url,/email-verifier/);return response({data:{status:'valid'}});};
+  const result=await executeLeadSearch({...options,requestedCount:1});assert.equal(result.leads[0].emailStatus,'deliverable');assert.equal(result.leads[0].emailVerification.provider,'hunter');assert.equal(calls.length,2);assert.ok(!calls.some(url=>url.includes('domain-search')));
+});
+test('enabled Hunter fallback finds contacts when the cached website has none',async()=>{
+  const {crawlWebsiteContacts}=await import('../services/contactCrawlerService.js');const site='https://spices.test/';
+  await crawlWebsiteContacts(site,{maxPages:1,delayMs:0,fetchResource:async url=>({status:url.endsWith('/robots.txt')?404:200,body:'No published contact',url,type:'text/html'})});
+  const calls=[];globalThis.fetch=async url=>{calls.push(url);if(url.includes('places:searchText'))return response({places:[{...place(997),websiteUri:site}]});if(url.includes('domain-search'))return response({data:{emails:[{value:'sales@spices.test'}]}});return response({data:{status:'valid'}});};
+  const result=await executeLeadSearch({...options,requestedCount:1});assert.equal(result.leads[0].emailDiscovery.source,'hunter');assert.equal(result.leads[0].emailStatus,'deliverable');assert.equal(calls.length,3);assert.match(calls[1],/limit=3/);
+});
+test('credit exhaustion pauses Hunter but retains website discovery and unknown verification',async()=>{
+  const {findEmails,verifyEmail}=await import('../services/leadFinderService.js');let calls=0;globalThis.fetch=async()=>{calls++;return {ok:false,status:402};};assert.deepEqual(await findEmails('spices.test'),[]);assert.equal(await verifyEmail('sales@spices.test'),'unknown');assert.equal(calls,1);assert.equal((await scrapeEmailsFromWebsite('https://spices.test/','spices.test',{fetchPage:async()=>'<a href="mailto:sales@spices.test">Sales</a>'}))[0].value,'sales@spices.test');
+});
+test('unverified published leads cannot generate or send cold outreach',async()=>{
+  saveLeadsHistory({leads:[{id:'public-contact',source:'live',email:'sales@spices.test',emailStatus:'unknown',emailDiscovery:{source:'website',sourceUrl:'https://spices.test/'}}],searches:[]});
+  const {generateLeadColdMail}=await import('../controllers/leadController.js');const {sendColdMail}=await import('../controllers/mailboxController.js');
+  const req={body:{leadId:'public-contact',email:'sales@spices.test',recipient:'sales@spices.test',subject:'Offer',body:'Body'}};
+  const res={status(code){this.code=code;return this;},json(value){this.body=value;return this;}};
+  await generateLeadColdMail(req,res,error=>{throw error;});assert.equal(res.code,400);
+  saveOutreachHistory([{id:'outreach-public',leadId:'public-contact',source:'live',recipient:'sales@spices.test',status:'pending_review',subject:'Offer',body:'Body'}]);
+  req.body={id:'outreach-public',to:'sales@spices.test',subject:'Offer',body:'Body'};
+  await sendColdMail(req,res,error=>{throw error;});assert.equal(res.code,400);assert.match(res.body.error,/verified live lead/);
+});
+
+test('uncapped workspace and account discovery continues past 60 daily leads and tracks usage',async()=>{
+  config.DAILY_LEAD_LIMIT=-1;
+  const actor=await account('company_admin');updateUser(actor.id,{dailyLeadLimit:-1},'platform');const fresh=publicUser(findUser(actor.id));
+  saveDailyUsage(getTodayDateString(),120);
+  getDatabase().prepare('INSERT INTO user_usage(user_id,date,count) VALUES(?,?,?)').run(fresh.id,getTodayDateString(),120);
+  globalThis.fetch=async()=>response({places:[place(1500),place(1501)]});
+  const result=await executeLeadSearch({...options,requestedCount:2,actor:fresh});
+  assert.equal(result.count,2);assert.equal(loadDailyUsage().count,122);assert.equal(userUsage(fresh.id),122);assert.equal(result.usage.unlimited,true);assert.equal(result.usage.remaining,null);assert.equal(result.usage.limit,-1);
+});
+test('an explicit account cap still restricts an uncapped workspace',async()=>{
+  config.DAILY_LEAD_LIMIT=-1;const actor=await account('company_admin');updateUser(actor.id,{dailyLeadLimit:1},'platform');
+  globalThis.fetch=async()=>response({places:[place(1600),place(1601)]});
+  const result=await executeLeadSearch({...options,requestedCount:2,actor:publicUser(findUser(actor.id))});assert.equal(result.count,1);assert.equal(result.effectiveCount,1);
+  await assert.rejects(executeLeadSearch({...options,requestedCount:1,actor:publicUser(findUser(actor.id))}),{statusCode:429});
+});
+test('an explicit workspace cap still restricts an uncapped account',async()=>{
+  config.DAILY_LEAD_LIMIT=1;const actor=await account('company_admin');updateUser(actor.id,{dailyLeadLimit:-1},'platform');
+  globalThis.fetch=async()=>response({places:[place(1700),place(1701)]});
+  const result=await executeLeadSearch({...options,requestedCount:2,actor:publicUser(findUser(actor.id))});assert.equal(result.count,1);assert.equal(result.usage.remaining,0);
+});
+
+test('Signinn plans accept unlimited discovery but reject unlimited mail quotas',async()=>{
+  const {listPlans,savePlan}=await import('../services/planService.js');const id=listPlans()[0].id;
+  const changed=savePlan(id,{leadLimit:-1});assert.equal(changed.leadLimit,-1);assert.equal(changed.replyLimit,30);assert.equal(changed.sendLimit,50);
+  assert.throws(()=>savePlan(id,{leadLimit:-2}),{statusCode:400});assert.throws(()=>savePlan(id,{sendLimit:-1}),{statusCode:400});assert.throws(()=>savePlan(id,{replyLimit:-1}),{statusCode:400});
+});
+
+test('Google connection failures explain the network cause without consuming discovery quota',async()=>{
+  for(const [error,pattern] of [
+    [Object.assign(new TypeError('fetch failed'),{cause:{code:'EACCES'}}),/denied outbound HTTPS/],
+    [Object.assign(new TypeError('fetch failed'),{cause:{code:'ENOTFOUND'}}),/could not resolve/],
+    [new DOMException('timeout','TimeoutError'),/connection timed out/]
+  ]) {
+    globalThis.fetch=async()=>{throw error;};
+    await assert.rejects(executeLeadSearch({...options,requestedCount:15}),err=>err.statusCode===502 && pattern.test(err.message));
+    assert.equal(loadDailyUsage().count,0);assert.equal(loadLeadsHistory().leads.length,0);
+  }
 });
