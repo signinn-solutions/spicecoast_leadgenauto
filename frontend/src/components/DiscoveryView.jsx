@@ -35,18 +35,20 @@ export default function DiscoveryView({
   onViewResults,
 }) {
   const nichePresets = [
-    "Spice Importer & Wholesaler",
-    "Food & Commodity Broker",
-    "Gourmet Specialty Retailer",
-    "HoReCa Foodservice Distributor",
-    "Seasoning & Blending Plant",
-    "Ethnic Supermarket Chain",
+    "Cardamom & Black Pepper Importer",
+    "Turmeric & Ginger Distributor",
+    "Vanilla & Clove Commodity Broker",
+    "Spice Seasoning & Blending Plant",
+    "Ethnic Supermarket Spice Supplier",
+    "HoReCa Culinary Spice Supplier",
+    "Organic Bulk Herb & Spice Packer",
   ];
 
   const cityPresets = [
     { city: "Hamburg", country: "Germany" },
     { city: "Rotterdam", country: "Netherlands" },
     { city: "Dubai", country: "UAE" },
+    { city: "Marseille", country: "France" },
     { city: "London", country: "United Kingdom" },
     { city: "New York", country: "United States" },
     { city: "Singapore", country: "Singapore" },

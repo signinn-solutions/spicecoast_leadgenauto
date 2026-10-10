@@ -62,12 +62,12 @@ export default function DashboardView({
 
   // Preset quick searches for one-click discovery
   const quickPicks = [
-    { niche: "Spice Importer", city: "Hamburg", country: "Germany", icon: "🇩🇪" },
-    { niche: "Food Distributor", city: "Rotterdam", country: "Netherlands", icon: "🇳🇱" },
-    { niche: "Gourmet Foods Broker", city: "Dubai", country: "UAE", icon: "🇦🇪" },
-    { niche: "Specialty Spice Wholesaler", city: "London", country: "UK", icon: "🇬🇧" },
-    { niche: "Organic Commodities", city: "New York", country: "USA", icon: "🇺🇸" },
-    { niche: "Ethnic Food Importers", city: "Toronto", country: "Canada", icon: "🇨🇦" },
+    { niche: "Cardamom & Black Pepper Importers", city: "Hamburg", country: "Germany", icon: "🇩🇪" },
+    { niche: "Turmeric & Ginger Wholesale Distributors", city: "Rotterdam", country: "Netherlands", icon: "🇳🇱" },
+    { niche: "Vanilla & Clove Commodity Brokers", city: "Dubai", country: "UAE", icon: "🇦🇪" },
+    { niche: "Spice Seasoning & Blending Packers", city: "London", country: "United Kingdom", icon: "🇬🇧" },
+    { niche: "Organic Bulk Herb & Spice Importers", city: "New York", country: "United States", icon: "🇺🇸" },
+    { niche: "HoReCa Culinary Spice Suppliers", city: "Marseille", country: "France", icon: "🇫🇷" },
   ];
 
   return (

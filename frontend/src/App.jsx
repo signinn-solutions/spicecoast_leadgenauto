@@ -92,6 +92,10 @@ export default function LeadFinderApp({ onLogout }) {
         setServerStatus(statusData);
         setLeadUsage({ date: statusData.date, count: statusData.count, limit: statusData.limit });
         setAllLeads(leadsData.all_leads || []);
+        if (selectedLead) {
+          const freshSelected = (leadsData.all_leads || []).find((l) => l.id === selectedLead.id);
+          if (freshSelected) setSelectedLead(freshSelected);
+        }
         setSearchHistory(leadsData.search_history || []);
         setMailboxStatus(mailboxData);
         setMailboxMessages(messagesData.messages || []);
@@ -193,13 +197,15 @@ export default function LeadFinderApp({ onLogout }) {
           mode: data.mode,
         });
 
-        // Accurate success notice (fixed copy-paste bug from legacy code!)
+        // Accurate success notice with auto-navigation
         setNotice({
           type: "success",
           title: "Discovery Complete",
-          text: `Harvested ${leads.length} new unique lead(s) for ${city}, ${country}.`,
+          text: `Harvested ${leads.length} new unique lead(s) for ${city}, ${country}. Directing to Prospects view.`,
         });
 
+        // Auto-navigate user to Discovered Prospects view
+        setActiveView("results");
         fetchAllData(true);
       } else {
         const err = await response.json().catch(() => ({}));
@@ -217,7 +223,7 @@ export default function LeadFinderApp({ onLogout }) {
   };
 
   // 1-Click Preset Discovery Launcher
-  const handleQuickSearch = (niche, qCity, qCountry) => {
+  const handleQuickSearch = (niche, qCity, qCountry, autoRun = false) => {
     setBusinessType(niche);
     setCity(qCity);
     setCountry(qCountry);
@@ -281,10 +287,12 @@ export default function LeadFinderApp({ onLogout }) {
 
         setNotice({
           type: "success",
-          title: "Draft Prepared",
-          text: `Outreach draft prepared for ${lead.name}. Review it before sending.`,
+          title: "Pitch Prepared",
+          text: `Outreach draft prepared for ${lead.name}. Directing to Campaigns to review.`,
         });
 
+        // Auto-navigate to Outreach Campaigns tab to review pitch
+        setActiveView("outreach");
         fetchAllData(true);
       } else {
         const err = await res.json().catch(() => ({}));
