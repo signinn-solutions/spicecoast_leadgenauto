@@ -885,10 +885,7 @@ export default function LeadFinderApp({
           {(serverStatus.subscription || user?.tenant?.subscription) && <div className="lf-company-status" role="status">{(serverStatus.subscription || user.tenant.subscription).plan?.name} · {(serverStatus.subscription || user.tenant.subscription).phase} · {(serverStatus.subscription || user.tenant.subscription).endsAt ? "Access ends " + new Date((serverStatus.subscription || user.tenant.subscription).endsAt).toLocaleDateString("en-IN",{timeZone:"Asia/Kolkata"}) : "No expiry configured"} · Subscription managed by Signinn</div>}
           {activeView === "dashboard" && <DashboardView canDiscover={can("discover")} allLeads={allLeads} outreachList={outreachList} mailboxMessages={mailboxMessages} searchHistory={searchHistory} leadUsage={leadUsage} onNavigate={setActiveView} onSelectLead={setSelectedLead} onQuickSearch={handleQuickSearch} />}
 
-          {activeView === "search" && <DiscoveryView jobs={discoveryJobs} onRestoreBatch={job => {
-          setCurrentResults(job.result?.leads || []);
-          setActiveView("results");
-        }} canDiscover={can("discover")} autoDraft={autoDraft} setAutoDraft={setAutoDraft} searchProgress={searchProgress} businessType={businessType} setBusinessType={setBusinessType} city={city} setCity={setCity} country={country} setCountry={setCountry} count={count} setCount={setCount} searching={searching} onSearch={handleSearch} remainingLeads={remainingLeads} lastSearchInfo={lastSearchInfo} onViewResults={() => setActiveView("results")} />}
+          {activeView === "search" && <DiscoveryView canDiscover={can("discover")} autoDraft={autoDraft} setAutoDraft={setAutoDraft} searchProgress={searchProgress} businessType={businessType} setBusinessType={setBusinessType} city={city} setCity={setCity} country={country} setCountry={setCountry} count={count} setCount={setCount} searching={searching} onSearch={handleSearch} remainingLeads={remainingLeads} lastSearchInfo={lastSearchInfo} onViewResults={() => setActiveView("results")} />}
 
           {activeView === "results" && <LeadsView canDraft={can("draft")} allLeads={allLeads} currentResults={currentResults} onSelectLead={setSelectedLead} onVerifyEmail={serverStatus.hunter_enabled ? handleVerifyEmail : undefined} onGeneratePitch={handleGeneratePitch} generatingDraftId={generatingDraftId} onExportCSV={handleExportCSV} onSendToOutreach={handleSendToOutreach} />}
 
@@ -906,7 +903,10 @@ export default function LeadFinderApp({
 
           {activeView === "analytics" && <AnalyticsView canDiscover={can("discover")} allLeads={allLeads} outreachList={outreachList} mailboxMessages={mailboxMessages} searchHistory={searchHistory} onRerunSearch={handleRerunSearch} />}
 
-          {activeView === "health" && <SystemHealthView webhookPath={user?.tenant?.webhookPath || "/webhook"} serverStatus={serverStatus} mailboxStatus={mailboxStatus} allLeads={allLeads} outreachList={outreachList} mailboxMessages={mailboxMessages} onCopyWebhook={handleCopyWebhook} />}
+          {activeView === "health" && <SystemHealthView jobs={discoveryJobs} onRestoreBatch={job => {
+          setCurrentResults(job.result?.leads || []);
+          setActiveView("results");
+        }} webhookPath={user?.tenant?.webhookPath || "/webhook"} serverStatus={serverStatus} mailboxStatus={mailboxStatus} allLeads={allLeads} outreachList={outreachList} mailboxMessages={mailboxMessages} onCopyWebhook={handleCopyWebhook} />}
         </main>
       </div>
 

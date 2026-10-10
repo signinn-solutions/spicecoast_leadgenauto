@@ -25,7 +25,7 @@ test('React component render smoke checks cover 60-result controls, paginated ro
     const publicLead={id:'public',name:'Public contact',source:'live',email:'sales@spices.test',emailStatus:'unknown',emailDiscovery:{source:'website',sourceUrl:'https://spices.test/contact'},emailCandidates:[{value:'sales@spices.test'}]};
     export const published=render(<LeadsView allLeads={[publicLead]} canDraft={true}/>);
     export const evidence=render(<LeadDetailDrawer lead={publicLead} canDraft={true}/>);
-    export const health=render(<SystemHealthView serverStatus={{has_hunter_key:true,hunter_enabled:false}}/>);
+    export const health=render(<SystemHealthView serverStatus={{has_hunter_key:true,hunter_enabled:false}} jobs={[{id:"failed",status:"failed",progress:{query:"Spice distributor in Hamburg"},error:"Google connection timed out"},{id:"done",status:"complete",result:{count:15,leads:[]}}]}/>);
     export const customer=render(<Sidebar tenantName="SpiceCoast" activeView="dashboard" canDiscover={false} leadUsage={{count:0,limit:0}} replyUsage={{count:0,limit:0}}/>);
     export const plans=render(<PlanManager plans={[{id:'standard',name:'Standard',leadLimit:60,replyLimit:30,sendLimit:50,seatLimit:10}]}/>);
     export const subscription=render(<SubscriptionPanel tenant={{id:'spicecoast',subscription:{allowed:true,phase:'active',status:'active',openEnded:true,plan:{id:'standard',name:'Standard'}}}} plans={[]}/>);
@@ -80,6 +80,12 @@ test('React component render smoke checks cover 60-result controls, paginated ro
   assert.match(evidence,/Publication does not confirm mailbox delivery/);
   assert.match(health,/Website discovery still works without Hunter/);
   assert.doesNotMatch(health,/falls back to simulation/);
+  assert.match(health,/Recent discovery jobs/);
+  assert.match(health,/Spice distributor in Hamburg/);
+  assert.match(health,/Google connection timed out/);
+  assert.match(health,/15 saved/);
+  assert.match(health,/View batch/);
+  assert.doesNotMatch(discovery,/Recent discovery jobs/);
   assert.doesNotMatch(customer,/Administration|Tenant access|Prospector|NaN|Infinity/);
   assert.match(plans,/Save plan/);
   assert.match(subscription,/No expiry is configured/);

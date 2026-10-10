@@ -16,6 +16,8 @@ import {
 } from "lucide-react";
 
 export default function SystemHealthView({
+  jobs = [],
+  onRestoreBatch,
   webhookPath = "/webhook",
   serverStatus = {},
   mailboxStatus = {},
@@ -120,6 +122,24 @@ export default function SystemHealthView({
           </div>
         ))}
       </div>
+
+      <section className="lf-panel" style={{ marginTop: 24 }}>
+        <div className="lf-panel-header">
+          <div>
+            <h3 className="lf-panel-title">Recent discovery jobs</h3>
+            <p className="lf-panel-desc">Running batches continue if you reload the dashboard. Completed results remain available.</p>
+          </div>
+        </div>
+        {jobs.length === 0 ? <p className="lf-panel-desc">No discovery jobs yet.</p> : jobs.map(job => (
+          <div key={job.id} style={{ padding: '12px 0', borderTop: '1px solid var(--border-card)', overflowWrap: 'anywhere' }}>
+            <div className="lf-admin-actions">
+              <span>{job.progress?.query || 'Discovery batch'} · {job.status} · {job.result?.count ?? job.progress?.processed ?? 0} saved</span>
+              {job.status === 'complete' && <button type="button" className="lf-btn-secondary sm" onClick={() => onRestoreBatch?.(job)}>View batch</button>}
+            </div>
+            {job.error && <p className="lf-panel-desc" style={{ marginTop: 8 }}>{job.error}</p>}
+          </div>
+        ))}
+      </section>
 
       {/* Database & Storage Stats */}
       <div className="lf-dashboard-grid-2" style={{ marginTop: 24 }}>

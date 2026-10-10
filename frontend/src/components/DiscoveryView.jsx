@@ -2,8 +2,6 @@ import React, { useState } from "react";
 import { Search, Sparkles, Globe, MapPin, Tag, Database, Loader2, CheckCircle2, AlertCircle, Zap, Sliders, Building2, ArrowRight, ShieldCheck } from "lucide-react";
 import { SPICE_PRESET_CATEGORIES } from "../constants/spicePresets";
 export default function DiscoveryView({
-  jobs = [],
-  onRestoreBatch,
   canDiscover = true,
   autoDraft = false,
   setAutoDraft,
@@ -74,7 +72,6 @@ export default function DiscoveryView({
           </button>
         </div>}
 
-      {jobs.length > 0 && <section className="lf-panel lf-admin-section"><h3>Recent discovery jobs</h3><p>Running batches continue if you reload the dashboard. Completed results remain available.</p>{jobs.map(job => <div className="lf-admin-actions" key={job.id}><span>{job.progress?.query || 'Discovery batch'} · {job.status} · {job.result?.count ?? job.progress?.processed ?? 0} saved</span>{job.status === 'complete' && <button className="lf-btn-secondary sm" onClick={() => onRestoreBatch?.(job)}>View batch</button>}{job.error && <span>{job.error}</span>}</div>)}</section>}
       {/* Search Builder Card */}
       <div className="lf-panel lf-search-panel">
         <form onSubmit={onSearch}>
