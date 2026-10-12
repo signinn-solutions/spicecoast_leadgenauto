@@ -1,28 +1,28 @@
-# Production readiness audit — 12 October 2026
+# Hostinger production readiness ? 12 October 2026
 
-Verdict: not ready for public production release. Suitable for supervised testing on one application instance. Readiness assessment: 6/10 (engineering judgment, not a benchmark).
+The confirmed code blockers identified in the audit have been patched. Deployment is prepared for one Hostinger Node.js Web App instance; launch still requires host configuration and acceptance checks.
 
-## Confirmed release blockers
+## Completed
 
-1. `server/services/userService.js:32`: startup seeds active accounts with fixed passwords without a production guard. Remove production default-password provisioning and rotate existing seeded credentials before exposure.
-2. `render.yaml:34`: deployment still defines obsolete AI variables and omits Groq credentials/model and the Hostinger mailbox resource ID. Local `.env` is excluded from the image, so local fixes do not configure the deployed service.
-3. `server/services/followUpEngine.js:49`: follow-up templates claim current container allocation and exact grades not established by the website-based brand context. Correct these before approving real follow-ups.
+- Removed Render configuration and obsolete standalone System Health UI.
+- Updated optional Docker settings to Groq and the required admin/mailbox settings.
+- Production startup validates required credentials and rejects active seeded development passwords. Development accounts are never created in production.
+- Production passwords require at least 14 characters when creating or updating users.
+- Cold outreach, reviewed replies and follow-ups persist send-attempt state before contacting the provider. Uncertain or accepted attempts block retries. Draft regeneration cannot erase these protections.
+- Follow-up templates no longer assert unconfirmed stock/grades; sent follow-up history retains the dispatched subject and body.
+- Hostinger connection check now verifies token and sender resource access rather than reporting configuration alone.
+- Storage failures make the health endpoint return 503. Default business timezone is Asia/Kolkata.
+- Online backup tool verifies SQLite integrity. A copy of the actual database was opened successfully with 304 leads.
+- Operational JSON files are excluded from Git tracking while local originals and SQLite remain intact. Earlier Git history is unchanged.
 
-## Reliability and data risks
+## Required before public launch
 
-- Sending precedes database persistence. Process locks prevent simultaneous duplicates in one process, but a crash after provider acceptance and before persistence can allow a retry to send again. No durable provider reconciliation was established.
-- `followUpEngine.js:380`: the stored follow-up draft is cleared before history reads its subject/body. If caller omits overrides, sent history loses the content that was dispatched.
-- Sessions, login attempt limits and search jobs are process-memory maps. Restarts lose sessions/jobs; multiple replicas do not share locks or limits. Deployment must remain single-instance until this is addressed.
-- Contact and follow-up dates use server-local timezone without an explicit deployment timezone. UTC hosting can differ from the expected Asia/Kolkata date.
-- `/health` returns a static process response, not current storage or provider readiness.
-- Repository-tracked JSON histories require a review before sharing the repository. Local storage currently includes simulated leads and historical drafts with incomplete origin metadata; migration/cleanup needs a backup.
+1. Set hPanel environment values using [Hostinger setup](HOSTINGER.md), generate a private admin password hash, and change/suspend seeded accounts before migrating existing data.
+2. Confirm persistent writable storage outside the redeployed code directory, native SQLite module support, HTTPS/proxy behavior and a single process/instance.
+3. Confirm one approved outbound message reaches the destination and an actual incoming reply enters the correct CRM conversation. No live email was sent during this hardening pass.
+4. Complete browser/mobile interaction QA, a host redeploy with retained records, and a host-level backup restore rehearsal.
+5. Run a dependency vulnerability audit from a network that can reach the npm registry; the attempts in this environment failed.
 
-## Verification
+## Known operating limits
 
-- Full suite: 42 passing, zero failing. Production frontend build passes.
-- Groq sample drafting and Hostinger read-only mailbox authentication were previously verified live.
-- Actual recipient delivery, inbound webhook/reply matching, browser/mobile QA, Docker startup, backup restoration and restart recovery remain unproven.
-- Local settings are development mode with config-admin authentication unset. This is local state, not evidence about a deployed server.
-- Dependency vulnerability check requires a successful registry response; record its final outcome separately.
-
-The audit changed no application behavior and sent no emails.
+Sessions and search jobs are process-local; restarting signs users out and interrupts running searches. Unknown sends need manual provider reconciliation; exactly-once delivery is not guaranteed. Provider limits and blocked websites can reduce lead coverage. Simulated and historical data were preserved rather than silently deleted. A SQLite backup copy was validated locally, not restored over the live Hostinger database.

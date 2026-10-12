@@ -55,7 +55,7 @@ SQLite is created at `SPICECOAST_DB_PATH` (default `./spicecoast.sqlite`). On in
 
 The current database uses dataset rows containing JSON, plus settings, with WAL and shared process-level workflow locks. This is appropriate for one modest-volume business instance; it is not a horizontally scaled database architecture. Mailbox history retains 150 messages and outreach history 200 records, matching existing behavior. These views are not an unlimited archive.
 
-Run `npm run build` then `npm start` to serve the app through Express. Docker uses Node 24 and a persistent `/var/data` volume. Images exclude operational JSON, databases, and environment secrets. See [deployment and migration](docs/DEPLOYMENT.md) for importing existing history and backing up/restoring data. Do not run multiple replicas against this database.
+Run `npm run build` then `npm start` to serve the app through Express. Use [Hostinger Node.js Web App setup](docs/HOSTINGER.md) for production. Optional Docker uses Node 22 and a persistent `/var/data` volume. Images exclude operational JSON, databases, and environment secrets. See [deployment and migration](docs/DEPLOYMENT.md) for importing existing history and backing up/restoring data. Do not run multiple replicas against this database. Production startup rejects incomplete configuration and active accounts with development default passwords.
 
 Webhook POSTs at `/webhook` and `/api/webhook` require `HOSTINGER_WEBHOOK_BEARER_TOKEN`, independently of dashboard sessions. Preserve the provider's event/message ID for retry deduplication. Mail transport requires Hostinger or SMTP credentials. SMTP requires encrypted transport.
 

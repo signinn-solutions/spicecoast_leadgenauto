@@ -280,12 +280,14 @@ export async function testConnectionHandler(req, res, next) {
           error: 'Hostinger API token is not configured. API delivery cannot be verified.',
         });
       }
-      return res.status(200).json({
-        ok: true,
-        verified: false,
-        latency,
-        message: `API configuration found for ${config.SENDER_MAILBOX}. Connectivity and delivery have not been tested.`,
-      });
+      try {
+        const response = await fetch('https://api.mail.hostinger.com/api/v1/me', { headers: { Authorization: `Bearer ${config.HOSTINGER_API_TOKEN}` }, signal: AbortSignal.timeout(10000) });
+        const payload = await response.json().catch(() => ({}));
+        const mailbox = payload.data?.mailboxes?.find(item => item.address?.toLowerCase() === config.SENDER_MAILBOX.toLowerCase() && item.resourceId === config.HOSTINGER_MAILBOX_RESOURCE_ID);
+        const ok = response.ok && Boolean(mailbox);
+        return res.status(200).json({ ok, verified: ok, latency: Date.now() - startTime,
+          ...(ok ? { message: 'Hostinger token and sender mailbox access verified. Actual delivery requires an approved send.' } : { error: response.ok ? 'Configured sender/resource ID does not match an authorized mailbox.' : `Hostinger authentication failed (HTTP ${response.status}).` }) });
+      } catch { return res.status(200).json({ ok: false, verified: false, latency: Date.now() - startTime, error: 'Hostinger connection failed.' }); }
     }
 
     if (service === 'sqlite') {

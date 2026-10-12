@@ -132,8 +132,8 @@ export async function createUser({ name, email, password, role = 'user', created
     err.statusCode = 400;
     throw err;
   }
-  if (!password || password.length < 8) {
-    const err = new Error('Password must be at least 8 characters long.');
+  if (!password || password.length < (config.NODE_ENV === 'production' ? 14 : 8)) {
+    const err = new Error(`Password must be at least ${config.NODE_ENV === 'production' ? 14 : 8} characters long.`);
     err.statusCode = 400;
     throw err;
   }
@@ -184,8 +184,8 @@ export async function updateUser(id, { name, role, status, password, notes }, ac
 
   let newHash = user.password_hash;
   if (password) {
-    if (password.length < 8) {
-      const err = new Error('New password must be at least 8 characters long.');
+    if (password.length < (config.NODE_ENV === 'production' ? 14 : 8)) {
+      const err = new Error(`New password must be at least ${config.NODE_ENV === 'production' ? 14 : 8} characters long.`);
       err.statusCode = 400;
       throw err;
     }

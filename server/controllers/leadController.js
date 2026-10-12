@@ -196,6 +196,9 @@ export async function generateLeadColdMail(req, res, next) {
     }
     const outreachHistory = loadOutreachHistory();
     const existingIdx = outreachHistory.findIndex((o) => o.leadId === leadId || (o.recipient && o.recipient === email));
+    if (existingIdx >= 0 && ['sending', 'unknown', 'sent'].includes(outreachHistory[existingIdx].dispatch?.state)) {
+      return res.status(409).json({ error: 'This outreach has a completed or unconfirmed dispatch. Check provider Sent before creating another draft.' });
+    }
     if (existingIdx >= 0 && outreachHistory[existingIdx].status === 'sent') {
       return res.status(409).json({ error: 'Outreach to this lead has already been sent.' });
     }
@@ -238,6 +241,11 @@ export async function generateLeadColdMail(req, res, next) {
     const outreachRecord = await withOutreachHistoryLock(() => {
       const currentHistory = loadOutreachHistory();
       const currentExistingIdx = currentHistory.findIndex((o) => o.leadId === leadId || (o.recipient && o.recipient === email));
+      if (currentExistingIdx >= 0 && ['sending', 'unknown', 'sent'].includes(currentHistory[currentExistingIdx].dispatch?.state)) {
+        const err = new Error('Outreach has a completed or unconfirmed dispatch.');
+        err.statusCode = 409;
+        throw err;
+      }
       if (currentExistingIdx >= 0 && currentHistory[currentExistingIdx].status === 'sent') {
         const err = new Error('Outreach to this lead has already been sent.');
         err.statusCode = 409;

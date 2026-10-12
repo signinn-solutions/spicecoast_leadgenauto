@@ -72,7 +72,10 @@ test('admin actions persist changes, report failures and revoke changed user ses
     config.HOSTINGER_API_TOKEN = 'test-only';
     const configCheck = await (await request('/api/admin/system/test-connection', 'POST', { service: 'hostinger' })).json();
     assert.equal(configCheck.verified, false);
-    assert.match(configCheck.message, /have not been tested/);
+    assert.match(configCheck.error, /connection failed/);
+    globalThis.fetch = async () => Response.json({ data: { mailboxes: [{ address: config.SENDER_MAILBOX, resourceId: config.HOSTINGER_MAILBOX_RESOURCE_ID }] } });
+    const verifiedMailbox = await (await request('/api/admin/system/test-connection', 'POST', { service: 'hostinger' })).json();
+    assert.equal(verifiedMailbox.verified, true);
     assert.equal((await request('/api/admin/system/test-connection', 'POST', { service: 'sqlite' })).status, 200);
     config.HUNTER_API_KEY = 'test-only-hunter';
     let discoverAllowed = false;

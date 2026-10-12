@@ -90,6 +90,7 @@ test('follow-up engine generates Turn 1 and Turn 2 follow-up drafts without auto
   assert.ok(draftTurn1.subject.includes('Direct Origin Spices Partnership'));
   assert.ok(draftTurn1.body.includes('Lars Svensson'));
   assert.ok(draftTurn1.body.includes('Malabar Black Pepper'));
+  assert.doesNotMatch(draftTurn1.body, /container allocations|550GL|8mm|High-Curcumin/);
 
   const draftTurn2 = generateFollowUpDraft(sampleLead, 2);
   assert.equal(draftTurn2.turn, 2);
