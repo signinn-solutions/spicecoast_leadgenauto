@@ -51,7 +51,10 @@ test('single-business dashboard authentication fails closed, protects mutations,
     assert.equal((await request('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{' })).status, 400);
   } finally {
     for (const key of ['NODE_ENV', 'ADMIN_EMAIL', 'ADMIN_PASSWORD_HASH']) config[key] = original[key];
-    await new Promise(resolve => server.close(resolve));
+    if (server) {
+      if (typeof server.closeAllConnections === 'function') server.closeAllConnections();
+      await new Promise(resolve => server.close(resolve));
+    }
   }
 });
 
@@ -78,6 +81,9 @@ test('local development bypass is denied for foreign Host and Origin', async () 
     assert.equal((await fetch(base + '/api/unknown', { headers: { Origin: 'https://untrusted.test' } })).status, 403);
   } finally {
     for (const key of ['NODE_ENV', 'ADMIN_EMAIL', 'ADMIN_PASSWORD_HASH']) config[key] = original[key];
-    await new Promise(resolve => server.close(resolve));
+    if (server) {
+      if (typeof server.closeAllConnections === 'function') server.closeAllConnections();
+      await new Promise(resolve => server.close(resolve));
+    }
   }
 });
