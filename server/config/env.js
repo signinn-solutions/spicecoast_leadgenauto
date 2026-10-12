@@ -50,7 +50,7 @@ export const config = {
 
   // Automation Guardrails
   AUTO_SEND: (process.env.AUTO_SEND || 'false').toLowerCase() === 'true',
-  DAILY_LEAD_LIMIT: parseInt(process.env.DAILY_LEAD_LIMIT || process.env.DAILY_LIMIT || '50', 10),
+  DAILY_LEAD_LIMIT: parseInt(process.env.DAILY_LEAD_LIMIT || process.env.DAILY_LIMIT || '100', 10),
   DAILY_REPLY_LIMIT: parseInt(process.env.DAILY_REPLY_LIMIT || '30', 10),
 
   // SQLite storage and preserved legacy JSON import sources

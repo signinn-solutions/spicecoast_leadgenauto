@@ -15,7 +15,7 @@ services:
       - SPICECOAST_DB_PATH=/var/data/spicecoast.sqlite
       - SENDER_MAILBOX=sales@thespicecoast.com
       - AUTO_SEND=false
-      - DAILY_LEAD_LIMIT=50
+      - DAILY_LEAD_LIMIT=100
       - DAILY_REPLY_LIMIT=30
       # API Keys (Can be loaded from .env)
       - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}

@@ -14,6 +14,7 @@ import {
   resetHunterQuotaState,
   setHunterQuotaExceeded,
 } from '../services/leadFinderService.js';
+import { loadHunterSetting, saveHunterSetting } from '../services/storageService.js';
 import config from '../config/env.js';
 
 test('isPrivateIp detects private, loopback, and cloud metadata IPs correctly (SSRF protection)', () => {
@@ -135,6 +136,7 @@ test('scrapeEmailsForWebsite discovers and ranks emails by spice outreach priori
     const res = await scrapeEmailsForWebsite('https://spicetrade-example.com', {
       maxPages: 2,
       checkMx: false,
+      allowPrivateHosts: true,
     });
 
     assert.equal(res.domain, 'spicetrade-example.com');
@@ -157,9 +159,11 @@ test('scrapeEmailsForWebsite discovers and ranks emails by spice outreach priori
 test('Hunter.io quota exhaustion (HTTP 429 & 402) triggers fallback to web scraper', async () => {
   const originalFetch = globalThis.fetch;
   const originalHunterKey = config.HUNTER_API_KEY;
+  const originalHunterSetting = loadHunterSetting();
   resetHunterQuotaState();
 
   try {
+    saveHunterSetting(true);
     config.HUNTER_API_KEY = 'test_hunter_key';
     assert.equal(isHunterQuotaExceeded(), false);
 
@@ -208,6 +212,46 @@ test('Hunter.io quota exhaustion (HTTP 429 & 402) triggers fallback to web scrap
   } finally {
     globalThis.fetch = originalFetch;
     config.HUNTER_API_KEY = originalHunterKey;
+    saveHunterSetting(originalHunterSetting);
     resetHunterQuotaState();
   }
 });
+
+test('toggling off Hunter API setting completely bypasses Hunter and routes discovery through inbuilt mail scraper', async () => {
+  const originalHunterKey = config.HUNTER_API_KEY;
+  const originalHunterSetting = loadHunterSetting();
+  const originalFetch = globalThis.fetch;
+
+  try {
+    config.HUNTER_API_KEY = 'configured_key';
+    saveHunterSetting(false);
+    assert.equal(loadHunterSetting(), false);
+
+    let hunterCalled = false;
+    globalThis.fetch = async (url) => {
+      if (url.includes('api.hunter.io')) {
+        hunterCalled = true;
+        return { ok: true, json: async () => ({ data: { emails: [{ value: 'should-not-be-called@domain.com' }] } }) };
+      }
+      return { ok: false };
+    };
+
+    // findEmails and verifyEmail should bypass Hunter when setting is false
+    const hunterEmails = await findEmails('cardamomworld.com');
+    assert.deepEqual(hunterEmails, []);
+    assert.equal(hunterCalled, false, 'Hunter API must not be called when toggled off');
+
+    const verifyStatus = await verifyEmail('test@cardamomworld.com');
+    assert.equal(verifyStatus, 'unknown');
+    assert.equal(hunterCalled, false, 'Hunter verification must not be called when toggled off');
+
+    // Re-enabling restores Hunter
+    saveHunterSetting(true);
+    assert.equal(loadHunterSetting(), true);
+  } finally {
+    globalThis.fetch = originalFetch;
+    config.HUNTER_API_KEY = originalHunterKey;
+    saveHunterSetting(originalHunterSetting);
+  }
+});
+

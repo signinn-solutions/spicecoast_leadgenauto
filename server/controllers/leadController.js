@@ -1,5 +1,13 @@
 import config from '../config/env.js';
-import { loadDailyUsage, loadLeadsHistory, loadOutreachHistory, saveOutreachHistory, withOutreachHistoryLock } from '../services/storageService.js';
+import {
+  loadDailyUsage,
+  loadLeadsHistory,
+  loadOutreachHistory,
+  saveOutreachHistory,
+  loadHunterSetting,
+  saveHunterSetting,
+  withOutreachHistoryLock,
+} from '../services/storageService.js';
 import { executeLeadSearch, isHunterQuotaExceeded } from '../services/leadFinderService.js';
 import { generateColdEmail } from '../services/deepseekService.js';
 
@@ -7,6 +15,7 @@ export async function getStatus(req, res, next) {
   try {
     const { date: today, count: usedToday } = loadDailyUsage();
     const remaining = Math.max(0, config.DAILY_LEAD_LIMIT - usedToday);
+    const hunterEnabled = loadHunterSetting();
     return res.status(200).json({
       date: today,
       count: usedToday,
@@ -14,6 +23,8 @@ export async function getStatus(req, res, next) {
       remaining,
       has_google_key: Boolean(config.GOOGLE_API_KEY),
       has_hunter_key: Boolean(config.HUNTER_API_KEY),
+      hunter_enabled: hunterEnabled,
+      use_inbuilt_scraper: !hunterEnabled,
       hunter_quota_exceeded: isHunterQuotaExceeded(),
     });
   } catch (err) {
@@ -55,23 +66,124 @@ export async function getLeads(req, res, next) {
   }
 }
 
+import { jobManager } from '../services/jobManager.js';
+
 export async function searchLeads(req, res, next) {
   try {
-    const { business_type, city, country, count, mode } = req.body || {};
-    const result = await executeLeadSearch({
-      businessType: business_type,
+    const { business_type, businessType, city, country, count, requestedCount, mode, sync } = req.body || {};
+    const searchOptions = {
+      businessType: business_type || businessType,
       city,
       country,
-      requestedCount: count,
+      requestedCount: count || requestedCount,
       mode: mode || 'live',
+    };
+
+    // If caller explicitly requested synchronous execution (e.g. CLI scripts or sync test runs)
+    const isSync = sync === true || req.query.sync === 'true' || req.headers['x-sync-search'] === 'true';
+    if (isSync) {
+      const result = await executeLeadSearch(searchOptions);
+      return res.status(200).json(result);
+    }
+
+    // Default: Asynchronous Job with real-time SSE progress streaming
+    const job = jobManager.createJob('lead_search', searchOptions);
+
+    // Detach from current request socket and execute in background
+    (async () => {
+      try {
+        const result = await executeLeadSearch(searchOptions, (progress) => {
+          jobManager.updateProgress(job.id, progress);
+        });
+        jobManager.completeJob(job.id, result);
+      } catch (err) {
+        jobManager.failJob(job.id, err);
+      }
+    })();
+
+    return res.status(202).json({
+      jobId: job.id,
+      status: 'running',
+      message: 'Lead discovery job started.',
+      streamUrl: `/api/jobs/${job.id}/stream`,
+      statusUrl: `/api/jobs/${job.id}`,
+      total: count,
     });
-    return res.status(200).json(result);
   } catch (err) {
     if (err.statusCode) {
       return res.status(err.statusCode).json({ error: err.message });
     }
     next(err);
   }
+}
+
+export function getJobStatus(req, res) {
+  const { jobId } = req.params;
+  const job = jobManager.getJob(jobId);
+  if (!job) {
+    return res.status(404).json({ error: 'Job not found or expired.' });
+  }
+  return res.status(200).json({
+    id: job.id,
+    status: job.status,
+    progress: job.progress,
+    logs: job.logs,
+    result: job.result,
+    error: job.error,
+    createdAt: job.createdAt,
+    completedAt: job.completedAt,
+  });
+}
+
+export function streamJobProgress(req, res) {
+  const { jobId } = req.params;
+  const job = jobManager.getJob(jobId);
+  if (!job) {
+    return res.status(404).json({ error: 'Job not found or expired.' });
+  }
+
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.flushHeaders?.();
+
+  // Send initial snapshot immediately
+  res.write(`data: ${JSON.stringify({ type: 'init', status: job.status, progress: job.progress, logs: job.logs })}\n\n`);
+
+  if (job.status === 'completed') {
+    res.write(`data: ${JSON.stringify({ type: 'completed', result: job.result, progress: job.progress })}\n\n`);
+    return res.end();
+  }
+  if (job.status === 'failed') {
+    res.write(`data: ${JSON.stringify({ type: 'failed', error: job.error, progress: job.progress })}\n\n`);
+    return res.end();
+  }
+
+  // Subscribe to live job updates
+  const unsubscribe = jobManager.subscribe(jobId, (event) => {
+    try {
+      res.write(`data: ${JSON.stringify(event)}\n\n`);
+      if (['completed', 'failed'].includes(event.type)) {
+        res.end();
+      }
+    } catch {
+      unsubscribe();
+    }
+  });
+
+  const pingInterval = setInterval(() => {
+    try {
+      res.write(': heartbeat\n\n');
+    } catch {
+      clearInterval(pingInterval);
+    }
+  }, 15000);
+
+  req.on('close', () => {
+    clearInterval(pingInterval);
+    unsubscribe();
+  });
 }
 
 export async function generateLeadColdMail(req, res, next) {
@@ -136,3 +248,21 @@ async function generateLeadColdMailUnlocked(req, res, next) {
     next(err);
   }
 }
+
+export async function toggleHunterSetting(req, res, next) {
+  try {
+    const { enabled } = req.body || {};
+    if (typeof enabled !== 'boolean') {
+      return res.status(400).json({ error: 'enabled must be a boolean.' });
+    }
+    saveHunterSetting(enabled);
+    const hunterEnabled = loadHunterSetting();
+    return res.status(200).json({
+      hunter_enabled: hunterEnabled,
+      use_inbuilt_scraper: !hunterEnabled,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+

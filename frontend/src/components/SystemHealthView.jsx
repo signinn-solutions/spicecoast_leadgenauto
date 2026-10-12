@@ -13,6 +13,11 @@ import {
   Copy,
   Check,
   ExternalLink,
+  Sliders,
+  Cpu,
+  Layers,
+  Sparkles,
+  Loader2,
 } from "lucide-react";
 
 export default function SystemHealthView({
@@ -22,14 +27,19 @@ export default function SystemHealthView({
   outreachList = [],
   mailboxMessages = [],
   onCopyWebhook,
+  onToggleHunter,
+  isTogglingHunter = false,
 }) {
   const [copied, setCopied] = React.useState(false);
+  const hunterEnabled = serverStatus.hunter_enabled !== false;
 
   const integrations = [
     {
       name: "Google Places API (New)",
       role: "Geospatial Entity Discovery & Geocoding",
       active: serverStatus.has_google_key,
+      statusLabel: serverStatus.has_google_key ? "Configured" : "Not configured",
+      statusColor: serverStatus.has_google_key ? "green" : "gold",
       details: serverStatus.has_google_key
         ? "Active API Key Configured"
         : "Missing key (falls back to simulation)",
@@ -37,17 +47,43 @@ export default function SystemHealthView({
     {
       name: "Hunter.io API",
       role: "Domain Executive Email Enrichment & MX Verification",
-      active: serverStatus.has_hunter_key && !serverStatus.hunter_quota_exceeded,
-      details: serverStatus.hunter_quota_exceeded
+      active: hunterEnabled && serverStatus.has_hunter_key && !serverStatus.hunter_quota_exceeded,
+      statusLabel: !hunterEnabled
+        ? "Turned Off (Scraper Active)"
+        : serverStatus.hunter_quota_exceeded
+        ? "Quota Exceeded"
+        : serverStatus.has_hunter_key
+        ? "Configured"
+        : "Not configured",
+      statusColor: !hunterEnabled
+        ? "purple"
+        : serverStatus.has_hunter_key && !serverStatus.hunter_quota_exceeded
+        ? "green"
+        : "gold",
+      details: !hunterEnabled
+        ? "Bypassed by operator. Using zero-cost Inbuilt Mail Scraper & MX engine."
+        : serverStatus.hunter_quota_exceeded
         ? "Monthly search limit reached (Website scraper fallback active)"
         : serverStatus.has_hunter_key
         ? "Active API Key Configured"
         : "Missing key (falls back to simulation)",
     },
     {
+      name: "Inbuilt Mail Scraper Engine",
+      role: "Website Contact Crawler & DNS MX Mailbox Verification",
+      active: true,
+      statusLabel: !hunterEnabled ? "Primary Engine" : "Active (Fallback)",
+      statusColor: !hunterEnabled ? "green" : "blue",
+      details: !hunterEnabled
+        ? "Active as Primary Engine (Hunter.io API bypassed). Free, zero external quotas."
+        : "Active as automatic fallback when Hunter.io has no hits or reaches quota limits.",
+    },
+    {
       name: `DeepSeek AI (${mailboxStatus.deepseek_model || "deepseek-chat"})`,
       role: "Autonomous Proposal Synthesis & Procurement Triage",
       active: mailboxStatus.has_deepseek_key,
+      statusLabel: mailboxStatus.has_deepseek_key ? "Configured" : "Not configured",
+      statusColor: mailboxStatus.has_deepseek_key ? "green" : "gold",
       details: mailboxStatus.has_deepseek_key
         ? "Active DeepSeek API Token"
         : "Missing key (uses built-in export templates)",
@@ -56,6 +92,8 @@ export default function SystemHealthView({
       name: "Hostinger Agentic Mailbox API",
       role: "Live B2B Email Sending & Mailbox Dispatch",
       active: mailboxStatus.has_hostinger_token,
+      statusLabel: mailboxStatus.has_hostinger_token ? "Configured" : "Not configured",
+      statusColor: mailboxStatus.has_hostinger_token ? "green" : "gold",
       details: mailboxStatus.has_hostinger_token
         ? `Bound to ${mailboxStatus.mailbox}`
         : "No token configured (dispatches blocked/simulated)",
@@ -64,6 +102,8 @@ export default function SystemHealthView({
       name: "Inbound Webhook Listener",
       role: "Real-time Inquiry Ingestion & Autoresponder",
       active: mailboxStatus.has_webhook_token,
+      statusLabel: mailboxStatus.has_webhook_token ? "Configured" : "Not configured",
+      statusColor: mailboxStatus.has_webhook_token ? "green" : "gold",
       details: mailboxStatus.has_webhook_token
         ? "Bearer token auth active"
         : "Blocked until a bearer token is configured",
@@ -82,15 +122,126 @@ export default function SystemHealthView({
       {/* Top Banner */}
       <div className="lf-section-header">
         <div>
-          <h2 className="lf-section-title">System Health & API Integrations</h2>
+          <h2 className="lf-section-title">System Health & API Monitoring</h2>
           <p className="lf-section-subtitle">
-            Diagnostics for external search, enrichment, AI reasoning, and mailbox transport layers.
+            Diagnostics and runtime controls for lead enrichment, email scraping, AI synthesis, and mail delivery.
           </p>
         </div>
       </div>
 
+      {/* Email Discovery Engine Switch Panel */}
+      <section className="lf-panel lf-engine-switch-card">
+        <div className="lf-engine-switch-header">
+          <div className="lf-engine-switch-title-box">
+            <div className="lf-engine-badge">
+              <Sliders size={14} className="text-purple" />
+              <span>Discovery Engine Configuration</span>
+            </div>
+            <h3 className="lf-engine-heading">
+              Email Enrichment Engine: {hunterEnabled ? "Hunter.io API" : "Inbuilt Mail Scraper"}
+            </h3>
+            <p className="lf-engine-desc">
+              Toggle off Hunter.io to prevent third-party API queries and exclusively use the native, free
+              inbuilt website crawler with DNS MX record verification.
+            </p>
+          </div>
+
+          <div className="lf-switch-control-wrap">
+            <div className="lf-switch-labels">
+              <span className={`lf-switch-opt ${hunterEnabled ? "active" : ""}`}>
+                Hunter.io API
+              </span>
+              <span className="lf-switch-divider">/</span>
+              <span className={`lf-switch-opt ${!hunterEnabled ? "active" : ""}`}>
+                Inbuilt Scraper
+              </span>
+            </div>
+
+            <button
+              type="button"
+              role="switch"
+              id="hunter-engine-toggle"
+              aria-checked={hunterEnabled}
+              aria-label="Toggle Hunter API vs Inbuilt Mail Scraper"
+              className={`lf-toggle-switch ${hunterEnabled ? "is-hunter" : "is-scraper"}`}
+              onClick={() => onToggleHunter && onToggleHunter(!hunterEnabled)}
+              disabled={isTogglingHunter}
+            >
+              <span className="lf-toggle-track">
+                <span className="lf-toggle-thumb">
+                  {isTogglingHunter ? (
+                    <Loader2 size={12} className="lf-spin text-purple" />
+                  ) : hunterEnabled ? (
+                    <Zap size={11} className="text-purple" />
+                  ) : (
+                    <Globe size={11} className="text-emerald" />
+                  )}
+                </span>
+              </span>
+            </button>
+          </div>
+        </div>
+
+        {/* Engine Status Callout */}
+        <div className={`lf-engine-status-banner ${hunterEnabled ? "mode-hunter" : "mode-scraper"}`}>
+          <div className="lf-engine-status-icon">
+            {hunterEnabled ? (
+              <Zap size={18} className="text-purple" />
+            ) : (
+              <Globe size={18} className="text-emerald" />
+            )}
+          </div>
+          <div className="lf-engine-status-content">
+            <div className="lf-engine-status-title">
+              {hunterEnabled
+                ? "Hunter.io API Active (Commercial)"
+                : "Inbuilt Mail Scraper Active (Zero Third-Party Cost)"}
+            </div>
+            <div className="lf-engine-status-text">
+              {hunterEnabled ? (
+                <>
+                  Lead searches query Hunter.io for executive mailboxes. If monthly quota is exhausted (HTTP 429/402)
+                  or no emails are found, searches automatically failover to the built-in crawler.
+                </>
+              ) : (
+                <>
+                  Hunter.io API is <strong>turned off</strong>. Lead searches bypass external API calls and directly
+                  crawl target websites, parse contact pages, de-obfuscate emails, decode Cloudflare hashes,
+                  and verify live DNS MX records with zero credit consumption.
+                </>
+              )}
+            </div>
+          </div>
+          <div className="lf-engine-status-action">
+            <button
+              type="button"
+              className={`lf-btn-secondary sm ${hunterEnabled ? "btn-to-scraper" : "btn-to-hunter"}`}
+              onClick={() => onToggleHunter && onToggleHunter(!hunterEnabled)}
+              disabled={isTogglingHunter}
+            >
+              {isTogglingHunter ? (
+                <>
+                  <Loader2 size={13} className="lf-spin" />
+                  <span>Updating...</span>
+                </>
+              ) : hunterEnabled ? (
+                <>
+                  <Globe size={13} />
+                  <span>Switch to Inbuilt Scraper</span>
+                </>
+              ) : (
+                <>
+                  <Zap size={13} />
+                  <span>Enable Hunter.io API</span>
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      </section>
+
       {/* Integration Status Cards */}
-      <div className="lf-integration-grid">
+      <div className="lf-integration-grid" style={{ marginTop: 24 }}>
         {integrations.map((item, idx) => (
           <div key={idx} className="lf-panel lf-integration-card">
             <div className="lf-integration-header">
@@ -99,17 +250,15 @@ export default function SystemHealthView({
                 <span className="lf-integration-role">{item.role}</span>
               </div>
               <span
-                className={`lf-badge-pill ${
-                  item.active ? "green" : "gold"
-                }`}
+                className={`lf-badge-pill ${item.statusColor || (item.active ? "green" : "gold")}`}
               >
                 {item.active ? (
                   <>
-                    <CheckCircle2 size={11} /> Configured
+                    <CheckCircle2 size={11} /> {item.statusLabel || "Configured"}
                   </>
                 ) : (
                   <>
-                    <AlertCircle size={11} /> Not configured
+                    <AlertCircle size={11} /> {item.statusLabel || "Not configured"}
                   </>
                 )}
               </span>
@@ -142,6 +291,12 @@ export default function SystemHealthView({
             <div className="lf-storage-item">
               <span>Inbound Webhook Messages</span>
               <span className="lf-mono text-emerald bold">{mailboxMessages.length}</span>
+            </div>
+            <div className="lf-storage-item">
+              <span>Active Enrichment Mode</span>
+              <span className={`lf-badge-pill ${hunterEnabled ? "purple" : "green"} sm`}>
+                {hunterEnabled ? "Hunter.io (API)" : "Inbuilt Scraper (Free)"}
+              </span>
             </div>
             <div className="lf-storage-item">
               <span>Concurrency Lock Engine</span>

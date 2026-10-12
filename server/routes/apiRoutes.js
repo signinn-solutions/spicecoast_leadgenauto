@@ -1,5 +1,13 @@
 import express from 'express';
-import { getStatus, getLeads, searchLeads, generateLeadColdMail } from '../controllers/leadController.js';
+import {
+  getStatus,
+  getLeads,
+  searchLeads,
+  getJobStatus,
+  streamJobProgress,
+  generateLeadColdMail,
+  toggleHunterSetting,
+} from '../controllers/leadController.js';
 import {
   getMailboxStatus,
   getMailboxMessages,
@@ -22,7 +30,11 @@ const router = express.Router();
 router.get('/status', getStatus);
 router.get('/leads', getLeads);
 router.post('/search', searchLeads);
+router.get('/jobs/:jobId', getJobStatus);
+router.get('/jobs/:jobId/stream', streamJobProgress);
 router.post('/leads/generate-coldmail', generateLeadColdMail);
+router.post('/settings/toggle-hunter', toggleHunterSetting);
+router.post('/leads/toggle-hunter', toggleHunterSetting);
 
 // Mailbox, AI autoresponder & Cold Outreach endpoints
 router.get('/mailbox/status', getMailboxStatus);

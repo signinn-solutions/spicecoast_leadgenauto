@@ -50,6 +50,76 @@ export function closeStorage() {
   openPath = undefined;
 }
 
+function extractDomain(url) {
+  if (!url) return null;
+  try {
+    return new URL(url.startsWith('http') ? url : `https://${url}`).hostname.replace(/^www\./i, '');
+  } catch {
+    return null;
+  }
+}
+
+function leadToRow(lead) {
+  const {
+    id, name, domain, website, phone, phoneStatus, email, emailStatus,
+    address, city, country, businessType, source, status,
+    first_contacted_at, last_contacted_at, foundAt, created_at,
+    ...extra
+  } = lead || {};
+
+  const cleanDomain = domain || extractDomain(website);
+  const createdAt = created_at || foundAt || getTodayDateString();
+
+  return {
+    id: id || `lead-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    name: name || 'Unnamed Business',
+    domain: cleanDomain,
+    website: website || null,
+    phone: phone || null,
+    phone_status: phoneStatus || null,
+    email: email || null,
+    email_status: emailStatus || null,
+    address: address || null,
+    city: city || null,
+    country: country || null,
+    business_type: businessType || null,
+    source: source || 'live',
+    status: status || 'discovered',
+    first_contacted_at: first_contacted_at || null,
+    last_contacted_at: last_contacted_at || null,
+    created_at: createdAt,
+    data: Object.keys(extra).length > 0 ? JSON.stringify(extra) : null,
+  };
+}
+
+function rowToLead(row) {
+  if (!row) return null;
+  let extra = {};
+  if (row.data) {
+    try { extra = JSON.parse(row.data); } catch {}
+  }
+  return {
+    ...extra,
+    id: row.id,
+    name: row.name,
+    domain: row.domain,
+    website: row.website,
+    phone: row.phone,
+    phoneStatus: row.phone_status,
+    email: row.email,
+    emailStatus: row.email_status,
+    address: row.address,
+    city: row.city,
+    country: row.country,
+    businessType: row.business_type,
+    source: row.source,
+    status: row.status,
+    first_contacted_at: row.first_contacted_at,
+    last_contacted_at: row.last_contacted_at,
+    foundAt: row.created_at ? (row.created_at.length > 10 ? row.created_at.slice(0, 10) : row.created_at) : getTodayDateString(),
+  };
+}
+
 function getDatabase() {
   const file = path.resolve(config.DB_PATH);
   if (database && openPath === file) return database;
@@ -58,11 +128,58 @@ function getDatabase() {
   const db = new Database(file, { timeout: 5000 });
   try {
     db.pragma('journal_mode = WAL');
-    db.exec('CREATE TABLE IF NOT EXISTS datasets (name TEXT PRIMARY KEY, value TEXT NOT NULL)');
-    db.exec('CREATE TABLE IF NOT EXISTS settings (name TEXT PRIMARY KEY, value TEXT NOT NULL)');
+    db.pragma('synchronous = NORMAL');
+
+    // Normalized tables
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS leads (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        domain TEXT,
+        website TEXT,
+        phone TEXT,
+        phone_status TEXT,
+        email TEXT,
+        email_status TEXT,
+        address TEXT,
+        city TEXT,
+        country TEXT,
+        business_type TEXT,
+        source TEXT,
+        status TEXT DEFAULT 'discovered',
+        first_contacted_at TEXT,
+        last_contacted_at TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        data TEXT
+      );
+      CREATE INDEX IF NOT EXISTS idx_leads_domain ON leads(domain);
+      CREATE INDEX IF NOT EXISTS idx_leads_email ON leads(email);
+      CREATE INDEX IF NOT EXISTS idx_leads_created_at ON leads(created_at);
+
+      CREATE TABLE IF NOT EXISTS searches (
+        id TEXT PRIMARY KEY,
+        query TEXT,
+        count INTEGER,
+        duplicates_skipped INTEGER,
+        date TEXT,
+        mode TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS daily_usage (
+        date TEXT PRIMARY KEY,
+        count INTEGER NOT NULL DEFAULT 0
+      );
+
+      CREATE TABLE IF NOT EXISTS datasets (name TEXT PRIMARY KEY, value TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS settings (name TEXT PRIMARY KEY, value TEXT NOT NULL);
+    `);
+
+    // Legacy dataset migration check
     const exists = db.prepare('SELECT 1 FROM datasets WHERE name = ?');
-    const insert = db.prepare('INSERT OR IGNORE INTO datasets (name, value) VALUES (?, ?)');
+    const insertDataset = db.prepare('INSERT OR IGNORE INTO datasets (name, value) VALUES (?, ?)');
     const setting = db.prepare('INSERT OR IGNORE INTO settings (name, value) VALUES (?, ?)');
+    
     db.transaction(() => {
       for (const [name, [key, fallback]] of Object.entries(datasets)) {
         if (exists.get(name)) continue;
@@ -72,10 +189,82 @@ function getDatabase() {
           try { value = JSON.parse(fs.readFileSync(source, 'utf8')); }
           catch (error) { throw new Error(`Cannot import legacy data from ${source}: ${error.message}`); }
         }
-        insert.run(name, JSON.stringify(value));
+        insertDataset.run(name, JSON.stringify(value));
       }
       setting.run('auto_send', JSON.stringify(Boolean(config.AUTO_SEND)));
+      setting.run('hunter_enabled', JSON.stringify(true));
     })();
+
+    // Populate normalized leads table from legacy files / datasets if empty
+    const leadCountRow = db.prepare('SELECT count(*) as cnt FROM leads').get();
+    if (leadCountRow.cnt === 0) {
+      let legacyData = null;
+      if (fs.existsSync(config.LEADS_HISTORY_FILE)) {
+        try { legacyData = JSON.parse(fs.readFileSync(config.LEADS_HISTORY_FILE, 'utf8')); } catch {}
+      }
+      if (!legacyData) {
+        const dsRow = db.prepare('SELECT value FROM datasets WHERE name = ?').get('leads_history');
+        if (dsRow) {
+          try { legacyData = JSON.parse(dsRow.value); } catch {}
+        }
+      }
+      if (legacyData && Array.isArray(legacyData.leads) && legacyData.leads.length > 0) {
+        const insertLeadStmt = db.prepare(`
+          INSERT OR IGNORE INTO leads (
+            id, name, domain, website, phone, phone_status, email, email_status,
+            address, city, country, business_type, source, status,
+            first_contacted_at, last_contacted_at, created_at, data
+          ) VALUES (
+            @id, @name, @domain, @website, @phone, @phone_status, @email, @email_status,
+            @address, @city, @country, @business_type, @source, @status,
+            @first_contacted_at, @last_contacted_at, @created_at, @data
+          )
+        `);
+        const insertSearchStmt = db.prepare(`
+          INSERT OR IGNORE INTO searches (id, query, count, duplicates_skipped, date, mode, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+        `);
+        db.transaction(() => {
+          for (const l of legacyData.leads) {
+            insertLeadStmt.run(leadToRow(l));
+          }
+          if (Array.isArray(legacyData.searches)) {
+            for (const s of legacyData.searches) {
+              insertSearchStmt.run(
+                String(s.id || Date.now()),
+                s.query || '',
+                Number(s.count) || 0,
+                Number(s.duplicatesSkipped) || 0,
+                s.date || getTodayDateString(),
+                s.mode || 'live',
+                s.date || getTodayDateString()
+              );
+            }
+          }
+        })();
+      }
+    }
+
+    // Populate daily_usage table if empty
+    const usageCountRow = db.prepare('SELECT count(*) as cnt FROM daily_usage').get();
+    if (usageCountRow.cnt === 0) {
+      let legacyUsage = null;
+      if (fs.existsSync(config.DAILY_USAGE_FILE)) {
+        try { legacyUsage = JSON.parse(fs.readFileSync(config.DAILY_USAGE_FILE, 'utf8')); } catch {}
+      }
+      if (!legacyUsage) {
+        const dsRow = db.prepare('SELECT value FROM datasets WHERE name = ?').get('daily_usage');
+        if (dsRow) {
+          try { legacyUsage = JSON.parse(dsRow.value); } catch {}
+        }
+      }
+      if (legacyUsage?.date) {
+        db.prepare('INSERT OR IGNORE INTO daily_usage (date, count) VALUES (?, ?)').run(
+          legacyUsage.date,
+          Number(legacyUsage.count) || 0
+        );
+      }
+    }
   } catch (error) {
     db.close();
     throw error;
@@ -106,27 +295,235 @@ function usage(name) {
   return { date: today, count: data?.date === today ? Math.max(0, Number(data.count) || 0) : 0 };
 }
 
-export function loadDailyUsage() { return usage('daily_usage'); }
-export function saveDailyUsage(date, count) { save('daily_usage', { date, count }); }
+export function loadDailyUsage() {
+  const today = getTodayDateString();
+  const db = getDatabase();
+  const row = db.prepare('SELECT count FROM daily_usage WHERE date = ?').get(today);
+  if (row) {
+    return { date: today, count: Math.max(0, Number(row.count) || 0) };
+  }
+  return usage('daily_usage');
+}
+
+export function saveDailyUsage(date, count) {
+  const db = getDatabase();
+  db.prepare('INSERT INTO daily_usage (date, count) VALUES (?, ?) ON CONFLICT(date) DO UPDATE SET count = excluded.count')
+    .run(date, Number(count) || 0);
+  save('daily_usage', { date, count });
+}
+
 export function loadReplyUsage() { return usage('reply_usage'); }
 export function saveReplyUsage(date, count) { save('reply_usage', { date, count }); }
 
 export function loadLeadsHistory() {
-  const data = load('leads_history');
-  return { leads: Array.isArray(data?.leads) ? data.leads : [], searches: Array.isArray(data?.searches) ? data.searches : [] };
+  const db = getDatabase();
+  const leadRows = db.prepare('SELECT * FROM leads ORDER BY created_at DESC, rowid DESC').all();
+  const searchRows = db.prepare('SELECT * FROM searches ORDER BY created_at DESC, id DESC LIMIT 50').all();
+  return {
+    leads: leadRows.map(rowToLead),
+    searches: searchRows.map((s) => ({
+      id: s.id,
+      query: s.query,
+      count: s.count,
+      duplicatesSkipped: s.duplicates_skipped,
+      date: s.date,
+      mode: s.mode,
+    })),
+  };
 }
-export function saveLeadsHistory(value) { save('leads_history', value); }
+
+export function saveLeadsHistory(value) {
+  const db = getDatabase();
+  const leads = Array.isArray(value?.leads) ? value.leads : [];
+  const searches = Array.isArray(value?.searches) ? value.searches : [];
+
+  const insertLeadStmt = db.prepare(`
+    INSERT INTO leads (
+      id, name, domain, website, phone, phone_status, email, email_status,
+      address, city, country, business_type, source, status,
+      first_contacted_at, last_contacted_at, created_at, data
+    ) VALUES (
+      @id, @name, @domain, @website, @phone, @phone_status, @email, @email_status,
+      @address, @city, @country, @business_type, @source, @status,
+      @first_contacted_at, @last_contacted_at, @created_at, @data
+    )
+    ON CONFLICT(id) DO UPDATE SET
+      name = excluded.name,
+      domain = excluded.domain,
+      website = excluded.website,
+      phone = excluded.phone,
+      phone_status = excluded.phone_status,
+      email = excluded.email,
+      email_status = excluded.email_status,
+      address = excluded.address,
+      city = excluded.city,
+      country = excluded.country,
+      business_type = excluded.business_type,
+      source = excluded.source,
+      status = COALESCE(excluded.status, leads.status),
+      first_contacted_at = COALESCE(excluded.first_contacted_at, leads.first_contacted_at),
+      last_contacted_at = COALESCE(excluded.last_contacted_at, leads.last_contacted_at),
+      data = excluded.data
+  `);
+
+  const insertSearchStmt = db.prepare(`
+    INSERT INTO searches (id, query, count, duplicates_skipped, date, mode, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      query = excluded.query,
+      count = excluded.count,
+      duplicates_skipped = excluded.duplicates_skipped,
+      date = excluded.date,
+      mode = excluded.mode
+  `);
+
+  const tx = db.transaction(() => {
+    db.prepare('DELETE FROM leads').run();
+    for (const lead of leads) {
+      insertLeadStmt.run(leadToRow(lead));
+    }
+    db.prepare('DELETE FROM searches').run();
+    for (const s of searches) {
+      insertSearchStmt.run(
+        String(s.id || Date.now()),
+        s.query || '',
+        Number(s.count) || 0,
+        Number(s.duplicatesSkipped) || 0,
+        s.date || getTodayDateString(),
+        s.mode || 'live',
+        s.date || getTodayDateString()
+      );
+    }
+    save('leads_history', value);
+  });
+  tx();
+}
+
+/**
+ * Batch insert discovered leads and update daily usage and search log in a single atomic transaction.
+ * Eliminates giant JSON deserialization / rewrite cycles.
+ */
+export function insertLeadsBatch(leadsList, options = {}) {
+  const db = getDatabase();
+  const { today, totalDailyCount, searchRecord, seenPlaces } = options;
+
+  const insertStmt = db.prepare(`
+    INSERT INTO leads (
+      id, name, domain, website, phone, phone_status, email, email_status,
+      address, city, country, business_type, source, status,
+      first_contacted_at, last_contacted_at, created_at, data
+    ) VALUES (
+      @id, @name, @domain, @website, @phone, @phone_status, @email, @email_status,
+      @address, @city, @country, @business_type, @source, @status,
+      @first_contacted_at, @last_contacted_at, @created_at, @data
+    )
+    ON CONFLICT(id) DO UPDATE SET
+      name = excluded.name,
+      domain = excluded.domain,
+      website = excluded.website,
+      phone = excluded.phone,
+      phone_status = excluded.phone_status,
+      email = excluded.email,
+      email_status = excluded.email_status,
+      address = excluded.address,
+      city = excluded.city,
+      country = excluded.country,
+      business_type = excluded.business_type,
+      source = excluded.source,
+      status = COALESCE(excluded.status, leads.status),
+      first_contacted_at = COALESCE(excluded.first_contacted_at, leads.first_contacted_at),
+      last_contacted_at = COALESCE(excluded.last_contacted_at, leads.last_contacted_at),
+      data = excluded.data
+  `);
+
+  const updateDailyUsageStmt = db.prepare(`
+    INSERT INTO daily_usage (date, count) VALUES (?, ?)
+    ON CONFLICT(date) DO UPDATE SET count = excluded.count
+  `);
+
+  const insertSearchStmt = db.prepare(`
+    INSERT INTO searches (id, query, count, duplicates_skipped, date, mode, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      query = excluded.query,
+      count = excluded.count,
+      duplicates_skipped = excluded.duplicates_skipped,
+      date = excluded.date,
+      mode = excluded.mode
+  `);
+
+  const insertBatch = db.transaction((leads) => {
+    for (const lead of leads) {
+      insertStmt.run(leadToRow(lead));
+    }
+    if (today && totalDailyCount !== undefined) {
+      updateDailyUsageStmt.run(today, totalDailyCount);
+      save('daily_usage', { date: today, count: totalDailyCount });
+    }
+    if (searchRecord) {
+      insertSearchStmt.run(
+        String(searchRecord.id || Date.now()),
+        searchRecord.query || '',
+        Number(searchRecord.count) || 0,
+        Number(searchRecord.duplicatesSkipped) || 0,
+        searchRecord.date || today,
+        searchRecord.mode || 'live',
+        searchRecord.date || today
+      );
+    }
+  });
+
+  insertBatch(leadsList || []);
+
+  if (seenPlaces) {
+    saveSeenPlaces(seenPlaces);
+  }
+}
+
+/**
+ * Update single lead status without deserializing or rewriting the entire dataset.
+ */
+export function updateLeadStatus(idOrEmail, updates = {}) {
+  const db = getDatabase();
+  const { status, contactedAt } = updates;
+  const leadRow = db.prepare('SELECT id FROM leads WHERE id = ? OR email = ?').get(idOrEmail, idOrEmail);
+  if (!leadRow) return false;
+
+  db.prepare(`
+    UPDATE leads
+    SET status = COALESCE(?, status),
+        first_contacted_at = COALESCE(first_contacted_at, ?),
+        last_contacted_at = COALESCE(?, last_contacted_at)
+    WHERE id = ?
+  `).run(
+    status || null,
+    contactedAt || null,
+    contactedAt || null,
+    leadRow.id
+  );
+  return true;
+}
 
 export function loadSeenPlaces() {
   const data = load('seen_places');
   const seen = data && typeof data === 'object' && !Array.isArray(data) ? { ...(data.places || data) } : {};
-  for (const lead of loadLeadsHistory().leads) {
+  const db = getDatabase();
+  const leadRows = db.prepare('SELECT id, name, address, phone, website, domain, email, email_status, created_at FROM leads').all();
+  for (const lead of leadRows) {
     if (!lead?.name) continue;
     const id = lead.id || `hist-${lead.name.toLowerCase().replace(/[^a-z0-9]/g, '')}`;
     if (!seen[id]) {
-      let domain = null;
-      try { domain = lead.website ? new URL(lead.website).hostname.replace(/^www\./i, '') : null; } catch {}
-      seen[id] = { id, name: lead.name, address: lead.address || '', phone: lead.phone || '', website: lead.website || '', domain, email: lead.email || '', emailStatus: lead.emailStatus || 'unknown', foundAt: lead.foundAt || getTodayDateString() };
+      seen[id] = {
+        id,
+        name: lead.name,
+        address: lead.address || '',
+        phone: lead.phone || '',
+        website: lead.website || '',
+        domain: lead.domain,
+        email: lead.email || '',
+        emailStatus: lead.email_status || 'unknown',
+        foundAt: lead.created_at ? (lead.created_at.length > 10 ? lead.created_at.slice(0, 10) : lead.created_at) : getTodayDateString(),
+      };
     }
   }
   return seen;
@@ -145,4 +542,13 @@ export function loadAutoSendSetting() {
 export function saveAutoSendSetting(value) {
   getDatabase().prepare('INSERT INTO settings (name, value) VALUES (?, ?) ON CONFLICT(name) DO UPDATE SET value = excluded.value')
     .run('auto_send', JSON.stringify(Boolean(value)));
+}
+
+export function loadHunterSetting() {
+  const row = getDatabase().prepare('SELECT value FROM settings WHERE name = ?').get('hunter_enabled');
+  return row ? Boolean(JSON.parse(row.value)) : true;
+}
+export function saveHunterSetting(value) {
+  getDatabase().prepare('INSERT INTO settings (name, value) VALUES (?, ?) ON CONFLICT(name) DO UPDATE SET value = excluded.value')
+    .run('hunter_enabled', JSON.stringify(Boolean(value)));
 }

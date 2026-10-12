@@ -27,7 +27,7 @@ export default function DashboardView({
   outreachList = [],
   mailboxMessages = [],
   searchHistory = [],
-  leadUsage = { count: 0, limit: 50 },
+  leadUsage = { count: 0, limit: 100 },
   onNavigate,
   onSelectLead,
   onQuickSearch,

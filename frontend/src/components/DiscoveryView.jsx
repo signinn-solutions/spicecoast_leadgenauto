@@ -27,9 +27,10 @@ export default function DiscoveryView({
   count,
   setCount,
   searching,
+  searchProgress,
   onSearch,
-  leadLimit = 50,
-  remainingLeads = 50,
+  leadLimit = 100,
+  remainingLeads = 100,
   lastSearchInfo,
   onViewResults,
 }) {
@@ -42,7 +43,7 @@ export default function DiscoveryView({
     { city: "Singapore", country: "Singapore" },
   ];
 
-  const countPresets = [10, 15, 25, 50];
+  const countPresets = [10, 25, 50, 100];
 
   return (
     <div className="lf-view-container lf-animate-fade">
@@ -196,7 +197,7 @@ export default function DiscoveryView({
               <div className="lf-field-header-row">
                 <label htmlFor="target-count">
                   <Sliders size={13} className="text-amber" />
-                  <span>Harvest Volume (Max 50 per batch)</span>
+                  <span>Harvest Volume (Max {leadLimit || 100} per batch)</span>
                 </label>
                 <span className="lf-count-indicator lf-mono">{count} Leads</span>
               </div>
@@ -205,7 +206,7 @@ export default function DiscoveryView({
                   id="target-count"
                   type="range"
                   min={1}
-                  max={Math.min(50, remainingLeads > 0 ? remainingLeads : 50)}
+                  max={Math.min(leadLimit || 100, remainingLeads > 0 ? remainingLeads : (leadLimit || 100))}
                   value={count}
                   onChange={(e) => setCount(parseInt(e.target.value, 10))}
                   className="lf-range-slider"
@@ -250,31 +251,73 @@ export default function DiscoveryView({
           </div>
         </form>
 
-        {/* Live Stepper Radar Animation during search */}
+        {/* Real-time Streaming Progress Monitor */}
         {searching && (
-          <div className="lf-search-radar-box">
+          <div className="lf-search-radar-box lf-progress-monitor-box">
             <div className="lf-radar-header">
-              <Loader2 size={16} className="spin text-amber" />
-              <span>Live Search in progress</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Loader2 size={16} className="spin text-amber" />
+                <span>
+                  {searchProgress?.message || `Harvesting ${businessType} in ${city}, ${country}...`}
+                </span>
+              </div>
+              <span className="lf-progress-percent lf-mono">
+                {searchProgress?.percent ?? 0}%
+              </span>
             </div>
-            <div className="lf-radar-steps">
-              <div className="lf-radar-step active">
-                <span className="lf-radar-dot pulse" />
-                <span>Searching for {businessType} in {city}, {country}</span>
-              </div>
-              <div className="lf-radar-step active">
-                <span className="lf-radar-dot pulse" />
-                <span>Querying Google Places and Hunter.io APIs</span>
-              </div>
-              <div className="lf-radar-step active">
-                <span className="lf-radar-dot pulse" />
-                <span>Checking for existing records</span>
-              </div>
-              <div className="lf-radar-step active">
-                <span className="lf-radar-dot pulse" />
-                <span>Preparing outreach drafts where eligible</span>
-              </div>
+
+            {/* Dynamic Progress Bar */}
+            <div className="lf-progress-bar-track">
+              <div
+                className="lf-progress-bar-fill"
+                style={{ width: `${Math.max(5, searchProgress?.percent || 0)}%` }}
+              />
             </div>
+
+            <div className="lf-progress-stats-row">
+              <span className="lf-progress-stats-leads">
+                Progress: {searchProgress?.current || 0} / {searchProgress?.total || count} places processed
+              </span>
+              <span className="lf-progress-badge-live">
+                <span className="lf-radar-dot pulse" /> 4x Concurrent Scrapers Active
+              </span>
+            </div>
+
+            {/* Live Scraper Activity Feed */}
+            {searchProgress?.logs && searchProgress.logs.length > 0 ? (
+              <div className="lf-progress-log-container">
+                <div className="lf-progress-log-title">Live Scraper Activity Feed:</div>
+                <div className="lf-progress-log-list">
+                  {searchProgress.logs.slice(-6).map((log, idx) => (
+                    <div key={idx} className="lf-progress-log-item">
+                      <span className="lf-log-time lf-mono">
+                        {new Date(log.timestamp).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                      </span>
+                      <span className="lf-log-msg">{log.message}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="lf-radar-steps">
+                <div className="lf-radar-step active">
+                  <span className="lf-radar-dot pulse" />
+                  <span>Searching for {businessType} in {city}, {country}</span>
+                </div>
+                <div className="lf-radar-step active">
+                  <span className="lf-radar-dot pulse" />
+                  <span>Querying Google Places & Hunter APIs</span>
+                </div>
+                <div className="lf-radar-step active">
+                  <span className="lf-radar-dot pulse" />
+                  <span>Deduplicating existing records</span>
+                </div>
+                <div className="lf-radar-step active">
+                  <span className="lf-radar-dot pulse" />
+                  <span>Generating AI outreach proposals</span>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

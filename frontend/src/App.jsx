@@ -30,7 +30,7 @@ export default function LeadFinderApp({ onLogout }) {
   const [allLeads, setAllLeads] = useState([]);
   const [currentResults, setCurrentResults] = useState([]);
   const [searchHistory, setSearchHistory] = useState([]);
-  const [leadUsage, setLeadUsage] = useState({ date: "", count: 0, limit: 50 });
+  const [leadUsage, setLeadUsage] = useState({ date: "", count: 0, limit: 100 });
   const [serverStatus, setServerStatus] = useState({});
 
   // Discovery Form State
@@ -76,13 +76,15 @@ export default function LeadFinderApp({ onLogout }) {
   const [isSendingFollowUpId, setIsSendingFollowUpId] = useState(null);
   const [isSimulatingInbound, setIsSimulatingInbound] = useState(false);
   const [isTogglingAutoSend, setIsTogglingAutoSend] = useState(false);
+  const [isTogglingHunter, setIsTogglingHunter] = useState(false);
+  const [searchProgress, setSearchProgress] = useState(null);
   const refreshPromiseRef = useRef(null);
   const lastFetchErrorRef = useRef(false);
 
   // The server returns today's usage in its own local date; avoid a UTC day rollover.
   const localNow = new Date();
   const todayStr = leadUsage.date || `${localNow.getFullYear()}-${String(localNow.getMonth() + 1).padStart(2, "0")}-${String(localNow.getDate()).padStart(2, "0")}`;
-  const remainingLeads = Math.max(0, (leadUsage.limit ?? 50) - (leadUsage.count ?? 0));
+  const remainingLeads = Math.max(0, (leadUsage.limit ?? 100) - (leadUsage.count ?? 0));
 
   // Primary Data Fetch
   const fetchAllData = useCallback((isSilent = false) => {
@@ -158,7 +160,53 @@ export default function LeadFinderApp({ onLogout }) {
       return;
     }
 
+    const applySearchSuccess = (data) => {
+      const leads = data?.leads || [];
+      if (data?.usage) {
+        setLeadUsage((prev) => ({
+          ...prev,
+          date: data.usage.date,
+          count: data.usage.count,
+        }));
+      }
+
+      // Deduplicate into allLeads
+      const seenKeys = new Set();
+      const newAll = [...leads, ...allLeads].filter((lead) => {
+        const key =
+          lead.id ||
+          (lead.name ? lead.name.toLowerCase().replace(/[^a-z0-9]/g, "") : null);
+        if (!key || seenKeys.has(key)) return false;
+        seenKeys.add(key);
+        return true;
+      });
+
+      setAllLeads(newAll);
+      setCurrentResults(leads);
+      setLastSearchInfo({
+        count: leads.length,
+        duplicatesSkipped: data.duplicatesSkipped || 0,
+        mode: data.mode,
+      });
+
+      setNotice({
+        type: "success",
+        title: "Discovery Complete",
+        text: `Harvested ${leads.length} new unique lead(s) for ${city}, ${country}.`,
+      });
+
+      fetchAllData(true);
+    };
+
     setSearching(true);
+    setSearchProgress({
+      current: 0,
+      total: count,
+      percent: 0,
+      message: `Initiating discovery for ${businessType} in ${city}, ${country}...`,
+      logs: [],
+    });
+
     try {
       const response = await fetch("/api/search", {
         method: "POST",
@@ -172,47 +220,101 @@ export default function LeadFinderApp({ onLogout }) {
         }),
       });
 
-      if (response.ok) {
-        const data = await response.json();
-        const leads = data.leads || [];
-        if (data.usage) {
-          setLeadUsage((prev) => ({
-            ...prev,
-            date: data.usage.date,
-            count: data.usage.count,
-          }));
-        }
-
-        // Deduplicate into allLeads
-        const seenKeys = new Set();
-        const newAll = [...leads, ...allLeads].filter((lead) => {
-          const key =
-            lead.id ||
-            (lead.name ? lead.name.toLowerCase().replace(/[^a-z0-9]/g, "") : null);
-          if (!key || seenKeys.has(key)) return false;
-          seenKeys.add(key);
-          return true;
-        });
-
-        setAllLeads(newAll);
-        setCurrentResults(leads);
-        setLastSearchInfo({
-          count: leads.length,
-          duplicatesSkipped: data.duplicatesSkipped || 0,
-          mode: data.mode,
-        });
-
-        // Accurate success notice (fixed copy-paste bug from legacy code!)
-        setNotice({
-          type: "success",
-          title: "Discovery Complete",
-          text: `Harvested ${leads.length} new unique lead(s) for ${city}, ${country}.`,
-        });
-
-        fetchAllData(true);
-      } else {
+      if (!response.ok) {
         const err = await response.json().catch(() => ({}));
         throw new Error(err.error || "Search operation failed.");
+      }
+
+      const initialData = await response.json();
+
+      // If server returned an asynchronous job (HTTP 202 Accepted)
+      if (initialData.jobId) {
+        await new Promise((resolve, reject) => {
+          let settled = false;
+          let pollTimer = null;
+
+          const finishSuccess = (result) => {
+            if (settled) return;
+            settled = true;
+            if (pollTimer) clearInterval(pollTimer);
+            applySearchSuccess(result);
+            resolve();
+          };
+
+          const finishError = (err) => {
+            if (settled) return;
+            settled = true;
+            if (pollTimer) clearInterval(pollTimer);
+            reject(err);
+          };
+
+          // 1. Try real-time streaming via EventSource (SSE)
+          let es = null;
+          try {
+            es = new EventSource(`/api/jobs/${initialData.jobId}/stream`);
+
+            es.onmessage = (event) => {
+              try {
+                const data = JSON.parse(event.data);
+                if (data.type === "progress" || data.type === "init") {
+                  setSearchProgress((prev) => ({
+                    ...prev,
+                    ...data.progress,
+                    logs: data.log
+                      ? [...(prev?.logs || []).slice(-20), data.log]
+                      : data.logs || prev?.logs || [],
+                  }));
+                } else if (data.type === "completed") {
+                  es.close();
+                  finishSuccess(data.result);
+                } else if (data.type === "failed") {
+                  es.close();
+                  finishError(new Error(data.error || "Search failed"));
+                }
+              } catch (parseErr) {
+                console.warn("[SSE parse error]", parseErr);
+              }
+            };
+
+            es.onerror = () => {
+              // On SSE error or proxy disconnect, fallback to polling
+              if (es) {
+                es.close();
+                es = null;
+              }
+              startPolling();
+            };
+          } catch {
+            startPolling();
+          }
+
+          // 2. Fallback polling mechanism if SSE closes or fails
+          function startPolling() {
+            if (settled || pollTimer) return;
+            pollTimer = setInterval(async () => {
+              try {
+                const pollRes = await fetch(`/api/jobs/${initialData.jobId}`);
+                if (!pollRes.ok) throw new Error("Job polling error");
+                const jobData = await pollRes.json();
+                setSearchProgress((prev) => ({
+                  ...prev,
+                  ...jobData.progress,
+                  logs: jobData.logs || prev?.logs || [],
+                }));
+                if (jobData.status === "completed") {
+                  finishSuccess(jobData.result);
+                } else if (jobData.status === "failed") {
+                  finishError(new Error(jobData.error || "Search failed"));
+                }
+              } catch (e) {
+                finishError(e);
+              }
+            }, 1000);
+          }
+        });
+      } else {
+        // Direct synchronous response
+        applySearchSuccess(initialData);
       }
     } catch (err) {
       setNotice({
@@ -222,6 +324,7 @@ export default function LeadFinderApp({ onLogout }) {
       });
     } finally {
       setSearching(false);
+      setSearchProgress(null);
     }
   };
 
@@ -657,6 +760,47 @@ export default function LeadFinderApp({ onLogout }) {
     }
   };
 
+  // Toggle Hunter.io API vs Inbuilt Mail Scraper
+  const handleToggleHunter = async (targetState) => {
+    const currentState = serverStatus.hunter_enabled !== false;
+    const nextState = typeof targetState === "boolean" ? targetState : !currentState;
+    setIsTogglingHunter(true);
+    try {
+      const res = await fetch("/api/settings/toggle-hunter", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled: nextState }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setServerStatus((prev) => ({
+          ...prev,
+          hunter_enabled: data.hunter_enabled,
+          use_inbuilt_scraper: data.use_inbuilt_scraper,
+        }));
+        setNotice({
+          type: "success",
+          title: nextState ? "Hunter.io API Enabled" : "Inbuilt Mail Scraper Active",
+          text: nextState
+            ? "External Hunter.io enrichment API is now active."
+            : "Hunter API turned off. Lead discovery is now using the zero-cost inbuilt mail scraper & MX engine.",
+        });
+      } else {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "Failed to toggle email enrichment engine.");
+      }
+    } catch (err) {
+      setNotice({
+        type: "error",
+        title: "Setting Error",
+        text: err.message || "Could not update email enrichment setting.",
+      });
+    } finally {
+      setIsTogglingHunter(false);
+    }
+  };
+
   // Copy Webhook URL to clipboard
   const handleCopyWebhook = async (url) => {
     try {
@@ -810,8 +954,9 @@ export default function LeadFinderApp({ onLogout }) {
               count={count}
               setCount={setCount}
               searching={searching}
+              searchProgress={searchProgress}
               onSearch={handleSearch}
-              leadLimit={leadUsage.limit || 50}
+              leadLimit={leadUsage.limit || 100}
               remainingLeads={remainingLeads}
               lastSearchInfo={lastSearchInfo}
               onViewResults={() => setActiveView("results")}
@@ -893,6 +1038,8 @@ export default function LeadFinderApp({ onLogout }) {
               outreachList={outreachList}
               mailboxMessages={mailboxMessages}
               onCopyWebhook={handleCopyWebhook}
+              onToggleHunter={handleToggleHunter}
+              isTogglingHunter={isTogglingHunter}
             />
           )}
         </main>

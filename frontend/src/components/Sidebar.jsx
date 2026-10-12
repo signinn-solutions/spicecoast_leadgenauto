@@ -29,7 +29,7 @@ export default function Sidebar({
   pendingOutreachCount = 0,
   inboxCount = 0,
   serverOnline = true,
-  leadUsage = { count: 0, limit: 50 },
+  leadUsage = { count: 0, limit: 100 },
   replyUsage = { count: 0, limit: 30 },
 }) {
   const sidebarRef = useRef(null);
@@ -52,7 +52,7 @@ export default function Sidebar({
 
   const leadPercent = Math.min(
     100,
-    Math.round(((leadUsage.count || 0) / (leadUsage.limit || 50)) * 100)
+    Math.round(((leadUsage.count || 0) / (leadUsage.limit || 100)) * 100)
   );
   const replyPercent = Math.min(
     100,

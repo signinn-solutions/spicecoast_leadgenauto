@@ -1512,6 +1512,100 @@ body {
   animation: pulse-dot 1.2s infinite;
 }
 
+/* Real-time Streaming Progress Monitor */
+.lf-progress-monitor-box {
+  border: 1px solid rgba(125, 98, 236, 0.35);
+  background: #ffffff;
+}
+
+.lf-progress-percent {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--purple);
+  background: var(--purple-soft);
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+}
+
+.lf-progress-bar-track {
+  width: 100%;
+  height: 8px;
+  background: #f1f5f9;
+  border-radius: 999px;
+  overflow: hidden;
+  margin-bottom: 10px;
+}
+
+.lf-progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #7d62ec 0%, #a855f7 100%);
+  border-radius: 999px;
+  transition: width 0.35s ease;
+}
+
+.lf-progress-stats-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 14px;
+}
+
+.lf-progress-badge-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #059669;
+  background: #ecfdf5;
+  padding: 3px 8px;
+  border-radius: var(--radius-pill);
+  font-weight: 500;
+  font-size: 11px;
+}
+
+.lf-progress-log-container {
+  background: #0f172a;
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  color: #f8fafc;
+  font-size: 11.5px;
+  max-height: 130px;
+  overflow-y: auto;
+}
+
+.lf-progress-log-title {
+  color: #94a3b8;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 6px;
+  font-weight: 600;
+}
+
+.lf-progress-log-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.lf-progress-log-item {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.lf-log-time {
+  color: #64748b;
+  font-size: 10px;
+  flex-shrink: 0;
+}
+
+.lf-log-msg {
+  color: #e2e8f0;
+  word-break: break-word;
+}
+
 /* Search complete banner */
 .lf-search-complete-banner {
   background: var(--emerald-soft);
@@ -3802,6 +3896,251 @@ body {
 .lf-auth-error {
   color: var(--rose);
   margin-top: 16px;
+}
+
+/* ==========================================================
+   Discovery Engine & Scraper Toggle Switch
+   ========================================================== */
+
+.lf-engine-switch-card {
+  padding: 24px;
+  background: #ffffff;
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.lf-engine-switch-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.lf-engine-switch-title-box {
+  flex: 1;
+  min-width: 280px;
+}
+
+.lf-engine-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--purple-soft);
+  color: var(--purple-dark);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: var(--radius-pill);
+  border: 1px solid rgba(125, 98, 236, 0.2);
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.lf-engine-heading {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-main);
+  margin: 0 0 6px 0;
+  letter-spacing: -0.01em;
+}
+
+.lf-engine-desc {
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.5;
+  margin: 0;
+  max-width: 640px;
+}
+
+.lf-switch-control-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.lf-switch-labels {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.lf-switch-opt {
+  color: var(--text-faint);
+  transition: color 0.15s ease;
+}
+
+.lf-switch-opt.active {
+  color: var(--text-main);
+  font-weight: 700;
+}
+
+.lf-switch-divider {
+  color: var(--text-faint);
+}
+
+.lf-toggle-switch {
+  position: relative;
+  width: 58px;
+  height: 32px;
+  border-radius: 9999px;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.lf-toggle-switch:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.lf-toggle-switch:focus-visible {
+  outline: 2px solid var(--purple);
+  outline-offset: 3px;
+}
+
+.lf-toggle-track {
+  width: 100%;
+  height: 100%;
+  border-radius: 9999px;
+  display: flex;
+  align-items: center;
+  padding: 3px;
+  transition: background-color 0.25s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.25s ease;
+}
+
+.lf-toggle-switch.is-hunter .lf-toggle-track {
+  background: var(--purple);
+  box-shadow: 0 2px 8px rgba(125, 98, 236, 0.35);
+}
+
+.lf-toggle-switch.is-scraper .lf-toggle-track {
+  background: var(--emerald);
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.35);
+}
+
+.lf-toggle-thumb {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.lf-toggle-switch.is-hunter .lf-toggle-thumb {
+  transform: translateX(0px);
+}
+
+.lf-toggle-switch.is-scraper .lf-toggle-thumb {
+  transform: translateX(26px);
+}
+
+.lf-spin {
+  animation: lf-spin-anim 0.8s linear infinite;
+}
+
+@keyframes lf-spin-anim {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.lf-engine-status-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 16px 20px;
+  border-radius: var(--radius-lg);
+  border: 1px solid transparent;
+  transition: all 0.2s ease;
+  flex-wrap: wrap;
+}
+
+.lf-engine-status-banner.mode-hunter {
+  background: #f8f6fe;
+  border-color: rgba(125, 98, 236, 0.22);
+}
+
+.lf-engine-status-banner.mode-scraper {
+  background: #f0fdf4;
+  border-color: rgba(16, 185, 129, 0.25);
+}
+
+.lf-engine-status-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.mode-hunter .lf-engine-status-icon {
+  background: rgba(125, 98, 236, 0.12);
+}
+
+.mode-scraper .lf-engine-status-icon {
+  background: rgba(16, 185, 129, 0.12);
+}
+
+.lf-engine-status-content {
+  flex: 1;
+  min-width: 240px;
+}
+
+.lf-engine-status-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-main);
+  margin-bottom: 4px;
+}
+
+.lf-engine-status-text {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.lf-engine-status-action {
+  align-self: center;
+}
+
+.btn-to-scraper {
+  background: #ffffff;
+  color: #065f46;
+  border: 1px solid #a7f3d0;
+}
+
+.btn-to-scraper:hover {
+  background: #ecfdf5;
+  border-color: #6ee7b7;
+}
+
+.btn-to-hunter {
+  background: #ffffff;
+  color: var(--purple-dark);
+  border: 1px solid rgba(125, 98, 236, 0.35);
+}
+
+.btn-to-hunter:hover {
+  background: var(--purple-soft);
+  border-color: var(--purple);
 }
 
 :where(button, a, input, select, textarea, [tabindex]):focus-visible {

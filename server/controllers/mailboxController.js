@@ -7,6 +7,7 @@ import {
   saveOutreachHistory,
   loadLeadsHistory,
   saveLeadsHistory,
+  updateLeadStatus,
   loadAutoSendSetting,
   saveAutoSendSetting,
   withOutreachHistoryLock,
@@ -191,17 +192,11 @@ async function sendColdMailUnlocked(req, res, next) {
     }
     saveOutreachHistory(outreach);
 
-    // Also reflect timestamps in leads_history
-    const leadsHistory = loadLeadsHistory();
-    if (Array.isArray(leadsHistory.leads)) {
-      const matchLead = leadsHistory.leads.find((l) => l.id === draft.leadId || l.email === to);
-      if (matchLead) {
-        matchLead.first_contacted_at = matchLead.first_contacted_at || sentDate;
-        matchLead.last_contacted_at = sentDate;
-        matchLead.status = 'sent';
-        saveLeadsHistory(leadsHistory);
-      }
-    }
+    // Reflect timestamps in normalized leads table without full-dataset rewrite
+    updateLeadStatus(draft.leadId || to, {
+      status: 'sent',
+      contactedAt: sentDate,
+    });
 
     return res.status(200).json({
       status: 'sent',

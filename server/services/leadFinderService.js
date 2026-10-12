@@ -5,10 +5,12 @@ import {
   saveDailyUsage,
   loadLeadsHistory,
   saveLeadsHistory,
+  insertLeadsBatch,
   loadSeenPlaces,
   saveSeenPlaces,
   loadOutreachHistory,
   saveOutreachHistory,
+  loadHunterSetting,
   withStorageOperationLock,
   withOutreachHistoryLock,
 } from './storageService.js';
@@ -274,7 +276,7 @@ export function setHunterQuotaExceeded(exceeded = true) {
 }
 
 export async function findEmails(domain) {
-  if (!domain || !config.HUNTER_API_KEY) return [];
+  if (!domain || !config.HUNTER_API_KEY || !loadHunterSetting()) return [];
   if (isSocialOrDirectoryDomain(domain)) return [];
   if (hunterQuotaExceeded) return [];
 
@@ -304,7 +306,7 @@ export async function findEmails(domain) {
 }
 
 export async function verifyEmail(email) {
-  if (!email || !config.HUNTER_API_KEY || hunterQuotaExceeded) return 'unknown';
+  if (!email || !config.HUNTER_API_KEY || !loadHunterSetting() || hunterQuotaExceeded) return 'unknown';
   const url = `https://api.hunter.io/v2/email-verifier?email=${encodeURIComponent(email)}&api_key=${encodeURIComponent(config.HUNTER_API_KEY)}`;
   try {
     const response = await fetch(url, { signal: AbortSignal.timeout(10000) });
@@ -426,11 +428,117 @@ export async function scrapeEmailsFromWebsite(websiteUrl, domain) {
   }).map(value => ({ value, email: value, source: 'website' }));
 }
 
-export async function executeLeadSearch(options) {
-  return withStorageOperationLock('lead-search', () => runLeadSearch(options));
+/**
+ * Executes async tasks over an array with bounded concurrency.
+ * Preserves the original order of items.
+ */
+export async function mapConcurrent(items, concurrency, asyncFn) {
+  if (!items || items.length === 0) return [];
+  const limit = Math.max(1, Math.min(concurrency, items.length));
+  const results = new Array(items.length);
+  let currentIndex = 0;
+
+  async function worker() {
+    while (currentIndex < items.length) {
+      const idx = currentIndex++;
+      results[idx] = await asyncFn(items[idx], idx);
+    }
+  }
+
+  const workers = Array.from({ length: limit }, () => worker());
+  await Promise.all(workers);
+  return results;
 }
 
-async function runLeadSearch({ businessType, city, country, requestedCount = 20, mode = 'live' }) {
+async function processLivePlace(place, idx, { cleanCity, cleanCountry, cleanType, today, hunterEnabled }) {
+  const placeId = place.id || `live-${Date.now()}-${idx}`;
+  const name = place.displayName?.text || `${cleanCity} ${cleanType} ${idx + 1}`;
+  const address = place.formattedAddress || `${cleanCity}, ${cleanCountry}`;
+  const phone = place.nationalPhoneNumber || '—';
+  const website = place.websiteUri || '';
+  const domain = extractDomain(website);
+
+  let email = '—';
+  let emailStatus = 'not_found';
+
+  if (domain || website) {
+    let emails = [];
+    // 1. Query Hunter.io if key is configured, hunter is enabled, and monthly quota / credits are not exceeded
+    if (domain && !isSocialOrDirectoryDomain(domain) && config.HUNTER_API_KEY && hunterEnabled && !hunterQuotaExceeded) {
+      emails = await findEmails(domain);
+      if (emails.length > 0) {
+        await new Promise((r) => setTimeout(r, 200));
+      }
+    }
+
+    // 2. If Hunter is disabled, has no results, OR Hunter credits/quota are exhausted, use inbuilt web scraper
+    if (emails.length === 0 && (website || domain)) {
+      const scraped = await scrapeEmailsFromWebsite(website, domain);
+      if (scraped.length > 0) {
+        emails = scraped;
+      }
+    }
+
+    const bestEmailItem = emails.find((item) => typeof item?.value === 'string' && item.value.includes('@'));
+    const bestEmail = bestEmailItem?.value;
+    if (bestEmail) {
+      let status = 'unknown';
+      if (bestEmailItem.source === 'website' || !hunterEnabled) {
+        // Web scraper candidates already check MX records and scoring
+        status = bestEmailItem.hasMx === false ? 'invalid' : 'deliverable';
+      } else if (config.HUNTER_API_KEY && !hunterQuotaExceeded) {
+        status = await verifyEmail(bestEmail);
+        await new Promise((r) => setTimeout(r, 200));
+      } else {
+        status = 'deliverable';
+      }
+      email = bestEmail;
+      emailStatus =
+        status === 'valid' || status === 'deliverable'
+          ? 'deliverable'
+          : status === 'accept_all' || status === 'webmail'
+          ? 'risky'
+          : status === 'invalid' ? 'invalid' : 'deliverable';
+    }
+  }
+
+  const phoneStatus = phone && phone !== '—' ? 'valid' : 'invalid';
+
+  const leadObj = {
+    id: placeId,
+    name,
+    address,
+    city: cleanCity,
+    country: cleanCountry,
+    businessType: cleanType,
+    phone,
+    phoneStatus,
+    email,
+    emailStatus,
+    website: website || (domain ? `https://${domain}` : '#'),
+    foundAt: today,
+    source: 'live',
+  };
+
+  // Generate AI Cold Email draft if deliverable
+  if (emailStatus === 'deliverable' || emailStatus === 'valid') {
+    const draft = await generateColdEmail(leadObj);
+    leadObj.coldMailDraft = {
+      subject: draft.subject,
+      body: draft.body,
+      status: 'pending_review',
+      generatedAt: today,
+    };
+  }
+
+  return { leadObj, domain };
+}
+
+export async function executeLeadSearch(options, onProgress = () => {}) {
+  return withStorageOperationLock('lead-search', () => runLeadSearch(options, onProgress));
+}
+
+async function runLeadSearch({ businessType, city, country, requestedCount = 20, mode = 'live' }, onProgress = () => {}) {
   const cleanType = (businessType || '').trim();
   const cleanCity = (city || '').trim();
   const cleanCountry = (country || '').trim();
@@ -442,8 +550,8 @@ async function runLeadSearch({ businessType, city, country, requestedCount = 20,
     throw err;
   }
 
-  if (!Number.isInteger(count) || count < 1 || count > 50) {
-    const err = new Error('Number to find must be between 1 and 50.');
+  if (!Number.isInteger(count) || count < 1 || count > 100) {
+    const err = new Error('Number to find must be between 1 and 100.');
     err.statusCode = 400;
     throw err;
   }
@@ -492,6 +600,14 @@ async function runLeadSearch({ businessType, city, country, requestedCount = 20,
   const fetchCount = Math.min(count, remaining);
   const query = `${cleanType} in ${cleanCity}, ${cleanCountry}`;
 
+  onProgress({
+    step: 'start',
+    message: `Searching Google Places for "${cleanType}" in ${cleanCity}, ${cleanCountry}...`,
+    current: 0,
+    total: fetchCount,
+    percent: 5,
+  });
+
   const seenMap = loadSeenPlaces();
   const history = loadLeadsHistory();
   const existingLeads = history.leads || [];
@@ -513,103 +629,62 @@ async function runLeadSearch({ businessType, city, country, requestedCount = 20,
 
     if (places && places.length > 0) {
       isLiveMode = true;
-      for (let idx = 0; idx < places.length; idx++) {
-        if (usedToday >= config.DAILY_LEAD_LIMIT) break;
+      const hunterEnabled = loadHunterSetting();
+      const maxToProcess = Math.min(places.length, remaining);
+      const placesToProcess = places.slice(0, maxToProcess);
 
-        const place = places[idx];
-        const placeId = place.id || `live-${Date.now()}-${idx}`;
-        const name = place.displayName?.text || `${cleanCity} ${cleanType} ${idx + 1}`;
-        const address = place.formattedAddress || `${cleanCity}, ${cleanCountry}`;
-        const phone = place.nationalPhoneNumber || '—';
-        const website = place.websiteUri || '';
-        const domain = extractDomain(website);
+      onProgress({
+        step: 'places_found',
+        message: `Found ${places.length} business locations (${duplicatesSkipped} duplicates skipped). Scraping contact websites...`,
+        current: 0,
+        total: placesToProcess.length,
+        percent: 15,
+      });
 
+      // Concurrency Pool: process up to 4 places simultaneously
+      let finishedWorkers = 0;
+      const CONCURRENCY_LIMIT = 4;
+      const results = await mapConcurrent(placesToProcess, CONCURRENCY_LIMIT, async (place, idx) => {
+        const placeName = place.displayName?.text || `Business #${idx + 1}`;
+        onProgress({
+          step: 'scraping_place',
+          message: `Inspecting ${placeName}...`,
+          current: finishedWorkers,
+          total: placesToProcess.length,
+          percent: 15 + Math.round((finishedWorkers / placesToProcess.length) * 75),
+        });
+
+        const res = await processLivePlace(place, idx, { cleanCity, cleanCountry, cleanType, today, hunterEnabled });
+        finishedWorkers++;
+
+        const emailInfo = res?.leadObj?.email && res.leadObj.email !== '—'
+          ? `found ${res.leadObj.email}`
+          : 'no email published';
+        onProgress({
+          step: 'place_enriched',
+          message: `${placeName}: ${emailInfo}`,
+          current: finishedWorkers,
+          total: placesToProcess.length,
+          percent: 15 + Math.round((finishedWorkers / placesToProcess.length) * 75),
+        });
+
+        return res;
+      });
+
+      for (const res of results) {
+        if (!res?.leadObj) continue;
+        const { leadObj, domain } = res;
         usedToday += 1;
-        saveDailyUsage(today, usedToday);
 
-        let email = '—';
-        let emailStatus = 'not_found';
-
-        if (domain || website) {
-          let emails = [];
-          // 1. Query Hunter.io if key is configured and monthly quota / credits are not exceeded
-          if (domain && !isSocialOrDirectoryDomain(domain) && config.HUNTER_API_KEY && !hunterQuotaExceeded) {
-            emails = await findEmails(domain);
-            if (emails.length > 0) {
-              await new Promise((r) => setTimeout(r, 400));
-            }
-          }
-
-          // 2. If Hunter has no results OR Hunter credits/quota are exhausted, use web scraper
-          if (emails.length === 0 && (website || domain)) {
-            const scraped = await scrapeEmailsFromWebsite(website, domain);
-            if (scraped.length > 0) {
-              emails = scraped;
-            }
-          }
-
-          const bestEmailItem = emails.find((item) => typeof item?.value === 'string' && item.value.includes('@'));
-          const bestEmail = bestEmailItem?.value;
-          if (bestEmail) {
-            let status = 'unknown';
-            if (bestEmailItem.source === 'website') {
-              // Web scraper candidates already check MX records and scoring
-              status = bestEmailItem.hasMx === false ? 'invalid' : 'deliverable';
-            } else if (config.HUNTER_API_KEY && !hunterQuotaExceeded) {
-              status = await verifyEmail(bestEmail);
-              await new Promise((r) => setTimeout(r, 400));
-            } else {
-              status = 'deliverable';
-            }
-            email = bestEmail;
-            emailStatus =
-              status === 'valid' || status === 'deliverable'
-                ? 'deliverable'
-                : status === 'accept_all' || status === 'webmail'
-                ? 'risky'
-                : status === 'invalid' ? 'invalid' : 'deliverable';
-          }
-        }
-
-        const phoneStatus = phone && phone !== '—' ? 'valid' : 'invalid';
-
-        const leadObj = {
-          id: placeId,
-          name,
-          address,
-          city: cleanCity,
-          country: cleanCountry,
-          businessType: cleanType,
-          phone,
-          phoneStatus,
-          email,
-          emailStatus,
-          website: website || (domain ? `https://${domain}` : '#'),
-          foundAt: today,
-          source: 'live',
-        };
-
-        // Generate AI Cold Email draft if deliverable
-        if (emailStatus === 'deliverable' || emailStatus === 'valid') {
-          const draft = await generateColdEmail(leadObj);
-          leadObj.coldMailDraft = {
-            subject: draft.subject,
-            body: draft.body,
-            status: 'pending_review',
-            generatedAt: today,
-          };
-        }
-
-        // Save to seenMap immediately
-        seenMap[placeId] = {
-          id: placeId,
-          name,
-          address,
-          phone,
+        seenMap[leadObj.id] = {
+          id: leadObj.id,
+          name: leadObj.name,
+          address: leadObj.address,
+          phone: leadObj.phone,
           website: leadObj.website,
           domain,
-          email,
-          emailStatus,
+          email: leadObj.email,
+          emailStatus: leadObj.emailStatus,
           foundAt: today,
         };
 
@@ -624,7 +699,6 @@ async function runLeadSearch({ businessType, city, country, requestedCount = 20,
     for (const lead of simLeads) {
       if (usedToday >= config.DAILY_LEAD_LIMIT) break;
       usedToday += 1;
-      saveDailyUsage(today, usedToday);
 
       if (lead.emailStatus === 'deliverable' || lead.emailStatus === 'valid') {
         const draft = await generateColdEmail(lead, { useAI: false });
@@ -652,12 +726,7 @@ async function runLeadSearch({ businessType, city, country, requestedCount = 20,
     }
   }
 
-  // Persist seenPlaces
-  saveSeenPlaces(seenMap);
-
-  // Persist to history
-  const updatedLeads = [...existingLeads, ...processedLeads];
-  const searches = history.searches || [];
+  // Atomic Batch Transaction: write all discovered leads, update daily usage, record search, and update seen places
   const newSearchRecord = {
     id: Date.now(),
     query: `${cleanType} · ${cleanCity}, ${cleanCountry}`,
@@ -666,10 +735,13 @@ async function runLeadSearch({ businessType, city, country, requestedCount = 20,
     date: today,
     mode: isLiveMode ? 'live' : 'simulated',
   };
-  searches.unshift(newSearchRecord);
-  history.leads = updatedLeads;
-  history.searches = searches.slice(0, 50);
-  saveLeadsHistory(history);
+
+  insertLeadsBatch(processedLeads, {
+    today,
+    totalDailyCount: usedToday,
+    searchRecord: newSearchRecord,
+    seenPlaces: seenMap,
+  });
 
   // Sync any drafted cold emails to outreach history
   await withOutreachHistoryLock(() => {
@@ -699,6 +771,14 @@ async function runLeadSearch({ businessType, city, country, requestedCount = 20,
       }
     }
     saveOutreachHistory(outreachHistory);
+  });
+
+  onProgress({
+    step: 'completed',
+    message: `Discovery finished! Harvested ${processedLeads.length} leads.`,
+    current: processedLeads.length,
+    total: processedLeads.length,
+    percent: 100,
   });
 
   return {
