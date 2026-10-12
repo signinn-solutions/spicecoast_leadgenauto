@@ -271,6 +271,180 @@ export function setHunterQuotaExceeded(exceeded = true) {
   hunterQuotaExceeded = Boolean(exceeded);
 }
 
+/**
+ * Discovers companies directly using Hunter.io's native discovery engine
+ * (Hunter Discover / Domain Search) without using Google Places as starting point.
+ */
+export async function searchHunterCompanies({ businessType, city, country, neededCount = 20, seenMap = {}, existingLeads = [] }) {
+  if (!config.HUNTER_API_KEY) {
+    return {
+      companies: [],
+      duplicatesSkipped: 0,
+      providerError: 'Hunter.io API key is not configured.',
+    };
+  }
+
+  if (hunterQuotaExceeded) {
+    return {
+      companies: [],
+      duplicatesSkipped: 0,
+      providerError: 'Hunter.io monthly quota / credits reached. Switch to Google Places Scraper.',
+    };
+  }
+
+  const uniqueCompanies = [];
+  let duplicatesSkipped = 0;
+  let providerError = null;
+
+  // 1. Primary: Query Hunter Discover Endpoint (/v2/discover)
+  try {
+    const limit = Math.min(50, Math.max(10, neededCount));
+    const url = new URL('https://api.hunter.io/v2/discover');
+    url.searchParams.set('query', businessType);
+    if (city) url.searchParams.set('city', city);
+    if (country) url.searchParams.set('country', country);
+    url.searchParams.set('limit', String(limit));
+    url.searchParams.set('api_key', config.HUNTER_API_KEY);
+
+    const response = await fetch(url.toString(), { signal: AbortSignal.timeout(10000) });
+
+    if (response.status === 429 || response.status === 402) {
+      hunterQuotaExceeded = true;
+      providerError = `Hunter.io monthly credits / search quota reached (HTTP ${response.status}).`;
+      console.warn(`[Hunter.io Discover Quota Exceeded]: HTTP ${response.status}`);
+    } else if (response.ok) {
+      const data = await response.json();
+      const rawCompanies = Array.isArray(data.data)
+        ? data.data
+        : Array.isArray(data.data?.companies)
+        ? data.data.companies
+        : [];
+
+      for (const comp of rawCompanies) {
+        const dom = comp.domain || extractDomain(comp.website);
+        const name = comp.name || comp.organization || `${city} ${businessType}`;
+        const candidate = {
+          id: `hunter-${(dom || name).toLowerCase().replace(/[^a-z0-9]/g, '')}`,
+          name,
+          website: comp.website || (dom ? `https://${dom}` : ''),
+          domain: dom,
+          address: [comp.street, comp.city || city, comp.country || country].filter(Boolean).join(', ') || `${city}, ${country}`,
+          phone: comp.phone_number || comp.phone || '—',
+          businessType: comp.industry || businessType,
+          city: comp.city || city,
+          country: comp.country || country,
+          emails: Array.isArray(comp.emails) ? comp.emails : [],
+        };
+
+        if (isPlaceDuplicate(candidate, seenMap, existingLeads, uniqueCompanies)) {
+          duplicatesSkipped++;
+        } else {
+          uniqueCompanies.push(candidate);
+          if (uniqueCompanies.length >= neededCount) break;
+        }
+      }
+    } else {
+      console.warn(`[Hunter Discover API status ${response.status}]`);
+    }
+  } catch (err) {
+    console.warn(`[Hunter Discover Request Error]: ${err.message}`);
+  }
+
+  // 2. Secondary fallback: Hunter domain-search by company keywords
+  if (uniqueCompanies.length < neededCount && !hunterQuotaExceeded) {
+    try {
+      const companyQuery = `${businessType} in ${city}`;
+      const searchUrl = `https://api.hunter.io/v2/domain-search?company=${encodeURIComponent(companyQuery)}&limit=10&api_key=${encodeURIComponent(config.HUNTER_API_KEY)}`;
+      const searchResp = await fetch(searchUrl, { signal: AbortSignal.timeout(8000) });
+      if (searchResp.ok) {
+        const data = await searchResp.json();
+        if (data.data?.domain) {
+          const dom = data.data.domain;
+          const candidate = {
+            id: `hunter-${dom.replace(/[^a-z0-9]/g, '')}`,
+            name: data.data.organization || `${city} ${businessType}`,
+            website: `https://${dom}`,
+            domain: dom,
+            address: `${city}, ${country}`,
+            phone: '—',
+            businessType,
+            city,
+            country,
+            emails: Array.isArray(data.data.emails) ? data.data.emails : [],
+          };
+          if (!isPlaceDuplicate(candidate, seenMap, existingLeads, uniqueCompanies)) {
+            uniqueCompanies.push(candidate);
+          }
+        }
+      }
+    } catch {}
+  }
+
+  return {
+    companies: uniqueCompanies.slice(0, neededCount),
+    duplicatesSkipped,
+    providerError: uniqueCompanies.length === 0 ? providerError : null,
+  };
+}
+
+export async function processHunterCompany(company, idx, { cleanCity, cleanCountry, cleanType, today }) {
+  const companyId = company.id || `hunter-${Date.now()}-${idx}`;
+  const name = company.name || `${cleanCity} ${cleanType} #${idx + 1}`;
+  const address = company.address || `${cleanCity}, ${cleanCountry}`;
+  const phone = company.phone || '—';
+  const website = company.website || '';
+  const domain = company.domain || extractDomain(website);
+
+  let email = '—';
+  let emailStatus = 'not_found';
+
+  let emails = Array.isArray(company.emails) ? company.emails : [];
+
+  if (emails.length === 0 && domain && !hunterQuotaExceeded && config.HUNTER_API_KEY) {
+    emails = await findEmails(domain);
+  }
+
+  const bestEmailItem = emails.find((item) => typeof (item?.value || item?.email) === 'string' && (item.value || item.email).includes('@'));
+  const bestEmail = bestEmailItem?.value || bestEmailItem?.email;
+
+  if (bestEmail) {
+    email = bestEmail;
+    if (config.HUNTER_API_KEY && !hunterQuotaExceeded) {
+      const status = await verifyEmail(bestEmail);
+      emailStatus =
+        status === 'valid' || status === 'deliverable'
+          ? 'deliverable'
+          : status === 'accept_all' || status === 'webmail'
+          ? 'risky'
+          : status === 'invalid'
+          ? 'invalid'
+          : 'deliverable';
+    } else {
+      emailStatus = 'deliverable';
+    }
+  }
+
+  const phoneStatus = phone && phone !== '—' ? 'valid' : 'invalid';
+
+  const leadObj = {
+    id: companyId,
+    name,
+    address,
+    city: cleanCity,
+    country: cleanCountry,
+    businessType: company.businessType || cleanType,
+    phone,
+    phoneStatus,
+    email,
+    emailStatus,
+    website: website || (domain ? `https://${domain}` : '#'),
+    foundAt: today,
+    source: 'hunter',
+  };
+
+  return { leadObj, domain };
+}
+
 export async function findEmails(domain) {
   if (!domain || !config.HUNTER_API_KEY || !loadHunterSetting()) return [];
   if (isSocialOrDirectoryDomain(domain)) return [];
@@ -523,7 +697,7 @@ export async function executeLeadSearch(options, onProgress = () => {}) {
   return withStorageOperationLock('lead-search', () => runLeadSearch(options, onProgress));
 }
 
-async function runLeadSearch({ businessType, city, country, requestedCount = 20, mode = 'live' }, onProgress = () => {}) {
+async function runLeadSearch({ businessType, city, country, requestedCount = 20, mode = 'live', engine }, onProgress = () => {}) {
   const cleanType = (businessType || '').trim();
   const cleanCity = (city || '').trim();
   const cleanCountry = (country || '').trim();
@@ -547,6 +721,10 @@ async function runLeadSearch({ businessType, city, country, requestedCount = 20,
     throw err;
   }
 
+  const hunterSetting = loadHunterSetting();
+  const selectedEngine = engine || (hunterSetting ? 'hunter' : 'scraper');
+  const isHunterEngine = selectedEngine === 'hunter';
+
   // Simulation mode is strictly gated to development/test environment or explicit SIMULATION_MODE=true
   if (mode === 'simulated') {
     const env = process.env.NODE_ENV || config.NODE_ENV || 'development';
@@ -558,17 +736,20 @@ async function runLeadSearch({ businessType, city, country, requestedCount = 20,
     }
   }
 
-  // Live search requires configured Google Places & Hunter.io API keys
+  // Live search validation: verify keys based on chosen discovery engine
   if (mode === 'live') {
-    if (!config.GOOGLE_API_KEY) {
-      const err = new Error('Google Places API key is not configured.');
-      err.statusCode = 503;
-      throw err;
-    }
-    if (!config.HUNTER_API_KEY && !hunterQuotaExceeded) {
-      const err = new Error('Hunter.io API key is not configured.');
-      err.statusCode = 503;
-      throw err;
+    if (isHunterEngine) {
+      if (!config.HUNTER_API_KEY && !hunterQuotaExceeded) {
+        const err = new Error('Hunter.io API key is not configured for Hunter Native Discovery.');
+        err.statusCode = 503;
+        throw err;
+      }
+    } else {
+      if (!config.GOOGLE_API_KEY) {
+        const err = new Error('Google Places API key is not configured for Scraper Discovery.');
+        err.statusCode = 503;
+        throw err;
+      }
     }
   }
 
@@ -587,7 +768,9 @@ async function runLeadSearch({ businessType, city, country, requestedCount = 20,
 
   onProgress({
     step: 'start',
-    message: `Searching Google Places for "${cleanType}" in ${cleanCity}, ${cleanCountry}...`,
+    message: isHunterEngine
+      ? `Querying Hunter.io Native Discover for "${cleanType}" in ${cleanCity}, ${cleanCountry}...`
+      : `Searching Google Places for "${cleanType}" in ${cleanCity}, ${cleanCountry}...`,
     current: 0,
     total: fetchCount,
     percent: 5,
@@ -603,77 +786,163 @@ async function runLeadSearch({ businessType, city, country, requestedCount = 20,
 
   // Execute Live APIs
   if (mode === 'live') {
-    const searchRes = await searchPlaces(query, fetchCount, seenMap, existingLeads);
-    if (searchRes.providerError && searchRes.places.length === 0) {
-      const err = new Error(searchRes.providerError);
-      err.statusCode = 502;
-      throw err;
-    }
-    const places = searchRes.places || [];
-    duplicatesSkipped = searchRes.duplicatesSkipped || 0;
-
-    if (places && places.length > 0) {
-      isLiveMode = true;
-      const hunterEnabled = loadHunterSetting();
-      const maxToProcess = Math.min(places.length, remaining);
-      const placesToProcess = places.slice(0, maxToProcess);
-
-      onProgress({
-        step: 'places_found',
-        message: `Found ${places.length} business locations (${duplicatesSkipped} duplicates skipped). Scraping contact websites...`,
-        current: 0,
-        total: placesToProcess.length,
-        percent: 15,
+    if (isHunterEngine) {
+      // 1. HUNTER.IO NATIVE DISCOVERY MODE
+      const hunterRes = await searchHunterCompanies({
+        businessType: cleanType,
+        city: cleanCity,
+        country: cleanCountry,
+        neededCount: fetchCount,
+        seenMap,
+        existingLeads,
       });
 
-      // Concurrency Pool: process up to 4 places simultaneously
-      let finishedWorkers = 0;
-      const CONCURRENCY_LIMIT = 4;
-      const results = await mapConcurrent(placesToProcess, CONCURRENCY_LIMIT, async (place, idx) => {
-        const placeName = place.displayName?.text || `Business #${idx + 1}`;
+      if (hunterRes.providerError && hunterRes.companies.length === 0) {
+        const err = new Error(hunterRes.providerError);
+        err.statusCode = 502;
+        throw err;
+      }
+
+      const companies = hunterRes.companies || [];
+      duplicatesSkipped = hunterRes.duplicatesSkipped || 0;
+
+      if (companies && companies.length > 0) {
+        isLiveMode = true;
+        const maxToProcess = Math.min(companies.length, remaining);
+        const companiesToProcess = companies.slice(0, maxToProcess);
+
         onProgress({
-          step: 'scraping_place',
-          message: `Inspecting ${placeName}...`,
-          current: finishedWorkers,
-          total: placesToProcess.length,
-          percent: 15 + Math.round((finishedWorkers / placesToProcess.length) * 75),
+          step: 'places_found',
+          message: `Discovered ${companies.length} corporate profiles from Hunter.io (${duplicatesSkipped} duplicates skipped). Verifying contact emails...`,
+          current: 0,
+          total: companiesToProcess.length,
+          percent: 20,
         });
 
-        const res = await processLivePlace(place, idx, { cleanCity, cleanCountry, cleanType, today, hunterEnabled });
-        finishedWorkers++;
+        let finishedWorkers = 0;
+        const CONCURRENCY_LIMIT = 4;
+        const results = await mapConcurrent(companiesToProcess, CONCURRENCY_LIMIT, async (company, idx) => {
+          const compName = company.name || `Company #${idx + 1}`;
+          onProgress({
+            step: 'scraping_place',
+            message: `Verifying Hunter emails for ${compName}...`,
+            current: finishedWorkers,
+            total: companiesToProcess.length,
+            percent: 20 + Math.round((finishedWorkers / companiesToProcess.length) * 70),
+          });
 
-        const emailInfo = res?.leadObj?.email && res.leadObj.email !== '—'
-          ? `found ${res.leadObj.email}`
-          : 'no email published';
-        onProgress({
-          step: 'place_enriched',
-          message: `${placeName}: ${emailInfo}`,
-          current: finishedWorkers,
-          total: placesToProcess.length,
-          percent: 15 + Math.round((finishedWorkers / placesToProcess.length) * 75),
+          const res = await processHunterCompany(company, idx, { cleanCity, cleanCountry, cleanType, today });
+          finishedWorkers++;
+
+          const emailInfo = res?.leadObj?.email && res.leadObj.email !== '—'
+            ? `found verified ${res.leadObj.email}`
+            : 'no email published';
+          onProgress({
+            step: 'place_enriched',
+            message: `${compName}: ${emailInfo}`,
+            current: finishedWorkers,
+            total: companiesToProcess.length,
+            percent: 20 + Math.round((finishedWorkers / companiesToProcess.length) * 70),
+          });
+
+          return res;
         });
 
-        return res;
-      });
+        for (const res of results) {
+          if (!res?.leadObj) continue;
+          const { leadObj, domain } = res;
+          usedToday += 1;
 
-      for (const res of results) {
-        if (!res?.leadObj) continue;
-        const { leadObj, domain } = res;
-        usedToday += 1;
+          seenMap[leadObj.id] = {
+            id: leadObj.id,
+            name: leadObj.name,
+            address: leadObj.address,
+            phone: leadObj.phone,
+            website: leadObj.website,
+            domain,
+            email: leadObj.email,
+            emailStatus: leadObj.emailStatus,
+            foundAt: today,
+          };
 
-        seenMap[leadObj.id] = {
-          id: leadObj.id,
-          name: leadObj.name,
-          address: leadObj.address,
-          phone: leadObj.phone,
-          website: leadObj.website,
-          domain,
-          email: leadObj.email,
-          emailStatus: leadObj.emailStatus,
-          foundAt: today,
-        };
+          processedLeads.push(leadObj);
+        }
+      }
+    } else {
+      // 2. GOOGLE PLACES + INBUILT MAIL SCRAPER MODE
+      const searchRes = await searchPlaces(query, fetchCount, seenMap, existingLeads);
+      if (searchRes.providerError && searchRes.places.length === 0) {
+        const err = new Error(searchRes.providerError);
+        err.statusCode = 502;
+        throw err;
+      }
+      const places = searchRes.places || [];
+      duplicatesSkipped = searchRes.duplicatesSkipped || 0;
 
-        processedLeads.push(leadObj);
+      if (places && places.length > 0) {
+        isLiveMode = true;
+        const maxToProcess = Math.min(places.length, remaining);
+        const placesToProcess = places.slice(0, maxToProcess);
+
+        onProgress({
+          step: 'places_found',
+          message: `Found ${places.length} business locations from Google Places (${duplicatesSkipped} duplicates skipped). Deep-crawling websites...`,
+          current: 0,
+          total: placesToProcess.length,
+          percent: 15,
+        });
+
+        // Concurrency Pool: process up to 4 places simultaneously
+        let finishedWorkers = 0;
+        const CONCURRENCY_LIMIT = 4;
+        const results = await mapConcurrent(placesToProcess, CONCURRENCY_LIMIT, async (place, idx) => {
+          const placeName = place.displayName?.text || `Business #${idx + 1}`;
+          onProgress({
+            step: 'scraping_place',
+            message: `Crawling website & MX records for ${placeName}...`,
+            current: finishedWorkers,
+            total: placesToProcess.length,
+            percent: 15 + Math.round((finishedWorkers / placesToProcess.length) * 75),
+          });
+
+          // In scraper mode, hunterEnabled is false to use inbuilt scraper & MX verification with zero Hunter API credit usage
+          const res = await processLivePlace(place, idx, { cleanCity, cleanCountry, cleanType, today, hunterEnabled: false });
+          finishedWorkers++;
+
+          const emailInfo = res?.leadObj?.email && res.leadObj.email !== '—'
+            ? `extracted ${res.leadObj.email}`
+            : 'no email published';
+          onProgress({
+            step: 'place_enriched',
+            message: `${placeName}: ${emailInfo}`,
+            current: finishedWorkers,
+            total: placesToProcess.length,
+            percent: 15 + Math.round((finishedWorkers / placesToProcess.length) * 75),
+          });
+
+          return res;
+        });
+
+        for (const res of results) {
+          if (!res?.leadObj) continue;
+          const { leadObj, domain } = res;
+          leadObj.source = 'scraper';
+          usedToday += 1;
+
+          seenMap[leadObj.id] = {
+            id: leadObj.id,
+            name: leadObj.name,
+            address: leadObj.address,
+            phone: leadObj.phone,
+            website: leadObj.website,
+            domain,
+            email: leadObj.email,
+            emailStatus: leadObj.emailStatus,
+            foundAt: today,
+          };
+
+          processedLeads.push(leadObj);
+        }
       }
     }
   }

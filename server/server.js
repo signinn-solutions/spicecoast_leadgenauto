@@ -1,10 +1,19 @@
 import app from './app.js';
 import config from './config/env.js';
 import { closeStorage, loadDailyUsage } from './services/storageService.js';
+import { seedDefaultUsers } from './services/userService.js';
 
-function startServer(port) {
+async function startServer(port) {
   // Detect inaccessible/corrupt storage before advertising a healthy server.
   loadDailyUsage();
+
+  try {
+    await seedDefaultUsers();
+    console.log('👥  Users verified/seeded: admin@signinn.in (Superadmin) & admin@thespicecoast.com (Leadgen)');
+  } catch (err) {
+    console.warn('⚠️  [User Initialization Warning]:', err.message);
+  }
+
   const server = app.listen(port, config.HOST, () => {
     console.log(`\n🌶️  SpiceCoast Express API Server running on http://${config.HOST}:${port}`);
     console.log(`📡  Health Check: http://${config.HOST}:${port}/health`);

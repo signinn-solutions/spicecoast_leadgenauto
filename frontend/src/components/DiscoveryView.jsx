@@ -14,6 +14,7 @@ import {
   Building2,
   ArrowRight,
   ShieldCheck,
+  Check,
 } from "lucide-react";
 import { SPICE_PRESET_CATEGORIES } from "../constants/spicePresets";
 
@@ -33,6 +34,9 @@ export default function DiscoveryView({
   remainingLeads = 200,
   lastSearchInfo,
   onViewResults,
+  discoveryEngine = "hunter",
+  onToggleEngine,
+  isTogglingHunter = false,
 }) {
   const cityPresets = [
     { city: "Hamburg", country: "Germany" },
@@ -44,6 +48,7 @@ export default function DiscoveryView({
   ];
 
   const countPresets = [10, 25, 50, 100, 200];
+  const isHunter = discoveryEngine === "hunter";
 
   return (
     <div className="lf-view-container lf-animate-fade">
@@ -52,12 +57,92 @@ export default function DiscoveryView({
         <div>
           <h2 className="lf-section-title">Lead Discovery & Prospecting Engine</h2>
           <p className="lf-section-subtitle">
-            Search live business listings with Google Places and enrich verified contact details with Hunter.io.
+            Autonomous B2B sourcing using Google Places Scraper or Hunter.io Native Company Discovery.
           </p>
         </div>
         <div className="lf-quota-badge-top">
           <span className="lf-quota-badge-label">Remaining Daily Quota:</span>
           <span className="lf-quota-badge-val lf-mono">{remainingLeads} / {leadLimit}</span>
+        </div>
+      </div>
+
+      {/* Discovery Engine Switcher Card */}
+      <div className="lf-panel" style={{ padding: "16px 20px", marginBottom: "18px", border: isHunter ? "1px solid rgba(124, 58, 237, 0.3)" : "1px solid rgba(59, 130, 246, 0.3)" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px" }}>
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
+              <span className={`lf-badge-pill ${isHunter ? "purple" : "blue"}`} style={{ display: "inline-flex", alignItems: "center", gap: "5px" }}>
+                {isHunter ? <Zap size={12} /> : <Globe size={12} />}
+                <span>Active Discovery Mode: {isHunter ? "Hunter.io Native Discovery" : "Google Places + Inbuilt Web Scraper"}</span>
+              </span>
+            </div>
+            <div style={{ fontSize: "13px", color: "var(--text-muted)" }}>
+              {isHunter ? (
+                <span>
+                  <strong>Starting Point:</strong> Hunter.io Company & Domain Discover database &bull;{" "}
+                  <strong>Email Extraction:</strong> Hunter verified executive contacts
+                </span>
+              ) : (
+                <span>
+                  <strong>Starting Point:</strong> Google Places API listing seed &bull;{" "}
+                  <strong>Email Extraction:</strong> Inbuilt deep website crawler & live DNS MX validation (0 Hunter credits used)
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Engine Switch Button Group */}
+          <div style={{ display: "flex", alignItems: "center", background: "var(--bg-surface-2)", padding: "4px", borderRadius: "var(--radius-md)", border: "1px solid var(--border-subtle)" }}>
+            <button
+              type="button"
+              className={`lf-engine-switch-btn ${!isHunter ? "active" : ""}`}
+              onClick={() => onToggleEngine && onToggleEngine("scraper")}
+              disabled={searching || isTogglingHunter}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "6px",
+                padding: "6px 12px",
+                fontSize: "12px",
+                fontWeight: "600",
+                borderRadius: "var(--radius-sm)",
+                border: "none",
+                cursor: "pointer",
+                background: !isHunter ? "var(--bg-surface-1)" : "transparent",
+                color: !isHunter ? "#2563eb" : "var(--text-muted)",
+                boxShadow: !isHunter ? "0 1px 3px rgba(0,0,0,0.08)" : "none",
+                transition: "all 0.2s ease",
+              }}
+            >
+              <Globe size={13} />
+              <span>Google Places Scraper</span>
+            </button>
+
+            <button
+              type="button"
+              className={`lf-engine-switch-btn ${isHunter ? "active" : ""}`}
+              onClick={() => onToggleEngine && onToggleEngine("hunter")}
+              disabled={searching || isTogglingHunter}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "6px",
+                padding: "6px 12px",
+                fontSize: "12px",
+                fontWeight: "600",
+                borderRadius: "var(--radius-sm)",
+                border: "none",
+                cursor: "pointer",
+                background: isHunter ? "var(--bg-surface-1)" : "transparent",
+                color: isHunter ? "#7c3aed" : "var(--text-muted)",
+                boxShadow: isHunter ? "0 1px 3px rgba(0,0,0,0.08)" : "none",
+                transition: "all 0.2s ease",
+              }}
+            >
+              <Zap size={13} />
+              <span>Hunter.io Discovery</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -68,7 +153,7 @@ export default function DiscoveryView({
             <CheckCircle2 size={18} className="text-emerald" />
             <div>
               <div className="lf-banner-title">
-                Search Complete &bull; Live Places & Hunter.io API
+                Search Complete &bull; {lastSearchInfo.mode === "hunter_discover" || isHunter ? "Hunter.io Native Engine" : "Google Places Scraper Engine"}
               </div>
               <div className="lf-banner-text">
                 Saved <strong>{lastSearchInfo.count}</strong> new business record(s).
@@ -239,12 +324,12 @@ export default function DiscoveryView({
               {searching ? (
                 <>
                   <Loader2 size={18} className="spin" />
-                  <span>Harvesting, Enriching & Drafting AI Proposals...</span>
+                  <span>Harvesting via {isHunter ? "Hunter Native Discover" : "Google Places Scraper"}...</span>
                 </>
               ) : (
                 <>
                   <Search size={18} />
-                  <span>Harvest {count} B2B Leads Now</span>
+                  <span>Harvest {count} B2B Leads ({isHunter ? "Hunter Native" : "Places Scraper"})</span>
                 </>
               )}
             </button>
@@ -276,17 +361,17 @@ export default function DiscoveryView({
 
             <div className="lf-progress-stats-row">
               <span className="lf-progress-stats-leads">
-                Progress: {searchProgress?.current || 0} / {searchProgress?.total || count} places processed
+                Progress: {searchProgress?.current || 0} / {searchProgress?.total || count} entities processed
               </span>
               <span className="lf-progress-badge-live">
-                <span className="lf-radar-dot pulse" /> 4x Concurrent Scrapers Active
+                <span className="lf-radar-dot pulse" /> 4x Concurrent Workers Active
               </span>
             </div>
 
             {/* Live Scraper Activity Feed */}
             {searchProgress?.logs && searchProgress.logs.length > 0 ? (
               <div className="lf-progress-log-container">
-                <div className="lf-progress-log-title">Live Scraper Activity Feed:</div>
+                <div className="lf-progress-log-title">Live Discovery Activity Feed:</div>
                 <div className="lf-progress-log-list">
                   {searchProgress.logs.slice(-6).map((log, idx) => (
                     <div key={idx} className="lf-progress-log-item">
@@ -302,19 +387,19 @@ export default function DiscoveryView({
               <div className="lf-radar-steps">
                 <div className="lf-radar-step active">
                   <span className="lf-radar-dot pulse" />
-                  <span>Searching for {businessType} in {city}, {country}</span>
+                  <span>Querying {isHunter ? "Hunter.io Native Discover" : "Google Places API"} for {businessType} in {city}</span>
                 </div>
                 <div className="lf-radar-step active">
                   <span className="lf-radar-dot pulse" />
-                  <span>Querying Google Places & Hunter APIs</span>
+                  <span>{isHunter ? "Verifying corporate domains with Hunter.io" : "Crawling company websites & validating MX records"}</span>
                 </div>
                 <div className="lf-radar-step active">
                   <span className="lf-radar-dot pulse" />
-                  <span>Deduplicating existing records</span>
+                  <span>Deduplicating existing CRM records</span>
                 </div>
                 <div className="lf-radar-step active">
                   <span className="lf-radar-dot pulse" />
-                  <span>Generating AI outreach proposals</span>
+                  <span>Synthesizing DeepSeek cold outreach pitches</span>
                 </div>
               </div>
             )}

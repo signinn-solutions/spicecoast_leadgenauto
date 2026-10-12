@@ -6,6 +6,7 @@ import { fileURLToPath } from 'url';
 
 import config from './config/env.js';
 import apiRoutes from './routes/apiRoutes.js';
+import adminRoutes from './routes/adminRoutes.js';
 import webhookRoutes from './routes/webhookRoutes.js';
 import { authRoutes, requireDashboardAuth } from './middleware/dashboardAuth.js';
 import { handleWebhook } from './controllers/mailboxController.js';
@@ -98,6 +99,7 @@ app.get('/health', (req, res) => {
 app.use('/', webhookRoutes); // /webhook
 app.post('/api/webhook', handleWebhook); // Both webhook paths use their own bearer authentication.
 app.use('/api/auth', authRoutes);
+app.use('/api/admin', adminRoutes);
 app.use('/api', requireDashboardAuth, apiRoutes);  // /api/*
 
 // Serve React production build (dist/) if present

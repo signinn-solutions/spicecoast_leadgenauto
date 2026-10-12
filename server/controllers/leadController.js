@@ -70,13 +70,14 @@ import { jobManager } from '../services/jobManager.js';
 
 export async function searchLeads(req, res, next) {
   try {
-    const { business_type, businessType, city, country, count, requestedCount, mode, sync } = req.body || {};
+    const { business_type, businessType, city, country, count, requestedCount, mode, engine, discoveryEngine, sync } = req.body || {};
     const searchOptions = {
       businessType: business_type || businessType,
       city,
       country,
       requestedCount: count || requestedCount,
       mode: mode || 'live',
+      engine: engine || discoveryEngine,
     };
 
     // If caller explicitly requested synchronous execution (e.g. CLI scripts or sync test runs)

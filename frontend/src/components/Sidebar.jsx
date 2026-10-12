@@ -8,6 +8,7 @@ import {
   Inbox,
   BarChart3,
   ShieldCheck,
+  ShieldAlert,
   PlusCircle,
   ExternalLink,
   ChevronLeft,
@@ -16,7 +17,9 @@ import {
   Activity,
   Zap,
   X,
+  LogOut,
 } from "lucide-react";
+import { apiFetch, setSessionToken } from "../api.js";
 
 export default function Sidebar({
   activeView,
@@ -31,6 +34,8 @@ export default function Sidebar({
   serverOnline = true,
   leadUsage = { count: 0, limit: 100 },
   replyUsage = { count: 0, limit: 30 },
+  currentUser = null,
+  onLogout = null,
 }) {
   const sidebarRef = useRef(null);
   const [isMobileViewport, setIsMobileViewport] = useState(() =>
@@ -58,6 +63,19 @@ export default function Sidebar({
     100,
     Math.round(((replyUsage.count || 0) / (replyUsage.limit || 30)) * 100)
   );
+
+  const handleLogout = async () => {
+    if (typeof onLogout === "function") {
+      onLogout();
+      return;
+    }
+    try {
+      await apiFetch("/api/auth/logout", { method: "POST" });
+    } catch {}
+    setSessionToken("");
+    window.dispatchEvent(new Event("session-expired"));
+    window.location.reload();
+  };
 
   const navItems = [
     {
@@ -112,6 +130,18 @@ export default function Sidebar({
       badge: null,
       desc: "Integrations & API quotas",
     },
+    ...(currentUser?.role === "superadmin"
+      ? [
+          {
+            id: "admin",
+            label: "Superadmin",
+            icon: ShieldAlert,
+            badge: "Admin",
+            badgeType: "purple",
+            desc: "App health & user access",
+          },
+        ]
+      : []),
   ];
 
   return (
@@ -162,7 +192,9 @@ export default function Sidebar({
             {!isCollapsed && (
               <div className="lf-brand-info">
                 <span className="lf-brand-title">SpiceCoast</span>
-                <span className="lf-brand-tagline">Lead Engine &bull; Pro</span>
+                <span className="lf-brand-tagline">
+                  {currentUser?.role === "superadmin" ? "👑 SuperAdmin Console" : "💼 Lead Operations"}
+                </span>
               </div>
             )}
           </div>
@@ -280,15 +312,48 @@ export default function Sidebar({
               <div className="lf-footer-origin">
                 <span>Direct Sourcing &bull; Cochin, India</span>
               </div>
+
+              <button
+                type="button"
+                className="lf-btn-secondary sm"
+                id="sidebar-signout-btn"
+                onClick={handleLogout}
+                style={{
+                  width: "100%",
+                  marginTop: "10px",
+                  justifyContent: "center",
+                  gap: "6px",
+                  color: "#dc2626",
+                  borderColor: "rgba(239, 68, 68, 0.25)",
+                  background: "rgba(239, 68, 68, 0.08)",
+                  fontWeight: "600",
+                }}
+                title="Sign out of current SpiceCoast session"
+              >
+                <LogOut size={13} />
+                <span>Sign Out</span>
+              </button>
             </div>
           ) : (
-            <div
-              className={`lf-collapsed-status ${serverOnline ? "online" : "offline"}`}
-              title={`API: ${serverOnline ? "Online" : "Offline"} | Leads: ${
-                leadUsage.count
-              }/${leadUsage.limit}`}
-            >
-              <span className="lf-pulse-dot" />
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "8px" }}>
+              <div
+                className={`lf-collapsed-status ${serverOnline ? "online" : "offline"}`}
+                title={`API: ${serverOnline ? "Online" : "Offline"} | Leads: ${
+                  leadUsage.count
+                }/${leadUsage.limit}`}
+              >
+                <span className="lf-pulse-dot" />
+              </div>
+              <button
+                type="button"
+                className="lf-collapse-btn"
+                id="sidebar-signout-btn-collapsed"
+                onClick={handleLogout}
+                title="Sign Out"
+                style={{ color: "#dc2626" }}
+              >
+                <LogOut size={14} />
+              </button>
             </div>
           )}
         </div>

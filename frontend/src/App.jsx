@@ -10,11 +10,12 @@ import ColdMailModal from "./components/ColdMailModal.jsx";
 import MailboxView from "./components/MailboxView.jsx";
 import AnalyticsView from "./components/AnalyticsView.jsx";
 import SystemHealthView from "./components/SystemHealthView.jsx";
+import SuperadminView from "./components/SuperadminView.jsx";
 import Toast from "./components/Toast.jsx";
 import { Loader2 } from "lucide-react";
 import { apiFetch as fetch } from './api.js';
 
-export default function LeadFinderApp({ onLogout }) {
+export default function LeadFinderApp({ onLogout, currentUser = null }) {
   // Navigation & Shell State
   const [activeView, setActiveView] = useState("dashboard"); // dashboard, search, results, outreach, mailbox, analytics, health
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
@@ -40,6 +41,7 @@ export default function LeadFinderApp({ onLogout }) {
   const [count, setCount] = useState(15);
   const [searching, setSearching] = useState(false);
   const [lastSearchInfo, setLastSearchInfo] = useState(null);
+  const [discoveryEngine, setDiscoveryEngine] = useState("hunter");
 
   // Mailbox & Outreach State
   const [mailboxStatus, setMailboxStatus] = useState({
@@ -217,6 +219,7 @@ export default function LeadFinderApp({ onLogout }) {
           country: country.trim(),
           count,
           mode: "live",
+          engine: discoveryEngine,
         }),
       });
 
@@ -934,6 +937,8 @@ export default function LeadFinderApp({ onLogout }) {
           count: mailboxStatus.used_today || 0,
           limit: mailboxStatus.daily_limit || 30,
         }}
+        currentUser={currentUser}
+        onLogout={onLogout}
       />
 
       {/* Main Layout Area */}
@@ -949,6 +954,7 @@ export default function LeadFinderApp({ onLogout }) {
           onToggleAutoSend={handleToggleAutoSend}
           isTogglingAutoSend={isTogglingAutoSend}
           onCopyWebhook={handleCopyWebhook}
+          currentUser={currentUser}
         />
 
         {/* View Router */}
@@ -983,6 +989,9 @@ export default function LeadFinderApp({ onLogout }) {
               remainingLeads={remainingLeads}
               lastSearchInfo={lastSearchInfo}
               onViewResults={() => setActiveView("results")}
+              discoveryEngine={discoveryEngine}
+              onToggleEngine={(mode) => handleToggleHunter(mode === "hunter")}
+              isTogglingHunter={isTogglingHunter}
             />
           )}
 
@@ -1069,6 +1078,13 @@ export default function LeadFinderApp({ onLogout }) {
               onCopyWebhook={handleCopyWebhook}
               onToggleHunter={handleToggleHunter}
               isTogglingHunter={isTogglingHunter}
+            />
+          )}
+
+          {activeView === "admin" && (
+            <SuperadminView
+              currentUser={currentUser}
+              onNotify={setNotice}
             />
           )}
         </main>

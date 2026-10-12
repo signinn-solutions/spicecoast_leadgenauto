@@ -9,7 +9,9 @@ import {
   Check,
   ExternalLink,
   Sparkles,
+  LogOut,
 } from "lucide-react";
+import { apiFetch, setSessionToken } from "../api.js";
 
 export default function Header({
   onLogout,
@@ -20,7 +22,7 @@ export default function Header({
   mailboxStatus = {},
   onToggleAutoSend,
   isTogglingAutoSend,
-  onCopyWebhook,
+  currentUser = null,
 }) {
   const [copiedWebhook, setCopiedWebhook] = useState(false);
 
@@ -32,6 +34,7 @@ export default function Header({
     mailbox: { title: "Inbound Mailbox & Autoresponder", subtitle: "Live Webhook Inquiries & Intent Extraction" },
     analytics: { title: "Harvest Intelligence", subtitle: "Deliverability Rates & Market Distribution" },
     health: { title: "System Health & Integrations", subtitle: "API Connection Diagnostics & Quotas" },
+    admin: { title: "Superadmin Control Center", subtitle: "System Infrastructure, Diagnostics & User Access" },
   };
 
   const currentInfo = viewTitles[activeView] || {
@@ -44,6 +47,19 @@ export default function Header({
     if (!(await onCopyWebhook(url))) return;
     setCopiedWebhook(true);
     setTimeout(() => setCopiedWebhook(false), 2200);
+  };
+
+  const handleLogout = async () => {
+    if (typeof onLogout === "function") {
+      onLogout();
+      return;
+    }
+    try {
+      await apiFetch("/api/auth/logout", { method: "POST" });
+    } catch {}
+    setSessionToken("");
+    window.dispatchEvent(new Event("session-expired"));
+    window.location.reload();
   };
 
   return (
@@ -65,7 +81,51 @@ export default function Header({
       </div>
 
       <div className="lf-header-right">
-        {onLogout && <button type="button" className="lf-header-pill btn-pill" onClick={onLogout}>Sign out</button>}
+        {/* User Persona & Role Badge */}
+        {currentUser && (
+          <div
+            className="lf-header-pill"
+            style={{
+              background: currentUser.role === "superadmin" ? "rgba(124, 58, 237, 0.15)" : "rgba(217, 119, 6, 0.15)",
+              border: currentUser.role === "superadmin" ? "1px solid rgba(124, 58, 237, 0.3)" : "1px solid rgba(217, 119, 6, 0.3)",
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+            }}
+            title={`Authenticated as ${currentUser.email} (${currentUser.role})`}
+          >
+            <span style={{ fontSize: "12px", fontWeight: "600", color: currentUser.role === "superadmin" ? "#7c3aed" : "#d97706" }}>
+              {currentUser.role === "superadmin" ? "👑 Superadmin" : "💼 Leadgen"}
+            </span>
+            <span className="lf-mono" style={{ fontSize: "11px", color: "var(--text-muted)" }}>
+              {currentUser.email}
+            </span>
+          </div>
+        )}
+
+        {/* Prominent Sign Out Button */}
+        <button
+          type="button"
+          className="lf-header-pill btn-pill"
+          id="header-signout-btn"
+          onClick={handleLogout}
+          style={{
+            cursor: "pointer",
+            background: "rgba(239, 68, 68, 0.15)",
+            borderColor: "rgba(239, 68, 68, 0.4)",
+            color: "#ef4444",
+            fontWeight: "600",
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "6px",
+            padding: "6px 14px",
+            boxShadow: "0 1px 3px rgba(239, 68, 68, 0.2)",
+          }}
+          title="Sign out of SpiceCoast session"
+        >
+          <LogOut size={13} />
+          <span>Sign Out</span>
+        </button>
         {/* Mailbox Badge */}
         <div className="lf-header-pill mailbox-pill" title="Primary Dispatch Mailbox">
           <Mail size={13} className="text-amber" />

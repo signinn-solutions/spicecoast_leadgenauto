@@ -120,7 +120,7 @@ function rowToLead(row) {
   };
 }
 
-function getDatabase() {
+export function getDatabase() {
   const file = path.resolve(config.DB_PATH);
   if (database && openPath === file) return database;
   closeStorage();
@@ -173,7 +173,45 @@ function getDatabase() {
 
       CREATE TABLE IF NOT EXISTS datasets (name TEXT PRIMARY KEY, value TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS settings (name TEXT PRIMARY KEY, value TEXT NOT NULL);
+
+      CREATE TABLE IF NOT EXISTS users (
+        id TEXT PRIMARY KEY,
+        email TEXT UNIQUE NOT NULL,
+        password_hash TEXT NOT NULL,
+        name TEXT NOT NULL,
+        role TEXT NOT NULL DEFAULT 'user',
+        status TEXT NOT NULL DEFAULT 'active',
+        active INTEGER NOT NULL DEFAULT 1,
+        version INTEGER NOT NULL DEFAULT 1,
+        daily_lead_limit INTEGER NOT NULL DEFAULT -1,
+        last_login_at DATETIME,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        created_by TEXT,
+        notes TEXT
+      );
+      CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+
+      CREATE TABLE IF NOT EXISTS audit_logs (
+        id TEXT PRIMARY KEY,
+        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+        user_email TEXT,
+        action TEXT NOT NULL,
+        details TEXT,
+        category TEXT DEFAULT 'general',
+        ip_address TEXT
+      );
+      CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON audit_logs(timestamp);
     `);
+
+    // Column migrations for users table
+    try { db.exec("ALTER TABLE users ADD COLUMN status TEXT DEFAULT 'active'"); } catch {}
+    try { db.exec("ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'user'"); } catch {}
+    try { db.exec("ALTER TABLE users ADD COLUMN active INTEGER DEFAULT 1"); } catch {}
+    try { db.exec("ALTER TABLE users ADD COLUMN version INTEGER DEFAULT 1"); } catch {}
+    try { db.exec("ALTER TABLE users ADD COLUMN daily_lead_limit INTEGER DEFAULT -1"); } catch {}
+    try { db.exec("ALTER TABLE users ADD COLUMN last_login_at DATETIME"); } catch {}
+    try { db.exec("ALTER TABLE users ADD COLUMN created_by TEXT"); } catch {}
+    try { db.exec("ALTER TABLE users ADD COLUMN notes TEXT"); } catch {}
 
     // Legacy dataset migration check
     const exists = db.prepare('SELECT 1 FROM datasets WHERE name = ?');
