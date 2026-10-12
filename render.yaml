@@ -24,7 +24,7 @@ services:
       - key: AUTO_SEND
         value: "false"
       - key: DAILY_LEAD_LIMIT
-        value: "100"
+        value: "200"
       - key: DAILY_REPLY_LIMIT
         value: "30"
       - key: GOOGLE_API_KEY

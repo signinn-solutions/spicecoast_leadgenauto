@@ -2,6 +2,18 @@ import OpenAI from 'openai';
 import config from '../config/env.js';
 
 let deepseekClient = null;
+let aiUnavailableUntil = 0;
+let aiUnavailableReason = '';
+
+export function isAiTemporarilyUnavailable() {
+  return Date.now() < aiUnavailableUntil;
+}
+
+export function resetAiUnavailableState() {
+  aiUnavailableUntil = 0;
+  aiUnavailableReason = '';
+}
+
 const textValue = (value, fallback) => typeof value === 'string' && value.trim() ? value.trim().slice(0, 2000) : fallback;
 
 export function getDeepseekClient() {
@@ -11,7 +23,7 @@ export function getDeepseekClient() {
       deepseekClient = new OpenAI({
         apiKey: config.DEEPSEEK_API_KEY,
         baseURL: 'https://api.deepseek.com',
-        timeout: 15000,
+        timeout: 8000,
         maxRetries: 0,
       });
     } catch (e) {
@@ -26,13 +38,17 @@ export function getDeepseekClient() {
  * Generates a highly customized B2B cold email draft for a discovered deliverable lead.
  * Does NOT send the email — saves it as a draft for human confirmation.
  */
-export async function generateColdEmail(lead = {}, { useAI = true } = {}) {
+export async function generateColdEmail(lead = {}, { useAI = true, force = false } = {}) {
+  if (force) {
+    resetAiUnavailableState();
+  }
+
   const companyName = lead.name || 'Valued Partner';
   const city = lead.city || (lead.address ? lead.address.split(',')[1]?.trim() : '') || 'your region';
   const country = lead.country || (lead.address ? lead.address.split(',').pop()?.trim() : '') || '';
   const businessType = lead.businessType || 'Spice Import & Distribution';
 
-  const client = useAI ? getDeepseekClient() : null;
+  const client = useAI && !isAiTemporarilyUnavailable() ? getDeepseekClient() : null;
 
   if (useAI && client && config.DEEPSEEK_API_KEY) {
     try {
@@ -89,7 +105,15 @@ Output Format: Provide strictly valid JSON with keys "subject" and "body". Do no
         console.warn('[DeepSeek ColdMail JSON Parse Issue]:', err.message);
       }
     } catch (e) {
-      console.warn(`[DeepSeek ColdMail API Error]: ${e.message}. Using fallback template.`);
+      const errMsg = e.message || String(e);
+      const isQuotaOrAuth = e.status === 402 || e.status === 401 || errMsg.includes('402') || errMsg.toLowerCase().includes('insufficient balance') || errMsg.toLowerCase().includes('quota');
+      if (isQuotaOrAuth) {
+        aiUnavailableUntil = Date.now() + 60000;
+        aiUnavailableReason = errMsg;
+        console.warn(`[DeepSeek Circuit Breaker]: Tripped (${errMsg}). Fast-failing with local fallback template for 60s.`);
+      } else {
+        console.warn(`[DeepSeek ColdMail API Error]: ${errMsg}. Using fallback template.`);
+      }
     }
   }
 

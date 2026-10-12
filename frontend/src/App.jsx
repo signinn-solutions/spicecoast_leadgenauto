@@ -30,7 +30,7 @@ export default function LeadFinderApp({ onLogout }) {
   const [allLeads, setAllLeads] = useState([]);
   const [currentResults, setCurrentResults] = useState([]);
   const [searchHistory, setSearchHistory] = useState([]);
-  const [leadUsage, setLeadUsage] = useState({ date: "", count: 0, limit: 100 });
+  const [leadUsage, setLeadUsage] = useState({ date: "", count: 0, limit: 200 });
   const [serverStatus, setServerStatus] = useState({});
 
   // Discovery Form State
@@ -84,7 +84,7 @@ export default function LeadFinderApp({ onLogout }) {
   // The server returns today's usage in its own local date; avoid a UTC day rollover.
   const localNow = new Date();
   const todayStr = leadUsage.date || `${localNow.getFullYear()}-${String(localNow.getMonth() + 1).padStart(2, "0")}-${String(localNow.getDate()).padStart(2, "0")}`;
-  const remainingLeads = Math.max(0, (leadUsage.limit ?? 100) - (leadUsage.count ?? 0));
+  const remainingLeads = Math.max(0, (leadUsage.limit ?? 200) - (leadUsage.count ?? 0));
 
   // Primary Data Fetch
   const fetchAllData = useCallback((isSilent = false) => {
@@ -349,14 +349,16 @@ export default function LeadFinderApp({ onLogout }) {
   };
 
   // AI Cold Pitch Generation Handler
-  const handleGeneratePitch = async (lead) => {
+  const handleGeneratePitch = async (lead, { force = false, silent = false } = {}) => {
     if (!lead || !lead.email) {
-      setNotice({
-        type: "warning",
-        title: "Missing Email",
-        text: "Cannot generate outreach proposal without a verified executive email address.",
-      });
-      return;
+      if (!silent) {
+        setNotice({
+          type: "warning",
+          title: "Missing Email",
+          text: "Cannot generate outreach proposal without a verified executive email address.",
+        });
+      }
+      return null;
     }
 
     setGeneratingDraftId(lead.id);
@@ -368,6 +370,7 @@ export default function LeadFinderApp({ onLogout }) {
           leadId: lead.id,
           name: lead.name,
           email: lead.email,
+          force,
           city: lead.city || city,
           country: lead.country || country,
           businessType: lead.businessType || businessType,
@@ -391,23 +394,31 @@ export default function LeadFinderApp({ onLogout }) {
           setSelectedLead((prev) => ({ ...prev, coldMailDraft: draft }));
         }
 
-        setNotice({
-          type: "success",
-          title: "Draft Prepared",
-          text: `Outreach draft prepared for ${lead.name}. Review it before sending.`,
-        });
+        if (!silent) {
+          setNotice({
+            type: "success",
+            title: draft?.source === "template_fallback" ? "Template Fallback Draft" : "Draft Prepared",
+            text: `Outreach draft prepared for ${lead.name}. Review it before sending.`,
+          });
+        }
 
-        fetchAllData(true);
+        if (!silent) {
+          fetchAllData(true);
+        }
+        return { draft, outreachRecord: data.outreachRecord };
       } else {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.error || "Could not synthesize cold proposal.");
       }
     } catch (err) {
-      setNotice({
-        type: "error",
-        title: "Synthesis Error",
-        text: err.message,
-      });
+      if (!silent) {
+        setNotice({
+          type: "error",
+          title: "Synthesis Error",
+          text: err.message,
+        });
+      }
+      throw err;
     } finally {
       setGeneratingDraftId(null);
     }
@@ -483,7 +494,7 @@ export default function LeadFinderApp({ onLogout }) {
   };
 
   // Send Cold Mail Dispatch Handler
-  const handleSendPitch = async (leadId, toEmail, subject, body) => {
+  const handleSendPitch = async (leadId, toEmail, subject, body, { silent = false } = {}) => {
     setIsSendingPitchId(leadId);
     try {
       const res = await fetch("/api/mailbox/send-coldmail", {
@@ -530,23 +541,35 @@ export default function LeadFinderApp({ onLogout }) {
           setActiveReviewDraft(null);
         }
 
-        setNotice({
-          type: "success",
-          title: "Outreach Dispatched",
-          text: `Email dispatched to ${toEmail} via Hostinger API.`,
-        });
-
-        fetchAllData(true);
+        if (!silent) {
+          setNotice({
+            type: "success",
+            title: "Outreach Dispatched",
+            text: `Email dispatched to ${toEmail} via Hostinger API.`,
+          });
+          fetchAllData(true);
+        }
+        return true;
       } else {
         const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || "Failed to dispatch email.");
+        if (!silent) {
+          setNotice({
+            type: "error",
+            title: "Dispatch Blocked",
+            text: err.error || "Failed to dispatch email.",
+          });
+        }
+        return false;
       }
     } catch (err) {
-      setNotice({
-        type: "error",
-        title: "Dispatch Blocked",
-        text: err.message,
-      });
+      if (!silent) {
+        setNotice({
+          type: "error",
+          title: "Dispatch Blocked",
+          text: err.message,
+        });
+      }
+      return false;
     } finally {
       setIsSendingPitchId(null);
     }
@@ -956,7 +979,7 @@ export default function LeadFinderApp({ onLogout }) {
               searching={searching}
               searchProgress={searchProgress}
               onSearch={handleSearch}
-              leadLimit={leadUsage.limit || 100}
+              leadLimit={leadUsage.limit || 200}
               remainingLeads={remainingLeads}
               lastSearchInfo={lastSearchInfo}
               onViewResults={() => setActiveView("results")}
@@ -990,8 +1013,14 @@ export default function LeadFinderApp({ onLogout }) {
                   source: isLiveOutreach(item) ? "live" : "simulated",
                 })
               }
-              onQuickSend={(item) =>
-                handleSendPitch(item.leadId, item.recipient, item.subject, item.body)
+              onQuickSend={(item, options) =>
+                handleSendPitch(
+                  item.leadId || item.lead?.id || (item.id || "").replace(/^outreach-/, "").replace(/^queue-/, ""),
+                  item.recipient,
+                  item.subject,
+                  item.body,
+                  options
+                )
               }
               isSendingId={isSendingPitchId}
               onRefresh={() => fetchAllData(false)}

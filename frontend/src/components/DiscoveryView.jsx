@@ -29,8 +29,8 @@ export default function DiscoveryView({
   searching,
   searchProgress,
   onSearch,
-  leadLimit = 100,
-  remainingLeads = 100,
+  leadLimit = 200,
+  remainingLeads = 200,
   lastSearchInfo,
   onViewResults,
 }) {
@@ -43,7 +43,7 @@ export default function DiscoveryView({
     { city: "Singapore", country: "Singapore" },
   ];
 
-  const countPresets = [10, 25, 50, 100];
+  const countPresets = [10, 25, 50, 100, 200];
 
   return (
     <div className="lf-view-container lf-animate-fade">
@@ -197,7 +197,7 @@ export default function DiscoveryView({
               <div className="lf-field-header-row">
                 <label htmlFor="target-count">
                   <Sliders size={13} className="text-amber" />
-                  <span>Harvest Volume (Max {leadLimit || 100} per batch)</span>
+                  <span>Harvest Volume (Max {leadLimit || 200} per batch)</span>
                 </label>
                 <span className="lf-count-indicator lf-mono">{count} Leads</span>
               </div>
@@ -206,7 +206,7 @@ export default function DiscoveryView({
                   id="target-count"
                   type="range"
                   min={1}
-                  max={Math.min(leadLimit || 100, remainingLeads > 0 ? remainingLeads : (leadLimit || 100))}
+                  max={Math.min(leadLimit || 200, remainingLeads > 0 ? remainingLeads : (leadLimit || 200))}
                   value={count}
                   onChange={(e) => setCount(parseInt(e.target.value, 10))}
                   className="lf-range-slider"

@@ -187,12 +187,8 @@ export function streamJobProgress(req, res) {
 }
 
 export async function generateLeadColdMail(req, res, next) {
-  return withOutreachHistoryLock(() => generateLeadColdMailUnlocked(req, res, next));
-}
-
-async function generateLeadColdMailUnlocked(req, res, next) {
   try {
-    const { leadId, email } = req.body || {};
+    const { leadId, email, force } = req.body || {};
     const savedLead = loadLeadsHistory().leads?.find((lead) => lead.id === leadId);
     if (!savedLead || !email || savedLead.email !== email || !['deliverable', 'valid'].includes(savedLead.emailStatus)) {
       return res.status(400).json({ error: 'A saved lead with a matching email is required.' });
@@ -205,6 +201,23 @@ async function generateLeadColdMailUnlocked(req, res, next) {
     if (existingIdx >= 0 && outreachHistory[existingIdx].leadId && outreachHistory[existingIdx].leadId !== leadId) {
       return res.status(409).json({ error: 'This email already belongs to another outreach draft.' });
     }
+
+    // Idempotency: return existing draft unless explicit force:true regeneration is requested
+    if (existingIdx >= 0 && !force) {
+      const existingRecord = outreachHistory[existingIdx];
+      return res.status(200).json({
+        success: true,
+        cached: true,
+        draft: {
+          subject: existingRecord.subject,
+          body: existingRecord.body,
+          model: existingRecord.model || (existingRecord.source === 'live' ? 'deepseek' : 'Local template'),
+          source: existingRecord.draftSource || (existingRecord.model === 'Local template' ? 'template_fallback' : 'deepseek'),
+        },
+        outreachRecord: existingRecord,
+      });
+    }
+
     const leadObj = {
       id: savedLead.id,
       name: savedLead.name || 'Valued Partner',
@@ -215,33 +228,50 @@ async function generateLeadColdMailUnlocked(req, res, next) {
       address: savedLead.address || '',
     };
 
-    const draft = await generateColdEmail(leadObj, { useAI: savedLead.source === 'live' });
+    // Run AI call outside the mutex lock so multiple draft requests execute concurrently in parallel
+    const draft = await generateColdEmail(leadObj, { useAI: savedLead.source === 'live', force });
+    const draftSource = draft.model === 'Local template' ? 'template_fallback' : 'deepseek';
 
-    // Persist to outreach history
-    const outreachRecord = {
-      id: `outreach-${leadObj.id}`,
-      leadId: leadObj.id,
-      source: savedLead?.source || 'unknown',
-      leadName: leadObj.name,
-      recipient: leadObj.email,
-      company: leadObj.name,
-      location: `${leadObj.city}, ${leadObj.country}`.replace(/^, |^ - |, $/g, ''),
-      subject: draft.subject,
-      body: draft.body,
-      status: 'pending_review',
-      createdAt: new Date().toISOString().slice(0, 10),
-    };
+    // Atomically persist to outreach history under lock
+    const outreachRecord = await withOutreachHistoryLock(() => {
+      const currentHistory = loadOutreachHistory();
+      const currentExistingIdx = currentHistory.findIndex((o) => o.leadId === leadId || (o.recipient && o.recipient === email));
+      if (currentExistingIdx >= 0 && currentHistory[currentExistingIdx].status === 'sent') {
+        const err = new Error('Outreach to this lead has already been sent.');
+        err.statusCode = 409;
+        throw err;
+      }
+      const record = {
+        id: currentExistingIdx >= 0 ? currentHistory[currentExistingIdx].id : `outreach-${leadObj.id}`,
+        leadId: leadObj.id,
+        source: savedLead?.source || 'unknown',
+        leadName: leadObj.name,
+        recipient: leadObj.email,
+        company: leadObj.name,
+        location: `${leadObj.city}, ${leadObj.country}`.replace(/^, |^ - |, $/g, ''),
+        subject: draft.subject,
+        body: draft.body,
+        status: 'pending_review',
+        draftSource,
+        model: draft.model,
+        createdAt: new Date().toISOString().slice(0, 10),
+      };
 
-    if (existingIdx >= 0) {
-      outreachHistory[existingIdx] = outreachRecord;
-    } else {
-      outreachHistory.unshift(outreachRecord);
-    }
-    saveOutreachHistory(outreachHistory);
+      if (currentExistingIdx >= 0) {
+        currentHistory[currentExistingIdx] = record;
+      } else {
+        currentHistory.unshift(record);
+      }
+      saveOutreachHistory(currentHistory);
+      return record;
+    });
 
     return res.status(200).json({
       success: true,
-      draft,
+      draft: {
+        ...draft,
+        source: draftSource,
+      },
       outreachRecord,
     });
   } catch (err) {

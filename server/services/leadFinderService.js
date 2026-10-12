@@ -8,13 +8,9 @@ import {
   insertLeadsBatch,
   loadSeenPlaces,
   saveSeenPlaces,
-  loadOutreachHistory,
-  saveOutreachHistory,
   loadHunterSetting,
   withStorageOperationLock,
-  withOutreachHistoryLock,
 } from './storageService.js';
-import { generateColdEmail } from './deepseekService.js';
 import { scrapeEmailsForWebsite } from './emailScraper.js';
 
 const PREFIXES = [
@@ -163,7 +159,7 @@ export async function searchPlaces(query, neededCount = 20, seenMap = {}, existi
   let duplicatesSkipped = 0;
   let providerError = null;
   let pageToken = null;
-  const MAX_PAGES = 3;
+  const MAX_PAGES = Math.max(10, Math.ceil(neededCount / 20));
 
   for (let pageNum = 0; pageNum < MAX_PAGES; pageNum++) {
     if (newUniquePlaces.length >= neededCount) break;
@@ -520,17 +516,6 @@ async function processLivePlace(place, idx, { cleanCity, cleanCountry, cleanType
     source: 'live',
   };
 
-  // Generate AI Cold Email draft if deliverable
-  if (emailStatus === 'deliverable' || emailStatus === 'valid') {
-    const draft = await generateColdEmail(leadObj);
-    leadObj.coldMailDraft = {
-      subject: draft.subject,
-      body: draft.body,
-      status: 'pending_review',
-      generatedAt: today,
-    };
-  }
-
   return { leadObj, domain };
 }
 
@@ -550,8 +535,8 @@ async function runLeadSearch({ businessType, city, country, requestedCount = 20,
     throw err;
   }
 
-  if (!Number.isInteger(count) || count < 1 || count > 100) {
-    const err = new Error('Number to find must be between 1 and 100.');
+  if (!Number.isInteger(count) || count < 1 || count > 200) {
+    const err = new Error('Number to find must be between 1 and 200.');
     err.statusCode = 400;
     throw err;
   }
@@ -700,16 +685,6 @@ async function runLeadSearch({ businessType, city, country, requestedCount = 20,
       if (usedToday >= config.DAILY_LEAD_LIMIT) break;
       usedToday += 1;
 
-      if (lead.emailStatus === 'deliverable' || lead.emailStatus === 'valid') {
-        const draft = await generateColdEmail(lead, { useAI: false });
-        lead.coldMailDraft = {
-          subject: draft.subject,
-          body: draft.body,
-          status: 'pending_review',
-          generatedAt: today,
-        };
-      }
-
       seenMap[lead.id] = {
         id: lead.id,
         name: lead.name,
@@ -741,36 +716,6 @@ async function runLeadSearch({ businessType, city, country, requestedCount = 20,
     totalDailyCount: usedToday,
     searchRecord: newSearchRecord,
     seenPlaces: seenMap,
-  });
-
-  // Sync any drafted cold emails to outreach history
-  await withOutreachHistoryLock(() => {
-    const outreachHistory = loadOutreachHistory();
-    for (const lead of processedLeads) {
-      if (lead.coldMailDraft) {
-        const existingIdx = outreachHistory.findIndex((o) => o.leadId === lead.id || o.recipient === lead.email);
-        const outreachRecord = {
-          id: `outreach-${lead.id}`,
-          leadId: lead.id,
-          source: lead.source,
-          leadName: lead.name,
-          recipient: lead.email,
-          company: lead.name,
-          location: `${lead.city || cleanCity}, ${lead.country || cleanCountry}`,
-          subject: lead.coldMailDraft.subject,
-          body: lead.coldMailDraft.body,
-          status: 'pending_review',
-          createdAt: today,
-        };
-        if (existingIdx >= 0) {
-          // A concurrent review or send must never be reset to pending.
-          if (outreachHistory[existingIdx].status === 'pending_review') outreachHistory[existingIdx] = outreachRecord;
-        } else {
-          outreachHistory.unshift(outreachRecord);
-        }
-      }
-    }
-    saveOutreachHistory(outreachHistory);
   });
 
   onProgress({

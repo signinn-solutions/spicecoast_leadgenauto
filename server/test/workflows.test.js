@@ -61,8 +61,8 @@ test('lead discovery, drafts and quota stay within isolated storage', async () =
     assert.equal(result.usage.remaining, 0);
     assert.equal(loadDailyUsage().count, 2);
     assert.equal(loadLeadsHistory().leads.length, 2);
-    assert.ok(result.leads.every((lead) => lead.source === 'simulated'));
-    assert.equal(loadOutreachHistory().length, result.leads.filter((lead) => lead.coldMailDraft).length);
+    assert.equal(loadOutreachHistory().length, 0);
+    assert.ok(result.leads.every((lead) => !lead.coldMailDraft));
 
     await assert.rejects(
       executeLeadSearch({ businessType: 'spice importer', city: 'Berlin', country: 'Germany', requestedCount: 1, mode: 'simulated' }),
@@ -483,3 +483,150 @@ test('concurrent sends dispatch each saved draft once', async () => {
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('POST /api/leads/generate-coldmail is idempotent and regenerates with force: true', async () => {
+  const keys = [
+    'DB_PATH', 'DAILY_USAGE_FILE', 'REPLY_USAGE_FILE', 'LEADS_HISTORY_FILE',
+    'SEEN_PLACES_FILE', 'MAILBOX_HISTORY_FILE', 'OUTREACH_HISTORY_FILE', 'HOSTINGER_API_TOKEN', 'DEEPSEEK_API_KEY',
+    'NODE_ENV', 'ADMIN_EMAIL', 'ADMIN_PASSWORD_HASH',
+  ];
+  const original = Object.fromEntries(keys.map((key) => [key, config[key]]));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'spicecoast-idempotent-draft-'));
+  let server;
+  const originalFetch = globalThis.fetch;
+  try {
+    for (const key of ['DB_PATH', 'DAILY_USAGE_FILE', 'REPLY_USAGE_FILE', 'LEADS_HISTORY_FILE', 'SEEN_PLACES_FILE', 'MAILBOX_HISTORY_FILE', 'OUTREACH_HISTORY_FILE']) {
+      config[key] = path.join(dir, `${key}.db`);
+    }
+    config.NODE_ENV = 'development';
+    config.ADMIN_EMAIL = '';
+    config.ADMIN_PASSWORD_HASH = '';
+    config.DEEPSEEK_API_KEY = 'test-key';
+
+    saveLeadsHistory({
+      leads: [{
+        id: 'test-lead-1',
+        name: 'Hanseatic Spice GmbH',
+        email: 'info@hanseatic-spice.de',
+        emailStatus: 'deliverable',
+        source: 'live',
+      }],
+      searches: [],
+    });
+
+    server = app.listen(0, '127.0.0.1');
+    await new Promise((resolve) => server.once('listening', resolve));
+    const baseUrl = `http://127.0.0.1:${server.address().port}`;
+
+    const aiClient = getDeepseekClient();
+    const originalCreate = aiClient.chat.completions.create;
+    let aiCalls = 0;
+    aiClient.chat.completions.create = async () => {
+      aiCalls++;
+      return {
+        choices: [{
+          message: {
+            content: JSON.stringify({
+              subject: `AI Pitch #${aiCalls}`,
+              body: `Hello from AI #${aiCalls}`,
+            }),
+          },
+        }],
+      };
+    };
+
+    try {
+      // First call: should invoke AI and create draft
+      const res1 = await originalFetch(`${baseUrl}/api/leads/generate-coldmail`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ leadId: 'test-lead-1', email: 'info@hanseatic-spice.de' }),
+      });
+      assert.equal(res1.status, 200);
+      const data1 = await res1.json();
+      assert.equal(data1.success, true);
+      assert.equal(data1.draft.subject, 'AI Pitch #1');
+      assert.equal(data1.draft.source, 'deepseek');
+      assert.equal(aiCalls, 1);
+
+      // Second call (idempotent): should return cached draft without invoking AI
+      const res2 = await originalFetch(`${baseUrl}/api/leads/generate-coldmail`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ leadId: 'test-lead-1', email: 'info@hanseatic-spice.de' }),
+      });
+      assert.equal(res2.status, 200);
+      const data2 = await res2.json();
+      assert.equal(data2.cached, true);
+      assert.equal(data2.draft.subject, 'AI Pitch #1');
+      assert.equal(aiCalls, 1); // No new AI call!
+
+      // Third call with force: true: should invoke AI and regenerate
+      const res3 = await originalFetch(`${baseUrl}/api/leads/generate-coldmail`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ leadId: 'test-lead-1', email: 'info@hanseatic-spice.de', force: true }),
+      });
+      assert.equal(res3.status, 200);
+      const data3 = await res3.json();
+      assert.equal(data3.draft.subject, 'AI Pitch #2');
+      assert.equal(aiCalls, 2);
+
+      // Fourth call simulating AI failure: fallback template tagged 'template_fallback'
+      aiClient.chat.completions.create = async () => {
+        throw new Error('DeepSeek API unavailable');
+      };
+      const res4 = await originalFetch(`${baseUrl}/api/leads/generate-coldmail`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ leadId: 'test-lead-1', email: 'info@hanseatic-spice.de', force: true }),
+      });
+      assert.equal(res4.status, 200);
+      const data4 = await res4.json();
+      assert.equal(data4.draft.source, 'template_fallback');
+      assert.match(data4.draft.subject, /Export-Grade/);
+    } finally {
+      aiClient.chat.completions.create = originalCreate;
+    }
+  } finally {
+    if (server) await new Promise((resolve) => server.close(resolve));
+    closeStorage();
+    Object.assign(config, original);
+    globalThis.fetch = originalFetch;
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('lead search accepts requestedCount up to 200 and rejects > 200', async () => {
+  const keys = [
+    'DB_PATH', 'DAILY_USAGE_FILE', 'REPLY_USAGE_FILE', 'LEADS_HISTORY_FILE',
+    'SEEN_PLACES_FILE', 'MAILBOX_HISTORY_FILE', 'OUTREACH_HISTORY_FILE', 'DAILY_LEAD_LIMIT',
+    'NODE_ENV', 'ADMIN_EMAIL', 'ADMIN_PASSWORD_HASH',
+  ];
+  const original = Object.fromEntries(keys.map((key) => [key, config[key]]));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'spicecoast-limit-test-'));
+  try {
+    for (const key of ['DB_PATH', 'DAILY_USAGE_FILE', 'REPLY_USAGE_FILE', 'LEADS_HISTORY_FILE', 'SEEN_PLACES_FILE', 'MAILBOX_HISTORY_FILE', 'OUTREACH_HISTORY_FILE']) {
+      config[key] = path.join(dir, `${key}.db`);
+    }
+    config.DAILY_LEAD_LIMIT = 200;
+    config.NODE_ENV = 'development';
+
+    // 201 should be rejected
+    await assert.rejects(
+      executeLeadSearch({ businessType: 'Spice Importer', city: 'Hamburg', country: 'Germany', requestedCount: 201, mode: 'simulated' }),
+      (err) => err.statusCode === 400 && err.message.includes('between 1 and 200')
+    );
+
+    // 200 should be accepted
+    const result = await executeLeadSearch({ businessType: 'Spice Importer', city: 'Hamburg', country: 'Germany', requestedCount: 200, mode: 'simulated' });
+    assert.equal(result.leads.length, 200);
+    assert.equal(result.usage.count, 200);
+  } finally {
+    closeStorage();
+    Object.assign(config, original);
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+
