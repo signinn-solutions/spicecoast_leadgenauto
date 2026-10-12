@@ -77,72 +77,78 @@ export default function Sidebar({
     window.location.reload();
   };
 
-  const navItems = [
-    {
-      id: "dashboard",
-      label: "Overview",
-      icon: Compass,
-      badge: null,
-      desc: "Performance & pipeline",
-    },
-    {
-      id: "search",
-      label: "Prospector",
-      icon: Search,
-      badge: null,
-      desc: "Discovery & harvest",
-    },
-    {
-      id: "results",
-      label: "Leads CRM",
-      icon: Users,
-      badge: leadsCount > 0 ? leadsCount : null,
-      badgeType: "default",
-      desc: "Verified contacts & dossier",
-    },
-    {
-      id: "outreach",
-      label: "Outreach Studio",
-      icon: Send,
-      badge: pendingOutreachCount > 0 ? pendingOutreachCount : null,
-      badgeType: "gold",
-      desc: "AI cold pitches & dispatches",
-    },
-    {
-      id: "mailbox",
-      label: "Inbound Mailbox",
-      icon: Inbox,
-      badge: inboxCount > 0 ? inboxCount : null,
-      badgeType: "emerald",
-      desc: "Replies & procurement intent",
-    },
-    {
-      id: "analytics",
-      label: "Intelligence",
-      icon: BarChart3,
-      badge: null,
-      desc: "Deliverability & analytics",
-    },
-    {
-      id: "health",
-      label: "System Health",
-      icon: ShieldCheck,
-      badge: null,
-      desc: "Integrations & API quotas",
-    },
-    ...(currentUser?.role === "superadmin"
-      ? [
-          {
-            id: "admin",
-            label: "Superadmin",
-            icon: ShieldAlert,
-            badge: "Admin",
-            badgeType: "purple",
-            desc: "App health & user access",
-          },
-        ]
-      : []),
-  ];
+  const navItems = currentUser?.role === "superadmin"
+    ? [
+        {
+          id: "health",
+          label: "System Health",
+          icon: ShieldCheck,
+          badge: null,
+          desc: "Integrations & API quotas",
+        },
+        {
+          id: "admin",
+          label: "Superadmin",
+          icon: ShieldAlert,
+          badge: "Admin",
+          badgeType: "purple",
+          desc: "App health & user access",
+        },
+      ]
+    : [
+        {
+          id: "dashboard",
+          label: "Overview",
+          icon: Compass,
+          badge: null,
+          desc: "Performance & pipeline",
+        },
+        {
+          id: "search",
+          label: "Prospector",
+          icon: Search,
+          badge: null,
+          desc: "Discovery & harvest",
+        },
+        {
+          id: "results",
+          label: "Leads CRM",
+          icon: Users,
+          badge: leadsCount > 0 ? leadsCount : null,
+          badgeType: "default",
+          desc: "Verified contacts & dossier",
+        },
+        {
+          id: "outreach",
+          label: "Outreach Studio",
+          icon: Send,
+          badge: pendingOutreachCount > 0 ? pendingOutreachCount : null,
+          badgeType: "gold",
+          desc: "AI cold pitches & dispatches",
+        },
+        {
+          id: "mailbox",
+          label: "Inbound Mailbox",
+          icon: Inbox,
+          badge: inboxCount > 0 ? inboxCount : null,
+          badgeType: "emerald",
+          desc: "Replies & procurement intent",
+        },
+        {
+          id: "analytics",
+          label: "Intelligence",
+          icon: BarChart3,
+          badge: null,
+          desc: "Deliverability & analytics",
+        },
+        {
+          id: "health",
+          label: "System Health",
+          icon: ShieldCheck,
+          badge: null,
+          desc: "Integrations & API quotas",
+        },
+      ];
 
   return (
     <>
