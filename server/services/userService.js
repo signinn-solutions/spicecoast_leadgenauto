@@ -30,6 +30,20 @@ export async function verifyUserPassword(password, storedHash) {
 let seeded = false;
 
 export async function seedDefaultUsers() {
+  if (config.NODE_ENV === 'production') {
+    const db = getDatabase();
+    // Existing installations must rotate seeded credentials before going public.
+    for (const [email, password] of [
+      ['admin@signinn.in', 'Admin@Signinn123'],
+      ['admin@thespicecoast.com', 'SpiceCoast_Admin_c3031b5744c12df9!'],
+    ]) {
+      const user = db.prepare('SELECT password_hash, status FROM users WHERE LOWER(email) = ?').get(email);
+      if (user?.status === 'active' && await verifyUserPassword(password, user.password_hash)) {
+        throw new Error('An active account still uses a development default password. Change its password or suspend it before production startup.');
+      }
+    }
+    return;
+  }
   if (seeded) return;
   const db = getDatabase();
 
@@ -39,7 +53,7 @@ export async function seedDefaultUsers() {
     VALUES (?, ?, ?, ?, ?, ?, 1, 1, -1, datetime('now'), ?)
   `);
 
-  // 1. Superadmin account: admin@signinn.in / Admin@Signinn123
+  // Development-only seed accounts.
   const superadminEmail = 'admin@signinn.in';
   const existingSuperadmin = findStmt.get(superadminEmail.toLowerCase());
   if (!existingSuperadmin) {
@@ -61,7 +75,6 @@ export async function seedDefaultUsers() {
     });
   }
 
-  // 2. SpiceCoast Leadgen User account: admin@thespicecoast.com / SpiceCoast_Admin_c3031b5744c12df9!
   const spicecoastUserEmail = 'admin@thespicecoast.com';
   const existingSpicecoastUser = findStmt.get(spicecoastUserEmail.toLowerCase());
   if (!existingSpicecoastUser) {

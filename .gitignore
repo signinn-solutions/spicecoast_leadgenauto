@@ -25,8 +25,13 @@ ENV/
 .bin/
 
 # Local data & history
-# daily_usage.json
-# leads_history.json
+daily_usage.json
+reply_usage.json
+leads_history.json
+seen_places.json
+mailbox_history.json
+outreach_history.json
+backups/
 *.sqlite
 *.sqlite-shm
 *.sqlite-wal

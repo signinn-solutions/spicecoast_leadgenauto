@@ -1,4 +1,5 @@
 import config from '../config/env.js';
+import { dispatchOnce } from './dispatchGuard.js';
 import { LIFECYCLE_CONFIG } from '../config/mailLifecycleConfig.js';
 import {
   loadOutreachHistory,
@@ -46,13 +47,14 @@ export function generateFollowUpDraft(lead, turn = 1) {
 
 Following up on our earlier note regarding export-grade direct origin spices from Kerala, India.
 
-We are currently locking in container allocations for this harvest season — particularly Malabar Black Pepper (Garbled 550GL), Alleppey Green Cardamom (8mm Extra Bold), and High-Curcumin Alleppey Turmeric.
+Spice Coast sources, processes and exports Alleppey Green Cardamom, Malabar Black Pepper and Cinnamon. We can discuss your preferred specifications and packaging with our export team.
 
-Could we share our harvest specification sheet and CIF export price list for ${company}'s review?
+Would product details be useful for ${company}'s sourcing review?
 
 Warm regards,
 The SpiceCoast Export Team
-The Spice Coast | Cochin, Kerala, India
+Spice Coast | Kochi, Kerala, India
+https://thespicecoast.com/
 ${config.SENDER_MAILBOX}`;
 
     return {
@@ -359,12 +361,14 @@ export async function dispatchFollowUpEmail(leadId, { subject, body, to }) {
     }
 
     const { sendEmail } = await import('./mailService.js');
-    const sendResult = await sendEmail(
+    item.follow_up_dispatches ||= {};
+    const turnDispatch = item.follow_up_dispatches[(item.follow_up_count || 0) + 1] ||= {};
+    const sendResult = await dispatchOnce({ record: turnDispatch, persist: () => saveOutreachHistory(outreachList), send: () => sendEmail(
       recipient,
       subject || item.follow_up_draft?.subject || 'Following up on Spice Partnership',
       body || item.follow_up_draft?.body || '',
       { reply: true }
-    );
+    ) });
 
     if (sendResult?.status === 'simulated') {
       throw new Error('Email transport is not configured. Message was not sent.');
@@ -377,6 +381,7 @@ export async function dispatchFollowUpEmail(leadId, { subject, body, to }) {
     item.status = 'followed_up';
     item.last_contacted_at = sentDate;
     item.follow_up_count = (item.follow_up_count || 0) + 1;
+    const dispatchedDraft = item.follow_up_draft;
     item.follow_up_draft = null; // Cleared once sent
 
     if (!Array.isArray(item.sent_followups)) {
@@ -384,8 +389,8 @@ export async function dispatchFollowUpEmail(leadId, { subject, body, to }) {
     }
     item.sent_followups.push({
       turn: item.follow_up_count,
-      subject: subject || item.follow_up_draft?.subject,
-      body: body || item.follow_up_draft?.body,
+      subject: subject || dispatchedDraft?.subject,
+      body: body || dispatchedDraft?.body,
       sentAt: sentDate,
     });
 

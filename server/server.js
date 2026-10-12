@@ -2,8 +2,10 @@ import app from './app.js';
 import config from './config/env.js';
 import { closeStorage, loadDailyUsage } from './services/storageService.js';
 import { seedDefaultUsers } from './services/userService.js';
+import { validateProductionConfig } from './config/production.js';
 
 async function startServer(port) {
+  validateProductionConfig(config);
   // Detect inaccessible/corrupt storage before advertising a healthy server.
   loadDailyUsage();
 
@@ -11,6 +13,7 @@ async function startServer(port) {
     await seedDefaultUsers();
     console.log('👥  Users verified/seeded: admin@signinn.in (Superadmin) & admin@thespicecoast.com (Leadgen)');
   } catch (err) {
+    if (config.NODE_ENV === 'production') throw err;
     console.warn('⚠️  [User Initialization Warning]:', err.message);
   }
 
@@ -55,4 +58,7 @@ async function startServer(port) {
   return server;
 }
 
-startServer(config.PORT);
+startServer(config.PORT).catch(err => {
+  console.error('Startup failed:', err.message);
+  process.exitCode = 1;
+});

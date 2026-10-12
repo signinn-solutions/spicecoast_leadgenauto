@@ -5,6 +5,7 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 
 import config from './config/env.js';
+import { getDatabase } from './services/storageService.js';
 import apiRoutes from './routes/apiRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
 import webhookRoutes from './routes/webhookRoutes.js';
@@ -86,6 +87,8 @@ app.use(express.urlencoded({ extended: false, limit: '256kb' }));
 
 // Health check endpoint
 app.get('/health', (req, res) => {
+  try { getDatabase().prepare('SELECT 1').get(); }
+  catch { return res.status(503).json({ status: 'unavailable', service: 'SpiceCoast' }); }
   res.status(200).json({
     status: 'ok',
     service: 'SpiceCoast Automation & Mailbox API',

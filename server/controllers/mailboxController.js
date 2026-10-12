@@ -1,4 +1,5 @@
 import config from '../config/env.js';
+import { dispatchOnce } from '../services/dispatchGuard.js';
 import { getAiSettings } from '../services/aiProvider.js';
 import {
   loadReplyUsage,
@@ -137,7 +138,8 @@ async function sendColdMailUnlocked(req, res, next) {
       return res.status(400).json({ error: 'Missing outreach draft ID, recipient email or email body.' });
     }
 
-    const draft = loadOutreachHistory().find((item) => item.id === id || (item.leadId && `outreach-${item.leadId}` === id));
+    const dispatchHistory = loadOutreachHistory();
+    const draft = dispatchHistory.find((item) => item.id === id || (item.leadId && `outreach-${item.leadId}` === id));
     if (!draft) return res.status(404).json({ error: 'Outreach draft not found.' });
     if (draft.status !== 'pending_review') return res.status(409).json({ error: 'Outreach draft was already sent.' });
     if (draft.recipient !== to) return res.status(400).json({ error: 'Recipient does not match outreach draft.' });
@@ -151,7 +153,7 @@ async function sendColdMailUnlocked(req, res, next) {
     }
 
     // Explicit confirmation dispatch
-    const sendResult = await sendEmail(to, subject || 'Partnership with The Spice Coast', body);
+    const sendResult = await dispatchOnce({ record: draft, persist: () => saveOutreachHistory(dispatchHistory), send: () => sendEmail(to, subject || 'Partnership with The Spice Coast', body) });
     if (sendResult?.status === 'simulated') {
       return res.status(503).json({ error: 'Email transport is not configured. Message was not sent.' });
     }
@@ -250,15 +252,16 @@ async function sendReviewedDraftUnlocked(req, res, next) {
       return res.status(400).json({ error: 'Missing mailbox draft ID, recipient address or reply body.' });
     }
 
+    const dispatchHistory = loadMailboxHistory();
+    const message = dispatchHistory.find((item) => item.id === messageId);
     if (messageId) {
-      const message = loadMailboxHistory().find((item) => item.id === messageId);
       if (!message) return res.status(404).json({ error: 'Mailbox draft not found.' });
       if (message.status !== 'drafted') return res.status(409).json({ error: 'Mailbox draft was already handled.' });
       if (message.source === 'simulated') return res.status(400).json({ error: 'Simulated inquiries cannot receive email.' });
       if (message.sender !== toAddress) return res.status(400).json({ error: 'Recipient does not match mailbox draft.' });
     }
 
-    const sendRes = await sendEmail(toAddress, subject || 'Spice Inquiry', replyText, { reply: true });
+    const sendRes = await dispatchOnce({ record: message, persist: () => saveMailboxHistory(dispatchHistory), send: () => sendEmail(toAddress, subject || 'Spice Inquiry', replyText, { reply: true }) });
     if (sendRes?.status === 'simulated') {
       return res.status(503).json({ error: 'Email transport is not configured. Message was not sent.' });
     }

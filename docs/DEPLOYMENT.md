@@ -3,8 +3,9 @@
 The Docker image contains application code and built frontend assets only. The
 six legacy JSON datasets, `.env` files, and SQLite files are excluded from the
 build context. Keep secrets in runtime environment variables. The configured
-SQLite path is `/var/data/spicecoast.sqlite`, on the persistent disk declared
-in `render.yaml`. Use one application instance against that disk.
+SQLite path must be an absolute path in a persistent writable directory.
+For optional Docker use, `/var/data/spicecoast.sqlite` is mounted by Compose.
+Use one application instance. For Hostinger Node.js Web App setup, see [Hostinger deployment](HOSTINGER.md).
 
 Writes to each named dataset are atomic SQLite updates, but a workflow that
 updates several datasets (for example usage, seen places, leads, and outreach)

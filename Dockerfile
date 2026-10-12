@@ -52,8 +52,9 @@ COPY --from=builder --chown=node:node /app/dist ./dist
 COPY --from=builder --chown=node:node /app/server ./server
 COPY --from=builder --chown=node:node /app/package.json ./package.json
 
-# Set environment defaults for Render / Docker
+# Set environment defaults for Docker
 ENV NODE_ENV=production
+ENV TZ=Asia/Kolkata
 ENV HOST=0.0.0.0
 ENV PORT=10000
 ENV SPICECOAST_DB_PATH=/var/data/spicecoast.sqlite

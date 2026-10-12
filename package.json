@@ -15,7 +15,8 @@
     "test": "node --test server/test/*.test.js",
     "docker:build": "docker build -t spicecoast-leadgen .",
     "docker:run": "docker run -p 5000:10000 --env-file .env spicecoast-leadgen",
-    "auth:hash": "node server/scripts/hash-password.js"
+    "auth:hash": "node server/scripts/hash-password.js",
+    "backup": "node server/scripts/backup.js"
   },
   "dependencies": {
     "better-sqlite3": "^12.2.0",

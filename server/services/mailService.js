@@ -65,15 +65,15 @@ export async function sendEmailViaHostinger(toAddress, subject, body, { reply = 
   }
 
   if (!response.ok) {
-    if (response.status === 404) throw new Error('Hostinger send endpoint or mailbox was not found. Check HOSTINGER_MAILBOX_RESOURCE_ID and the token mailbox permissions.');
-    throw new Error(`Email provider rejected message (HTTP ${response.status}).`);
+    const message = response.status === 404 ? 'Hostinger send endpoint or mailbox was not found. Check HOSTINGER_MAILBOX_RESOURCE_ID and the token mailbox permissions.' : `Email provider rejected message (HTTP ${response.status}).`;
+    throw Object.assign(new Error(message), { deliveryRejected: response.status >= 400 && response.status < 500 });
   }
 
   // A successful HTTP status is the transport acknowledgement; APIs may
   // return an empty body. Do not expose a provider's raw error response.
   const data = await response.json().catch(() => ({}));
   if (['failed', 'failure', 'error', 'rejected'].includes(String(data?.status).toLowerCase()) || data?.error) {
-    throw new Error('Email provider rejected message.');
+    throw Object.assign(new Error('Email provider rejected message.'), { deliveryRejected: true });
   }
   return { ...data, status: 'sent' };
 }
