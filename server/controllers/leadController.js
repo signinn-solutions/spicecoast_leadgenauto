@@ -77,7 +77,7 @@ export async function searchLeads(req, res, next) {
       country,
       requestedCount: count || requestedCount,
       mode: mode || 'live',
-      engine: engine || discoveryEngine,
+      engine: req.dashboardSession?.role === 'superadmin' ? engine || discoveryEngine : undefined,
     };
 
     // If caller explicitly requested synchronous execution (e.g. CLI scripts or sync test runs)
@@ -191,7 +191,7 @@ export async function generateLeadColdMail(req, res, next) {
   try {
     const { leadId, email, force } = req.body || {};
     const savedLead = loadLeadsHistory().leads?.find((lead) => lead.id === leadId);
-    if (!savedLead || !email || savedLead.email !== email || !['deliverable', 'valid'].includes(savedLead.emailStatus)) {
+    if (!savedLead || !email || savedLead.email !== email || !['deliverable', 'valid', 'mx_valid'].includes(savedLead.emailStatus)) {
       return res.status(400).json({ error: 'A saved lead with a matching email is required.' });
     }
     const outreachHistory = loadOutreachHistory();
@@ -214,6 +214,7 @@ export async function generateLeadColdMail(req, res, next) {
           body: existingRecord.body,
           model: existingRecord.model || (existingRecord.source === 'live' ? 'deepseek' : 'Local template'),
           source: existingRecord.draftSource || (existingRecord.model === 'Local template' ? 'template_fallback' : 'deepseek'),
+          fallbackReason: existingRecord.fallbackReason || '',
         },
         outreachRecord: existingRecord,
       });
@@ -230,7 +231,7 @@ export async function generateLeadColdMail(req, res, next) {
     };
 
     // Run AI call outside the mutex lock so multiple draft requests execute concurrently in parallel
-    const draft = await generateColdEmail(leadObj, { useAI: savedLead.source === 'live', force });
+    const draft = await generateColdEmail(leadObj, { useAI: force === true || savedLead.source === 'live', force: force === true });
     const draftSource = draft.model === 'Local template' ? 'template_fallback' : 'deepseek';
 
     // Atomically persist to outreach history under lock
@@ -255,6 +256,7 @@ export async function generateLeadColdMail(req, res, next) {
         status: 'pending_review',
         draftSource,
         model: draft.model,
+        fallbackReason: draft.fallbackReason || '',
         createdAt: new Date().toISOString().slice(0, 10),
       };
 

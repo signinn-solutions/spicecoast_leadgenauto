@@ -63,7 +63,7 @@ export default function LeadsView({
       }
 
       // Status pill match
-      const hasEmail = isLiveLead(lead) && (lead.emailStatus === "deliverable" || lead.emailStatus === "valid");
+      const hasEmail = isLiveLead(lead) && (lead.emailStatus === "deliverable" || lead.emailStatus === "valid" || lead.emailStatus === "mx_valid");
       const hasPhone = isLiveLead(lead) && lead.phoneStatus === "valid";
 
       if (filterStatus === "deliverable") return hasEmail;
@@ -85,8 +85,8 @@ export default function LeadsView({
       list.sort((a, b) => (a.foundAt || "").localeCompare(b.foundAt || ""));
     } else if (sortBy === "deliverable") {
       list.sort((a, b) => {
-        const aDeliv = isLiveLead(a) && (a.emailStatus === "deliverable" || a.emailStatus === "valid") ? 1 : 0;
-        const bDeliv = isLiveLead(b) && (b.emailStatus === "deliverable" || b.emailStatus === "valid") ? 1 : 0;
+        const aDeliv = isLiveLead(a) && (a.emailStatus === "deliverable" || a.emailStatus === "valid" || a.emailStatus === "mx_valid") ? 1 : 0;
+        const bDeliv = isLiveLead(b) && (b.emailStatus === "deliverable" || b.emailStatus === "valid" || b.emailStatus === "mx_valid") ? 1 : 0;
         return bDeliv - aDeliv;
       });
     } else {
@@ -100,11 +100,11 @@ export default function LeadsView({
   const counts = useMemo(() => {
     const total = baseList.length;
     const deliverable = baseList.filter(
-      (l) => isLiveLead(l) && (l.emailStatus === "deliverable" || l.emailStatus === "valid")
+      (l) => isLiveLead(l) && (l.emailStatus === "deliverable" || l.emailStatus === "valid" || l.emailStatus === "mx_valid")
     ).length;
     const validPhone = baseList.filter((l) => isLiveLead(l) && l.phoneStatus === "valid").length;
     const fullyVerified = baseList.filter(
-      (l) => isLiveLead(l) && (l.emailStatus === "deliverable" || l.emailStatus === "valid") && l.phoneStatus === "valid"
+      (l) => isLiveLead(l) && (l.emailStatus === "deliverable" || l.emailStatus === "valid" || l.emailStatus === "mx_valid") && l.phoneStatus === "valid"
     ).length;
     const withWebsite = baseList.filter((l) => safeUrl(l.website)).length;
     const liveOnly = baseList.filter(isLiveLead).length;
@@ -122,7 +122,7 @@ export default function LeadsView({
 
   const handleSelectAllValid = () => {
     const validIds = sortedLeads
-      .filter((l) => isLiveLead(l) && (l.emailStatus === "deliverable" || l.emailStatus === "valid"))
+      .filter((l) => isLiveLead(l) && (l.emailStatus === "deliverable" || l.emailStatus === "valid" || l.emailStatus === "mx_valid"))
       .map((l) => l.id);
     setSelectedLeadIds(new Set(validIds));
   };
@@ -192,6 +192,7 @@ export default function LeadsView({
           <input
             type="text"
             className="lf-search-input"
+            aria-label="Search leads"
             placeholder="Search by company, city, email, phone..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
@@ -200,6 +201,7 @@ export default function LeadsView({
             <button
               type="button"
               className="lf-search-clear"
+              aria-label="Clear lead search"
               onClick={() => setSearchQuery("")}
             >
               ✕
@@ -212,13 +214,14 @@ export default function LeadsView({
           <ArrowUpDown size={14} className="text-muted" />
           <select
             className="lf-select"
+            aria-label="Sort leads"
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value)}
           >
             <option value="newest">Newest Discovered</option>
             <option value="oldest">Oldest Discovered</option>
             <option value="name">Company Name A-Z</option>
-            <option value="deliverable">Deliverable Inboxes First</option>
+            <option value="deliverable">Usable Emails First</option>
           </select>
         </div>
 
@@ -269,7 +272,7 @@ export default function LeadsView({
             onClick={() => setFilterStatus("deliverable")}
           >
             <CheckCircle2 size={12} className="text-emerald" />
-            <span>Deliverable Emails ({counts.deliverable})</span>
+            <span>Usable Emails ({counts.deliverable})</span>
           </button>
           <button
             type="button"
@@ -277,7 +280,7 @@ export default function LeadsView({
             onClick={() => setFilterStatus("validPhone")}
           >
             <Phone size={12} className="text-emerald" />
-            <span>Valid Phones ({counts.validPhone})</span>
+            <span>Published Phones ({counts.validPhone})</span>
           </button>
           <button
             type="button"
@@ -285,7 +288,7 @@ export default function LeadsView({
             onClick={() => setFilterStatus("both")}
           >
             <Sparkles size={12} className="text-amber" />
-            <span>Fully Verified ({counts.fullyVerified})</span>
+            <span>Email & Phone ({counts.fullyVerified})</span>
           </button>
           <button
             type="button"
@@ -309,7 +312,7 @@ export default function LeadsView({
             type="button"
             className="lf-preset-chip"
             onClick={handleSelectAllValid}
-            title="Select only deliverable/valid emails"
+            title="Select published emails with a receiving mail domain"
             style={{ display: "inline-flex", alignItems: "center", gap: 4 }}
           >
             <CheckCircle2 size={12} className="text-emerald" />
@@ -397,7 +400,7 @@ export default function LeadsView({
                 </th>
                 <th>Company & Location</th>
                 <th>Telephone Contact</th>
-                <th>Verified Email</th>
+                <th>Email Contact</th>
                 <th>AI Cold Pitch</th>
                 <th style={{ textAlign: "right" }}>Actions</th>
               </tr>
@@ -406,7 +409,7 @@ export default function LeadsView({
               {sortedLeads.map((lead) => {
                 const isSelected = selectedLeadIds.has(lead.id);
                 const hasDeliverable = isLiveLead(lead) &&
-                  (lead.emailStatus === "deliverable" || lead.emailStatus === "valid");
+                  (lead.emailStatus === "deliverable" || lead.emailStatus === "valid" || lead.emailStatus === "mx_valid");
                 const hasValidPhone = isLiveLead(lead) && lead.phoneStatus === "valid";
                 const websiteUrl = safeUrl(lead.website);
                 const isSent = lead.coldMailDraft?.status === "sent";
@@ -512,7 +515,7 @@ export default function LeadsView({
                             ) : (
                               <XCircle size={10} />
                             )}
-                            <span>{isLiveLead(lead) ? lead.emailStatus || "Not found" : "Unverified"}</span>
+                            <span>{isLiveLead(lead) ? (lead.emailStatus === "mx_valid" ? "Published / MX confirmed" : lead.emailStatus) || "Not found" : "Unverified"}</span>
                           </span>
                         </div>
                         <div className="lf-contact-val lf-mono">

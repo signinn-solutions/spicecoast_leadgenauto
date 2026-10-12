@@ -1,3 +1,4 @@
+import dns from 'node:dns/promises';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -314,7 +315,7 @@ test('concurrent inbound drafts consume one reply slot and preserve mailbox hist
   }
 });
 
-test('concurrent sends dispatch each saved draft once', async () => {
+test('concurrent sends dispatch each saved draft once', async (t) => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'spicecoast-concurrent-send-'));
   const keys = [
     'DB_PATH', 'DAILY_USAGE_FILE', 'REPLY_USAGE_FILE', 'LEADS_HISTORY_FILE',
@@ -335,7 +336,7 @@ test('concurrent sends dispatch each saved draft once', async () => {
     config.ADMIN_EMAIL = '';
     config.ADMIN_PASSWORD_HASH = '';
     saveLeadsHistory({ leads: [{
-      id: 'live-1', source: 'live', email: 'buyer@example.test', emailStatus: 'deliverable',
+      id: 'live-1', source: 'live', email: 'buyer@example.test', emailStatus: 'mx_valid',
       coldMailDraft: { subject: 'Stale saved subject', body: 'Stale saved body', status: 'pending_review' },
     }], searches: [] });
     saveOutreachHistory([
@@ -459,7 +460,9 @@ test('concurrent sends dispatch each saved draft once', async () => {
     assert.equal(providerCalls, 2);
     assert.equal(loadMailboxHistory().find((message) => message.id === simulatedMessage.id).status, 'drafted');
 
-    // Verify website email scraper fallback extracts emails correctly
+    // Verify the protected website crawler without real network/DNS dependencies.
+    t.mock.method(dns, "lookup", async () => [{ address: "8.8.8.8", family: 4 }]);
+    t.mock.method(dns, "resolveMx", async () => [{ exchange: "mail.targetspice.com", priority: 10 }]);
     const mockHtml = '<html><body><a href="mailto:info@targetspice.com">Contact</a><p>Sales: sales@targetspice.com</p></body></html>';
     globalThis.fetch = async (url) => {
       if (url.includes('targetspice.com')) {
@@ -584,7 +587,7 @@ test('POST /api/leads/generate-coldmail is idempotent and regenerates with force
       assert.equal(res4.status, 200);
       const data4 = await res4.json();
       assert.equal(data4.draft.source, 'template_fallback');
-      assert.match(data4.draft.subject, /Export-Grade/);
+      assert.match(data4.draft.subject, /Kerala-origin/);
     } finally {
       aiClient.chat.completions.create = originalCreate;
     }

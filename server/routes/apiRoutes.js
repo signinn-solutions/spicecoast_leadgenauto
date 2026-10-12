@@ -1,4 +1,5 @@
 import express from 'express';
+import { requireSuperadmin } from '../middleware/dashboardAuth.js';
 import {
   getStatus,
   getLeads,
@@ -33,8 +34,8 @@ router.post('/search', searchLeads);
 router.get('/jobs/:jobId', getJobStatus);
 router.get('/jobs/:jobId/stream', streamJobProgress);
 router.post('/leads/generate-coldmail', generateLeadColdMail);
-router.post('/settings/toggle-hunter', toggleHunterSetting);
-router.post('/leads/toggle-hunter', toggleHunterSetting);
+router.post('/settings/toggle-hunter', requireSuperadmin, toggleHunterSetting);
+router.post('/leads/toggle-hunter', requireSuperadmin, toggleHunterSetting);
 
 // Mailbox, AI autoresponder & Cold Outreach endpoints
 router.get('/mailbox/status', getMailboxStatus);

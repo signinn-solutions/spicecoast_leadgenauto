@@ -19,6 +19,8 @@ import {
   ShieldCheck,
 } from "lucide-react";
 
+import useDialogFocus from "../hooks/useDialogFocus.js";
+
 const MAX_DRAFT_CONCURRENCY = 4;
 
 export default function OutreachView({
@@ -58,6 +60,10 @@ export default function OutreachView({
     results: [],
   });
   const canceledSendRef = useRef(false);
+  const bulkDialogRef = useRef(null);
+  useDialogFocus(isSendAllModalOpen, bulkDialogRef, () => {
+    if (!isSendingAll) setIsSendAllModalOpen(false);
+  }, ".lf-modal-close");
 
   // Inline editing state
   const [editingDraftId, setEditingDraftId] = useState(null);
@@ -85,7 +91,7 @@ export default function OutreachView({
       ) || Boolean(lead.coldMailDraft) || Boolean(draftDataMap[lead.id]);
       const status = draftStatusMap[lead.id];
       return !hasExisting && !processingRef.current.has(lead.id) && status !== "ready" &&
-        lead.email && (lead.emailStatus === "deliverable" || lead.emailStatus === "valid");
+        lead.email && (lead.emailStatus === "deliverable" || lead.emailStatus === "valid" || lead.emailStatus === "mx_valid");
     });
 
     if (queueToProcess.length === 0) return;
@@ -166,7 +172,7 @@ export default function OutreachView({
   const queueList = useMemo(() => {
     if (!queueLeads || queueLeads.length === 0) return [];
     return queueLeads.map((lead) => {
-      const existing = outreachList.find(
+      const existing = draftDataMap[lead.id] || outreachList.find(
         (o) => o.leadId === lead.id || (o.recipient && o.recipient === lead.email)
       );
       if (existing) {
@@ -419,7 +425,7 @@ export default function OutreachView({
       ...prev,
       status: "complete",
     }));
-    onRefresh?.();
+
   };
 
   return (
@@ -455,18 +461,7 @@ export default function OutreachView({
             >
               Clear Queue
             </button>
-            {sendableQueueItems.length > 0 && (
-              <button
-                type="button"
-                className="lf-btn-primary sm gold"
-                onClick={() => handleOpenSendAll(sendableQueueItems)}
-                disabled={isSendingAll || isAnyGenerating}
-                title="Approve and dispatch all ready queue drafts"
-              >
-                <Send size={13} />
-                <span>Approve & Send All ({sendableQueueItems.length})</span>
-              </button>
-            )}
+
           </div>
         </div>
       )}
@@ -516,6 +511,7 @@ export default function OutreachView({
           <input
             type="text"
             className="lf-search-input"
+            aria-label="Search outreach drafts"
             placeholder="Search by company, recipient, subject, or port..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
@@ -524,6 +520,7 @@ export default function OutreachView({
             <button
               type="button"
               className="lf-search-clear"
+              aria-label="Clear outreach search"
               onClick={() => setSearchQuery("")}
             >
               ✕
@@ -532,7 +529,7 @@ export default function OutreachView({
         </div>
 
         {/* View Mode Toggle & Refresh */}
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <div className="lf-action-bar-right">
           <div className="lf-scope-tabs" style={{ padding: 2 }}>
             <button
               type="button"
@@ -554,15 +551,7 @@ export default function OutreachView({
             </button>
           </div>
 
-          <button
-            type="button"
-            className="lf-btn-secondary sm"
-            onClick={onRefresh}
-            title="Refresh outreach list"
-          >
-            <RefreshCw size={13} />
-            <span>Sync</span>
-          </button>
+
 
           {currentSendableList.length > 0 && (
             <button
@@ -658,7 +647,7 @@ export default function OutreachView({
                 {/* Template Fallback Notice Banner */}
                 {!isGenerating && isTemplateFallback && (
                   <div className="lf-template-fallback-banner">
-                    <span className="lf-badge-pill amber sm">
+                    <span className="lf-badge-pill amber sm" title={item.fallbackReason || 'AI generation was unavailable; this is a local template.'}>
                       <AlertTriangle size={11} /> Template Fallback
                     </span>
                     <button
@@ -677,6 +666,9 @@ export default function OutreachView({
                       <span>Regenerate with AI</span>
                     </button>
                   </div>
+                )}
+                {!isGenerating && isTemplateFallback && item.fallbackReason && (
+                  <p role="status" style={{ margin: '8px 0 12px', fontSize: 13, color: 'var(--text-secondary, #64748b)' }}>{item.fallbackReason}</p>
                 )}
 
                 {/* Body Area */}
@@ -729,7 +721,7 @@ export default function OutreachView({
                         onChange={(e) => setEditBody(e.target.value)}
                         placeholder="Pitch body..."
                         disabled={isSavingInline}
-                        style={{ marginTop: 2, resize: "vertical", fontFamily: "var(--font-sans)", lineHeight: 1.5 }}
+                        style={{ marginTop: 2, resize: "vertical", fontFamily: "inherit", lineHeight: 1.5 }}
                       />
                     </div>
                   </div>
@@ -985,15 +977,15 @@ export default function OutreachView({
       {isSendAllModalOpen && (
         <div
           className="lf-modal-backdrop"
-          onClick={(e) => {
+          onPointerDown={(e) => {
             if (e.target === e.currentTarget && !isSendingAll) setIsSendAllModalOpen(false);
           }}
         >
-          <div className="lf-modal-card" style={{ maxWidth: 640 }}>
+          <div ref={bulkDialogRef} className="lf-modal-card" role="dialog" aria-modal="true" aria-labelledby="bulk-dispatch-title" tabIndex={-1} style={{ maxWidth: 640 }}>
             {/* Header */}
             <div className="lf-modal-header">
               <div className="lf-modal-title-group">
-                <div className="lf-modal-title">
+                <div className="lf-modal-title" id="bulk-dispatch-title">
                   <Send size={18} className="text-amber" />
                   <span>
                     {sendAllProgress.status === "sending"
@@ -1015,6 +1007,7 @@ export default function OutreachView({
                 <button
                   type="button"
                   className="lf-modal-close"
+                  aria-label="Close bulk dispatch dialog"
                   onClick={() => setIsSendAllModalOpen(false)}
                 >
                   ✕
@@ -1172,7 +1165,6 @@ export default function OutreachView({
                   className="lf-btn-primary gold"
                   onClick={() => {
                     setIsSendAllModalOpen(false);
-                    onRefresh?.();
                   }}
                 >
                   <span>Done</span>

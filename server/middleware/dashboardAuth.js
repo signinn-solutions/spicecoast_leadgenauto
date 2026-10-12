@@ -2,7 +2,7 @@ import { randomBytes, scrypt, timingSafeEqual, createHash } from 'node:crypto';
 import { promisify } from 'node:util';
 import express from 'express';
 import config from '../config/env.js';
-import { getUserByEmail, verifyUserPassword, recordUserLogin, seedDefaultUsers } from '../services/userService.js';
+import { getUserByEmail, getUserById, verifyUserPassword, recordUserLogin, seedDefaultUsers } from '../services/userService.js';
 
 const derive = promisify(scrypt);
 const sessions = new Map();
@@ -56,6 +56,15 @@ function getSession(req) {
       sessions.delete(token);
       return null;
     }
+  } else {
+    const user = getUserById(session.userId);
+    const currentFingerprint = user && createHash('sha256')
+      .update(`${user.id}:${user.password_hash}:${user.role}:${user.status}`).digest('hex');
+    if (!user || user.status !== 'active' || currentFingerprint !== session.fingerprint) {
+      sessions.delete(token);
+      return null;
+    }
+    session.name = user.name;
   }
 
   return { ...session, token };
@@ -228,6 +237,7 @@ authRoutes.post('/login', async (req, res, next) => {
               name: dbUser.name,
               role: dbUser.role || 'user',
               status: dbUser.status,
+              passwordHash: dbUser.password_hash,
             };
             recordUserLogin(dbUser.id, address);
           }
@@ -256,7 +266,8 @@ authRoutes.post('/login', async (req, res, next) => {
       isConfigAdmin,
       csrfToken,
       expires: Date.now() + lifetime,
-      fingerprint: isConfigAdmin ? fingerprint() : createHash('sha256').update(`${authUser.email}:${authUser.id}`).digest('hex'),
+      fingerprint: isConfigAdmin ? fingerprint() : createHash('sha256')
+        .update(`${authUser.id}:${authUser.passwordHash}:${authUser.role}:${authUser.status}`).digest('hex'),
     };
     sessions.set(token, session);
 

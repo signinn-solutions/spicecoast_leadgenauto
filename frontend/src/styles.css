@@ -23,12 +23,12 @@
   --turmeric-soft: #f1effc;
 
   /* Snov.io Functional Status Colors */
-  --emerald: #10b981;
+  --emerald: #047857;
   --emerald-hover: #059669;
   --emerald-soft: #ecfdf5;
   --emerald-border: #a7f3d0;
 
-  --rose: #f65353;
+  --rose: #c83232;
   --rose-hover: #e03838;
   --rose-soft: #fef2f2;
   --rose-border: #fecaca;
@@ -53,7 +53,7 @@
   --text-main: #192435;
   --text-secondary: #666e7a;
   --text-muted: #666e7a;
-  --text-faint: #999fa7;
+  --text-faint: #697383;
   --text-disabled: #909090;
   --text-inverse: #ffffff;
 
@@ -615,7 +615,7 @@ body {
 /* Main Viewport Container */
 .lf-main-content {
   flex: 1;
-  padding: 30px 32px 80px;
+  padding: 24px 32px 48px;
   max-width: 1280px;
   width: 100%;
   margin: 0 auto;
@@ -1135,13 +1135,13 @@ body {
    ========================================================== */
 .lf-dashboard-grid-2 {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 20px;
 }
 
 .lf-quick-picks-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
 }
 
@@ -1247,7 +1247,7 @@ body {
 
 .lf-form-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 20px;
 }
 
@@ -1644,6 +1644,34 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  flex-wrap: wrap;
+}
+
+.lf-action-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  background: #ffffff;
+  padding: 8px 14px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-card);
+  box-shadow: 0 1px 3px rgba(25, 36, 53, 0.04);
+  margin-bottom: 0;
+}
+
+.lf-action-bar .lf-search-input-wrap {
+  flex: 1 1 260px;
+  max-width: 380px;
+  min-width: 180px;
+}
+
+.lf-action-bar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
   flex-wrap: wrap;
 }
 
@@ -2260,7 +2288,7 @@ body {
 /* Card Grid */
 .lf-outreach-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 360px), 1fr));
   gap: 20px;
   align-items: stretch;
 }
@@ -2770,7 +2798,7 @@ body {
 
 .lf-parties-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
 }
 
@@ -2978,7 +3006,7 @@ body {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
   gap: 14px;
-  margin-bottom: 20px;
+  margin-bottom: 0;
 }
 
 @media (max-width: 1200px) {
@@ -3081,7 +3109,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 18px;
+  margin-bottom: 0;
   gap: 12px;
   flex-wrap: wrap;
 }
@@ -3156,7 +3184,7 @@ body {
 /* Hot Leads Grid & Cards */
 .lf-hot-leads-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 380px), 1fr));
   gap: 16px;
 }
 
@@ -3465,7 +3493,7 @@ body {
 /* Integration Grid */
 .lf-integration-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
   gap: 16px;
 }
 
@@ -4210,3 +4238,109 @@ body {
   border: 1px solid #fde68a;
 }
 
+
+/* Consistent spacing and resilient narrow-screen layouts. */
+.lf-layout-wrap, .lf-header-left, .lf-header-title-box,
+.lf-view-container > *, .lf-panel, .lf-search-input-wrap { min-width: 0; }
+.lf-header { height: auto; min-height: var(--header-h); padding-block: 12px; }
+.lf-header-right { flex-shrink: 0; }
+.lf-user-pill { max-width: 240px; }
+.lf-user-pill .lf-mono { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lf-header-title, .lf-panel-title, .lf-section-title { overflow-wrap: anywhere; }
+.lf-panel-desc, .lf-section-subtitle { line-height: 1.5; max-width: 68ch; }
+.lf-scope-tabs, .lf-lifecycle-tabs, .lf-panel-header,
+.lf-history-row, .lf-history-meta, .lf-webhook-url-bar { flex-wrap: wrap; }
+.lf-view-container > .lf-section-header:empty { display: none; }
+.lf-preset-disclosure { margin-top: 8px; }
+.lf-preset-disclosure summary { color: var(--purple-dark); cursor: pointer; font-size: 13px; padding: 8px 0; }
+.lf-preset-disclosure .lf-preset-groups { margin-top: 8px; }
+.lf-webhook-url-val, .lf-integration-detail, .lf-modal-subtitle { overflow-wrap: anywhere; min-width: 0; }
+.lf-engine-switch-title-box, .lf-engine-status-content { min-width: 0; }
+.lf-modal-overlay { position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(25, 36, 53, .5); }
+.lf-modal-overlay > .lf-modal-card { width: 100%; padding: 24px; max-height: calc(100dvh - 32px); overflow-y: auto; }
+.lf-modal-footer, .lf-modal-header-actions { flex-wrap: wrap; }
+.lf-header-icon-btn, .lf-mobile-toggle, .lf-modal-close, .lf-drawer-close { min-width: 40px; min-height: 40px; flex-shrink: 0; }
+@media (max-width: 1100px) {
+  .lf-user-pill { display: none; }
+}
+@media (max-width: 768px) {
+  .lf-header { gap: 8px; padding: 12px 16px; flex-wrap: wrap; }
+  .lf-header-left { flex: 1; }
+  .lf-header-title { font-size: 16px; }
+  .lf-header-subtitle { display: none; }
+  .lf-main-content { padding: 20px 16px 40px; }
+  .lf-view-container { gap: 20px; }
+  .lf-panel, .lf-pipeline-panel, .lf-engine-switch-card { padding: 16px; }
+  .lf-hero-banner { padding: 24px; }
+  .lf-hero-title { font-size: 22px; }
+  .lf-pipeline-steps { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); overflow: visible; }
+  .lf-pipeline-step { min-width: 0; }
+  .lf-step-arrow { display: none; }
+  .lf-crm-toolbar, .lf-action-bar, .lf-lifecycle-toolbar { gap: 12px; }
+  .lf-search-input-wrap, .lf-action-bar .lf-search-input-wrap { min-width: 0; max-width: none; flex-basis: 100%; }
+  .lf-action-bar-right { margin-left: 0; }
+  .lf-lifecycle-toolbar, .lf-search-complete-banner { flex-wrap: wrap; }
+  .lf-search-complete-banner > div:last-child { flex-wrap: wrap; }
+  .lf-quick-picks-grid, .lf-intent-grid { grid-template-columns: 1fr; }
+  .lf-modal-header, .lf-modal-footer { gap: 12px; flex-wrap: wrap; }
+  .lf-modal-header, .lf-modal-body, .lf-modal-footer { padding: 16px; }
+}
+
+.lf-user-role { font-size: 12px; font-weight: 600; color: var(--text-main); white-space: nowrap; }
+@media (max-width: 480px) { .lf-header-right { flex-wrap: wrap; } .lf-header-pill { padding: 8px; } }
+
+.lf-header-right { max-width: 100%; }
+.lf-modal-overlay .lf-modal-header { padding: 0 0 16px; margin-bottom: 16px; background: transparent; }
+.lf-modal-overlay > .lf-modal-card { display: block; }
+
+/* Admin uses the same typography and spacing scale as workspace pages. */
+.lf-admin-tabs-row { display: flex; gap: 4px; border-bottom: 1px solid var(--border-card); overflow-x: auto; }
+.lf-admin-tab-btn { display: inline-flex; align-items: center; gap: 8px; padding: 12px 16px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--text-muted); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+.lf-admin-tab-btn:hover { background: var(--bg-surface-2); color: var(--text-main); }
+.lf-admin-tab-btn.active { border-bottom-color: var(--purple); color: var(--purple-dark); }
+.lf-admin-view .lf-stat-label { font-size: 13px; font-weight: 600; line-height: 1.5; color: var(--text-muted); }
+.lf-admin-view .lf-stat-val { font-size: 24px; font-weight: 700; line-height: 1.3; margin: 8px 0; overflow-wrap: anywhere; }
+.lf-admin-view .lf-stat-desc { font-size: 13px; line-height: 1.5; color: var(--text-muted); }
+.lf-admin-view .lf-stat-card { padding: 20px; }
+.lf-admin-view .lf-stat-top { gap: 12px; }
+.lf-admin-view .lf-panel p { line-height: 1.5; }
+.lf-admin-view .lf-btn-primary, .lf-admin-view .lf-btn-secondary { min-height: 36px; }
+.lf-admin-view button[aria-pressed="true"]:disabled { opacity: 1; }
+@media (max-width: 768px) {
+  .lf-admin-tab-btn { padding: 12px; }
+  .lf-admin-view .lf-stat-card { padding: 16px; }
+  .lf-admin-view .lf-stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+  .lf-admin-view .lf-stat-val { font-size: 22px !important; }
+}
+@media (max-width: 480px) {
+  .lf-admin-view .lf-stat-grid { grid-template-columns: 1fr !important; }
+}
+
+/* Shared administrative tables and account card. */
+.lf-data-table { width: 100%; border-collapse: collapse; text-align: left; font-size: 13px; }
+.lf-data-table th { padding: 12px 16px; text-align: left; font-size: 12px; font-weight: 600; color: var(--text-muted); background: var(--bg-surface-2); border-bottom: 1px solid var(--border-card); white-space: nowrap; }
+.lf-data-table td { padding: 14px 16px; vertical-align: middle; line-height: 1.5; border-bottom: 1px solid var(--border-subtle); }
+.lf-data-table tbody tr:last-child td { border-bottom: 0; }
+.lf-data-table tbody tr:hover { background: var(--bg-surface-2); }
+.lf-admin-users-table { min-width: 980px; }
+.lf-admin-user-profile { display: flex; align-items: center; gap: 12px; min-width: 220px; }
+.lf-admin-user-avatar { flex-shrink: 0; }
+.lf-admin-user-identity { min-width: 0; }
+.lf-admin-user-identity .lf-mono { overflow-wrap: anywhere; }
+.lf-admin-user-actions { display: inline-flex; align-items: center; gap: 8px; }
+.lf-data-table .lf-admin-actions-cell { text-align: right; width: 148px; white-space: nowrap; }
+.lf-admin-user-action { width: 36px; height: 36px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--border-card); border-radius: var(--radius-md); background: var(--bg-surface-1); color: var(--text-muted); cursor: pointer; }
+.lf-admin-user-action:hover:not(:disabled) { background: var(--bg-surface-hover); border-color: var(--border-strong); }
+.lf-admin-user-action:disabled { opacity: .4; cursor: not-allowed; }
+.lf-admin-account-card { padding: 16px; border: 1px solid var(--border-card); border-radius: var(--radius-lg); background: var(--bg-surface-2); }
+.lf-admin-account-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
+.lf-admin-account-title { font-size: 12px; font-weight: 600; color: var(--text-muted); }
+.lf-admin-account-role { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: var(--text-main); }
+.lf-admin-account-email { display: block; margin-top: 4px; font-size: 12px; line-height: 1.5; color: var(--text-muted); overflow-wrap: anywhere; }
+.lf-admin-account-brand { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-card); color: var(--text-muted); font-size: 11px; }
+@media (pointer: coarse) { .lf-admin-user-action { width: 44px; height: 44px; } }
+
+.lf-app-logo { display: block; width: 72px; height: 40px; object-fit: contain; flex-shrink: 0; }
+.lf-auth-logo { display: block; width: 190px; height: auto; object-fit: contain; margin: 0 auto 16px; }
+.lf-sidebar.collapsed .lf-app-logo { width: 42px; height: 28px; }
+.lf-sidebar.collapsed .lf-sidebar-header { flex-direction: column; justify-content: center; gap: 8px; padding: 12px 8px; height: auto; min-height: var(--header-h); }

@@ -6,7 +6,7 @@ import config from '../config/env.js';
 import { hashPassword } from '../middleware/dashboardAuth.js';
 
 test('single-business dashboard authentication fails closed, protects mutations, and revokes sessions', async () => {
-  const original = { ...config };
+  const original = Object.fromEntries(Object.entries(config).filter(([key]) => Object.getOwnPropertyDescriptor(config, key)?.writable));
   config.NODE_ENV = 'production';
   config.ADMIN_EMAIL = '';
   config.ADMIN_PASSWORD_HASH = '';
@@ -56,7 +56,7 @@ test('single-business dashboard authentication fails closed, protects mutations,
 });
 
 test('local development bypass is denied for foreign Host and Origin', async () => {
-  const original = { ...config };
+  const original = Object.fromEntries(Object.entries(config).filter(([key]) => Object.getOwnPropertyDescriptor(config, key)?.writable));
   Object.assign(config, { NODE_ENV: 'development', ADMIN_EMAIL: '', ADMIN_PASSWORD_HASH: '' });
   const server = app.listen(0, '127.0.0.1');
   await new Promise(resolve => server.once('listening', resolve));

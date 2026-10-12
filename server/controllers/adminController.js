@@ -1,4 +1,5 @@
 import config from '../config/env.js';
+import { requestHunter } from '../services/hunterClient.js';
 import {
   getAllUsers,
   createUser,
@@ -17,6 +18,7 @@ import {
   saveHunterSetting,
   loadAutoSendSetting,
   saveAutoSendSetting,
+  getTodayDateString,
 } from '../services/storageService.js';
 import {
   isHunterQuotaExceeded,
@@ -104,8 +106,8 @@ export async function getSystemHealthHandler(req, res, next) {
         details: !hunterEnabled
           ? 'Hunter disabled: Inbuilt scraper engine active'
           : isHunterQuotaExceeded()
-          ? 'Quota limit hit (429/402): Inbuilt scraper fallback active'
-          : 'Hunter.io API ready for native discovery',
+          ? 'Hunter quota reached. Admin must restore quota or select scraper.'
+          : 'Optional Hunter mode selected; requires a configured API key.',
       },
       inbuilt_scraper: {
         configured: true,
@@ -123,7 +125,7 @@ export async function getSystemHealthHandler(req, res, next) {
         mailbox: config.SENDER_MAILBOX,
         status: config.HOSTINGER_API_TOKEN ? 'healthy' : 'unconfigured',
         webhook_token_configured: Boolean(config.HOSTINGER_WEBHOOK_BEARER_TOKEN),
-        details: config.HOSTINGER_API_TOKEN ? `Bound to ${config.SENDER_MAILBOX}` : 'Dispatch simulation active',
+        details: config.HOSTINGER_API_TOKEN ? `Bound to ${config.SENDER_MAILBOX}; delivery not tested` : 'API token missing; API delivery unavailable',
       },
     };
 
@@ -172,11 +174,14 @@ export async function resetHunterQuotaHandler(req, res, next) {
 export async function resetDailyUsageHandler(req, res, next) {
   try {
     const { type } = req.body || {};
-    const today = new Date().toISOString().slice(0, 10);
+    if (!['leads', 'replies'].includes(type)) {
+      return res.status(400).json({ error: 'Usage type must be leads or replies.' });
+    }
+    const today = getTodayDateString();
     if (type === 'replies') {
-      saveReplyUsage({ date: today, count: 0 });
+      saveReplyUsage(today, 0);
     } else {
-      saveDailyUsage({ date: today, count: 0 });
+      saveDailyUsage(today, 0);
     }
 
     addAuditLog({
@@ -230,34 +235,17 @@ export async function testConnectionHandler(req, res, next) {
     }
 
     if (service === 'hunter') {
-      if (!config.HUNTER_API_KEY) {
-        return res.status(400).json({ ok: false, error: 'Hunter.io API key is not configured.' });
-      }
-      try {
-        const resp = await fetch(
-          `https://api.hunter.io/v2/account?api_key=${encodeURIComponent(config.HUNTER_API_KEY)}`,
-          { signal: AbortSignal.timeout(5000) }
-        );
-        const latency = Date.now() - startTime;
-        if (!resp.ok) {
-          return res.status(200).json({ ok: false, status: resp.status, latency, error: `Hunter API responded with HTTP ${resp.status}` });
-        }
-        const data = await resp.json();
-        return res.status(200).json({
-          ok: true,
-          latency,
-          message: 'Hunter.io API connected.',
-          account: {
-            first_name: data.data?.first_name,
-            last_name: data.data?.last_name,
-            email: data.data?.email,
-            plan_name: data.data?.plan_name,
-            requests: data.data?.requests,
-          },
-        });
-      } catch (err) {
-        return res.status(200).json({ ok: false, latency: Date.now() - startTime, error: err.message });
-      }
+      if (!config.HUNTER_API_KEY) return res.status(400).json({ ok: false, error: 'Hunter API key is not configured.' });
+      const account = await requestHunter('account', { maxAttempts: 1 });
+      if (!account.ok || !account.data) return res.status(200).json({ ok: false, status: account.status, error: `Hunter authentication failed (HTTP ${account.status}).` });
+      // A filter-only Discover probe does not consume a natural-language query or email credits.
+      const discover = await requestHunter('discover', { body: { organization: { domain: ['hunter.io'] } }, maxAttempts: 1 });
+      return res.status(200).json({
+        ok: discover.ok, authenticated: true, discover_access: discover.ok,
+        latency: Date.now() - startTime,
+        ...(discover.ok ? { message: 'Hunter account authenticated and Discover access confirmed.' } : { error: `Account authenticated, but Discover access failed (HTTP ${discover.status}).` }),
+        account: { plan_name: account.data.plan_name, requests: account.data.requests },
+      });
     }
 
     if (service === 'deepseek') {
@@ -279,15 +267,61 @@ export async function testConnectionHandler(req, res, next) {
       }
     }
 
-    if (service === 'sqlite') {
+    if (service === 'hostinger') {
+      const latency = Date.now() - startTime;
+      if (!config.HOSTINGER_API_TOKEN) {
+        return res.status(400).json({
+          ok: false,
+          verified: false,
+          latency,
+          error: 'Hostinger API token is not configured. API delivery cannot be verified.',
+        });
+      }
       return res.status(200).json({
         ok: true,
-        latency: 1,
+        verified: false,
+        latency,
+        message: `API configuration found for ${config.SENDER_MAILBOX}. Connectivity and delivery have not been tested.`,
+      });
+    }
+
+    if (service === 'sqlite') {
+      getSystemMetrics();
+      return res.status(200).json({
+        ok: true,
+        latency: Date.now() - startTime,
         message: 'SQLite database WAL journal connection active and healthy.',
       });
     }
 
     return res.status(400).json({ error: 'Unknown service requested for connection test.' });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function toggleEngineHandler(req, res, next) {
+  try {
+    const { engine } = req.body || {};
+    if (!['hunter', 'scraper'].includes(engine)) {
+      return res.status(400).json({ error: 'Engine must be hunter or scraper.' });
+    }
+    const hunterEnabled = engine === 'hunter';
+    saveHunterSetting(hunterEnabled);
+    if (hunterEnabled) {
+      resetHunterQuotaState();
+    }
+    addAuditLog({
+      userEmail: req.dashboardSession?.email || 'superadmin',
+      action: 'engine_switch',
+      details: `Superadmin switched system discovery engine to ${hunterEnabled ? 'Hunter.io Native Discovery' : 'Google Places Scraper'}`,
+      category: 'admin',
+    });
+    return res.status(200).json({
+      success: true,
+      discovery_engine: hunterEnabled ? 'hunter' : 'scraper',
+      hunter_enabled: hunterEnabled,
+    });
   } catch (err) {
     next(err);
   }

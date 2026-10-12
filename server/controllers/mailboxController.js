@@ -144,7 +144,7 @@ async function sendColdMailUnlocked(req, res, next) {
       return res.status(400).json({ error: 'Simulated leads cannot receive outreach email.' });
     }
     if (!savedLead || savedLead.source !== 'live' || savedLead.email !== to ||
-        !['deliverable', 'valid'].includes(savedLead.emailStatus)) {
+        !['deliverable', 'valid', 'mx_valid'].includes(savedLead.emailStatus)) {
       return res.status(400).json({ error: 'A saved, verified live lead is required for outreach.' });
     }
 

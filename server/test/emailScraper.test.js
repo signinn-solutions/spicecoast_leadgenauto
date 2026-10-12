@@ -156,7 +156,7 @@ test('scrapeEmailsForWebsite discovers and ranks emails by spice outreach priori
   }
 });
 
-test('Hunter.io quota exhaustion (HTTP 429 & 402) triggers fallback to web scraper', async () => {
+test('Hunter quota detection does not call Hunter again; scraper can be run independently', async () => {
   const originalFetch = globalThis.fetch;
   const originalHunterKey = config.HUNTER_API_KEY;
   const originalHunterSetting = loadHunterSetting();

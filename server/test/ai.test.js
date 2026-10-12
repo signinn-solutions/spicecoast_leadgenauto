@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import config from '../config/env.js';
-import { getDeepseekClient, generateColdEmail, extractMetadataAndDraftReply } from '../services/deepseekService.js';
+import { getDeepseekClient, generateColdEmail, extractMetadataAndDraftReply, resetAiUnavailableState } from '../services/deepseekService.js';
 
 test('AI metadata is safe to render and fallback drafts identify their actual source', async () => {
   const originalKey = config.DEEPSEEK_API_KEY;
@@ -24,5 +24,41 @@ test('AI metadata is safe to render and fallback drafts identify their actual so
   } finally {
     client.chat.completions.create = originalCreate;
     config.DEEPSEEK_API_KEY = originalKey;
+  }
+});
+
+test('Cold drafts retry unusable JSON and expose actionable provider failures', async () => {
+  const originalKey = config.DEEPSEEK_API_KEY;
+  config.DEEPSEEK_API_KEY = 'test-key-no-network';
+  const client = getDeepseekClient();
+  const originalCreate = client.chat.completions.create;
+  resetAiUnavailableState();
+  try {
+    let calls = 0;
+    client.chat.completions.create = async (request) => {
+      calls++;
+      assert.deepEqual(request.response_format, { type: 'json_object' });
+      assert.ok(request.max_tokens >= 1000);
+      assert.match(request.messages[1].content, /https:\/\/thespicecoast.com\//);
+      assert.match(request.messages[1].content, /Custom|buyer-specific/);
+      assert.doesNotMatch(request.messages[1].content, /550\/570|7-8mm|High-Curcumin/);
+      return { choices: [{ message: { content: calls === 1 ? '' : JSON.stringify({ subject: 'Spice partnership', body: 'May we share our catalog?' }) } }] };
+    };
+    const generated = await generateColdEmail({ name: 'Buyer' });
+    assert.equal(calls, 2);
+    assert.equal(generated.subject, 'Spice partnership');
+    client.chat.completions.create = async () => { throw Object.assign(new Error('Payment required'), { status: 402 }); };
+    const fallback = await generateColdEmail({ name: 'Buyer' });
+    assert.equal(fallback.model, 'Local template');
+    assert.match(fallback.fallbackReason, /balance/);
+    const unavailable = await generateColdEmail({ name: 'Buyer' });
+    assert.match(unavailable.fallbackReason, /balance/);
+    config.DEEPSEEK_API_KEY = '';
+    resetAiUnavailableState();
+    assert.match((await generateColdEmail({})).fallbackReason, /not configured/);
+  } finally {
+    client.chat.completions.create = originalCreate;
+    config.DEEPSEEK_API_KEY = originalKey;
+    resetAiUnavailableState();
   }
 });

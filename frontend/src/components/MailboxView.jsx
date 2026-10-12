@@ -162,7 +162,6 @@ Director of Imports, NY Flavour Imports`,
       message: simBody,
     });
     setShowSimulator(false);
-    onRefresh?.();
   };
 
   // Follow-up draft input state accessors
@@ -217,7 +216,6 @@ Director of Imports, NY Flavour Imports`,
     setReopeningLeadId(leadId);
     try {
       await onReopenLead(leadId);
-      onRefresh?.();
     } finally {
       setReopeningLeadId(null);
     }
@@ -374,15 +372,7 @@ Director of Imports, NY Flavour Imports`,
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <button
-            type="button"
-            className="lf-btn-secondary xs"
-            onClick={onRefresh}
-            title="Refresh lifecycle records"
-          >
-            <RefreshCw size={13} className={isRefreshing ? "spin" : ""} />
-            <span>Refresh</span>
-          </button>
+
 
           <button
             type="button"
@@ -398,7 +388,7 @@ Director of Imports, NY Flavour Imports`,
 
       {/* Optional Webhook Simulator Overlay / Panel */}
       {showSimulator && (
-        <div className="lf-panel lf-animate-fade" style={{ marginBottom: 20 }}>
+        <div className="lf-panel lf-animate-fade" >
           <div className="lf-panel-header">
             <div>
               <h3 className="lf-panel-title">Inbound Webhook Test Simulator</h3>
@@ -409,6 +399,7 @@ Director of Imports, NY Flavour Imports`,
             <button
               type="button"
               className="lf-btn-icon-xs"
+              aria-label="Close webhook simulator"
               onClick={() => setShowSimulator(false)}
             >
               &times;
@@ -436,8 +427,8 @@ Director of Imports, NY Flavour Imports`,
 
           <form onSubmit={handleSimSubmit} className="lf-form-grid" style={{ marginTop: 16 }}>
             <div className="lf-form-field">
-              <label>From Sender Email</label>
-              <input
+              <label htmlFor="mailbox-field-1">From Sender Email</label>
+              <input id="mailbox-field-1"
                 type="email"
                 className="lf-input"
                 value={simFrom}
@@ -447,8 +438,8 @@ Director of Imports, NY Flavour Imports`,
             </div>
 
             <div className="lf-form-field">
-              <label>Buyer / Company Name</label>
-              <input
+              <label htmlFor="mailbox-field-2">Buyer / Company Name</label>
+              <input id="mailbox-field-2"
                 type="text"
                 className="lf-input"
                 value={simName}
@@ -458,8 +449,8 @@ Director of Imports, NY Flavour Imports`,
             </div>
 
             <div className="lf-form-field span-2">
-              <label>Inbound Email Subject</label>
-              <input
+              <label htmlFor="mailbox-field-3">Inbound Email Subject</label>
+              <input id="mailbox-field-3"
                 type="text"
                 className="lf-input"
                 value={simSubject}
@@ -469,8 +460,8 @@ Director of Imports, NY Flavour Imports`,
             </div>
 
             <div className="lf-form-field span-2">
-              <label>Inquiry Message Content</label>
-              <textarea
+              <label htmlFor="mailbox-field-4">Inquiry Message Content</label>
+              <textarea id="mailbox-field-4"
                 className="lf-textarea"
                 rows={5}
                 value={simBody}

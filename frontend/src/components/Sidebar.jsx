@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import spiceCoastLogo from "../assets/spice-coast-logo.png";
 import useDialogFocus from "../hooks/useDialogFocus.js";
 import {
   Compass,
@@ -13,7 +14,6 @@ import {
   ExternalLink,
   ChevronLeft,
   ChevronRight,
-  Sprout,
   Activity,
   Zap,
   X,
@@ -64,35 +64,16 @@ export default function Sidebar({
     Math.round(((replyUsage.count || 0) / (replyUsage.limit || 30)) * 100)
   );
 
-  const handleLogout = async () => {
-    if (typeof onLogout === "function") {
-      onLogout();
-      return;
-    }
-    try {
-      await apiFetch("/api/auth/logout", { method: "POST" });
-    } catch {}
-    setSessionToken("");
-    window.dispatchEvent(new Event("session-expired"));
-    window.location.reload();
-  };
 
   const navItems = currentUser?.role === "superadmin"
     ? [
-        {
-          id: "health",
-          label: "System Health",
-          icon: ShieldCheck,
-          badge: null,
-          desc: "Integrations & API quotas",
-        },
         {
           id: "admin",
           label: "Superadmin",
           icon: ShieldAlert,
           badge: "Admin",
           badgeType: "purple",
-          desc: "App health & user access",
+          desc: "Health, integrations & users",
         },
       ]
     : [
@@ -141,13 +122,6 @@ export default function Sidebar({
           badge: null,
           desc: "Deliverability & analytics",
         },
-        {
-          id: "health",
-          label: "System Health",
-          icon: ShieldCheck,
-          badge: null,
-          desc: "Integrations & API quotas",
-        },
       ];
 
   return (
@@ -178,28 +152,26 @@ export default function Sidebar({
           <div
             className="lf-brand-box"
             onClick={() => {
-              onSelectView("dashboard");
+              onSelectView(currentUser?.role === "superadmin" ? "admin" : "dashboard");
               if (onCloseMobile) onCloseMobile();
             }}
             role="button"
             tabIndex={0}
-            aria-label="Go to overview"
+            aria-label={currentUser?.role === "superadmin" ? "Go to Superadmin Console" : "Go to overview"}
             onKeyDown={(event) => {
               if (event.key === "Enter" || event.key === " ") {
                 event.preventDefault();
-                onSelectView("dashboard");
+                onSelectView(currentUser?.role === "superadmin" ? "admin" : "dashboard");
                 onCloseMobile?.();
               }
             }}
           >
-            <div className="lf-brand-icon">
-              <Sprout size={20} />
-            </div>
+            <img className="lf-app-logo" src={spiceCoastLogo} alt="SpiceCoast" width="120" height="56" />
             {!isCollapsed && (
               <div className="lf-brand-info">
                 <span className="lf-brand-title">SpiceCoast</span>
                 <span className="lf-brand-tagline">
-                  {currentUser?.role === "superadmin" ? "👑 SuperAdmin Console" : "💼 Lead Operations"}
+                  {currentUser?.role === "superadmin" ? "Administration" : "Lead Operations"}
                 </span>
               </div>
             )}
@@ -216,26 +188,11 @@ export default function Sidebar({
           </button>
         </div>
 
-        {/* Quick Launch Action */}
-        <div className="lf-sidebar-cta">
-          <button
-            type="button"
-            className="lf-btn-new-discovery"
-            onClick={() => {
-              onSelectView("search");
-              if (onCloseMobile) onCloseMobile();
-            }}
-            title="Start new prospect discovery"
-            aria-label="New Discovery"
-          >
-            <PlusCircle size={16} />
-            {!isCollapsed && <span>New Discovery</span>}
-          </button>
-        </div>
-
         {/* Navigation Links */}
         <nav className="lf-sidebar-nav" aria-label="Main menu">
-          <div className="lf-nav-group-label">{!isCollapsed && "WORKFLOW"}</div>
+          <div className="lf-nav-group-label">
+            {!isCollapsed && (currentUser?.role === "superadmin" ? "SUPERADMIN" : "WORKFLOW")}
+          </div>
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = activeView === item.id;
@@ -274,72 +231,68 @@ export default function Sidebar({
         {/* Bottom Quota & Status Panel */}
         <div className="lf-sidebar-footer">
           {!isCollapsed ? (
-            <div className="lf-quota-card">
-              <div className="lf-quota-header">
-                <span className="lf-quota-title">Daily Operations Quota</span>
-                <span className={`lf-status-pill ${serverOnline ? "online" : "offline"}`}>
-                  <span className="lf-pulse-dot" />
-                  {serverOnline ? "Online" : "Offline"}
-                </span>
-              </div>
-
-              {/* Lead Search Usage */}
-              <div className="lf-quota-meter">
-                <div className="lf-meter-label">
-                  <span>Lead Discovery</span>
-                  <span className="lf-mono">
-                    {leadUsage.count}/{leadUsage.limit}
+            currentUser?.role === "superadmin" ? (
+              <section className="lf-admin-account-card" aria-label="Administrator account">
+                <div className="lf-admin-account-header">
+                  <span className="lf-admin-account-title">System Core</span>
+                  <span className={`lf-status-pill ${serverOnline ? "online" : "offline"}`}>
+                    <span className="lf-pulse-dot" />
+                    {serverOnline ? "Online" : "Offline"}
                   </span>
                 </div>
-                <div className="lf-meter-bar">
-                  <div
-                    className="lf-meter-fill amber"
-                    style={{ width: `${leadPercent}%` }}
-                  />
-                </div>
-              </div>
-
-              {/* AI Reply Usage */}
-              <div className="lf-quota-meter">
-                <div className="lf-meter-label">
-                  <span>AI Inbound Replies</span>
-                  <span className="lf-mono">
-                    {replyUsage.count}/{replyUsage.limit}
+                <div className="lf-admin-account-role"><ShieldCheck size={14} /><span>Superadmin</span></div>
+                <span className="lf-admin-account-email" title={currentUser.email}>{currentUser.email}</span>
+                <div className="lf-admin-account-brand">Signinn Solutions</div>
+              </section>
+            ) : (
+              <div className="lf-quota-card">
+                <div className="lf-quota-header">
+                  <span className="lf-quota-title">Daily Operations Quota</span>
+                  <span className={`lf-status-pill ${serverOnline ? "online" : "offline"}`}>
+                    <span className="lf-pulse-dot" />
+                    {serverOnline ? "Online" : "Offline"}
                   </span>
                 </div>
-                <div className="lf-meter-bar">
-                  <div
-                    className="lf-meter-fill emerald"
-                    style={{ width: `${replyPercent}%` }}
-                  />
+
+                {/* Lead Search Usage */}
+                <div className="lf-quota-meter">
+                  <div className="lf-meter-label">
+                    <span>Lead Discovery</span>
+                    <span className="lf-mono">
+                      {leadUsage.count}/{leadUsage.limit}
+                    </span>
+                  </div>
+                  <div className="lf-meter-bar">
+                    <div
+                      className="lf-meter-fill amber"
+                      style={{ width: `${leadPercent}%` }}
+                    />
+                  </div>
                 </div>
-              </div>
 
-              <div className="lf-footer-origin">
-                <span>Direct Sourcing &bull; Cochin, India</span>
-              </div>
+                {/* AI Reply Usage */}
+                <div className="lf-quota-meter">
+                  <div className="lf-meter-label">
+                    <span>AI Inbound Replies</span>
+                    <span className="lf-mono">
+                      {replyUsage.count}/{replyUsage.limit}
+                    </span>
+                  </div>
+                  <div className="lf-meter-bar">
+                    <div
+                      className="lf-meter-fill emerald"
+                      style={{ width: `${replyPercent}%` }}
+                    />
+                  </div>
+                </div>
 
-              <button
-                type="button"
-                className="lf-btn-secondary sm"
-                id="sidebar-signout-btn"
-                onClick={handleLogout}
-                style={{
-                  width: "100%",
-                  marginTop: "10px",
-                  justifyContent: "center",
-                  gap: "6px",
-                  color: "#dc2626",
-                  borderColor: "rgba(239, 68, 68, 0.25)",
-                  background: "rgba(239, 68, 68, 0.08)",
-                  fontWeight: "600",
-                }}
-                title="Sign out of current SpiceCoast session"
-              >
-                <LogOut size={13} />
-                <span>Sign Out</span>
-              </button>
-            </div>
+                <div className="lf-footer-origin">
+                  <span>Direct Sourcing &bull; Cochin, India</span>
+                </div>
+
+
+              </div>
+            )
           ) : (
             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "8px" }}>
               <div
@@ -350,16 +303,7 @@ export default function Sidebar({
               >
                 <span className="lf-pulse-dot" />
               </div>
-              <button
-                type="button"
-                className="lf-collapse-btn"
-                id="sidebar-signout-btn-collapsed"
-                onClick={handleLogout}
-                title="Sign Out"
-                style={{ color: "#dc2626" }}
-              >
-                <LogOut size={14} />
-              </button>
+
             </div>
           )}
         </div>

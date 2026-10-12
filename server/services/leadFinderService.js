@@ -1,4 +1,5 @@
 import config from '../config/env.js';
+import { requestHunter, resetHunterRequestQuota } from './hunterClient.js';
 import {
   getTodayDateString,
   loadDailyUsage,
@@ -152,7 +153,7 @@ export async function searchPlaces(query, neededCount = 20, seenMap = {}, existi
     'Content-Type': 'application/json',
     'X-Goog-Api-Key': config.GOOGLE_API_KEY,
     'X-Goog-FieldMask':
-      'places.id,places.displayName,places.formattedAddress,places.websiteUri,places.nationalPhoneNumber,nextPageToken',
+      'places.id,places.displayName,places.formattedAddress,places.websiteUri,places.nationalPhoneNumber,places.internationalPhoneNumber,nextPageToken',
   };
 
   const newUniquePlaces = [];
@@ -265,6 +266,7 @@ export function isHunterQuotaExceeded() {
 
 export function resetHunterQuotaState() {
   hunterQuotaExceeded = false;
+  resetHunterRequestQuota();
 }
 
 export function setHunterQuotaExceeded(exceeded = true) {
@@ -276,326 +278,129 @@ export function setHunterQuotaExceeded(exceeded = true) {
  * (Hunter Discover / Domain Search) without using Google Places as starting point.
  */
 export async function searchHunterCompanies({ businessType, city, country, neededCount = 20, seenMap = {}, existingLeads = [] }) {
-  if (!config.HUNTER_API_KEY) {
-    return {
-      companies: [],
-      duplicatesSkipped: 0,
-      providerError: 'Hunter.io API key is not configured.',
-    };
-  }
-
-  if (hunterQuotaExceeded) {
-    return {
-      companies: [],
-      duplicatesSkipped: 0,
-      providerError: 'Hunter.io monthly quota / credits reached. Switch to Google Places Scraper.',
-    };
-  }
-
-  const uniqueCompanies = [];
+  if (!config.HUNTER_API_KEY || hunterQuotaExceeded) return { companies: [], duplicatesSkipped: 0, providerError: !config.HUNTER_API_KEY ? 'Hunter API key is not configured.' : 'Hunter quota is exhausted. Admin must restore quota or select scraper.' };
+  const companies = [];
+  const warnings = [];
   let duplicatesSkipped = 0;
   let providerError = null;
-
-  // 1. Primary: Query Hunter Discover Endpoint (/v2/discover)
-  try {
-    const limit = Math.min(50, Math.max(10, neededCount));
-    const url = new URL('https://api.hunter.io/v2/discover');
-    url.searchParams.set('query', businessType);
-    if (city) url.searchParams.set('city', city);
-    if (country) url.searchParams.set('country', country);
-    url.searchParams.set('limit', String(limit));
-    url.searchParams.set('api_key', config.HUNTER_API_KEY);
-
-    const response = await fetch(url.toString(), { signal: AbortSignal.timeout(10000) });
-
-    if (response.status === 429 || response.status === 402) {
-      hunterQuotaExceeded = true;
-      providerError = `Hunter.io monthly credits / search quota reached (HTTP ${response.status}).`;
-      console.warn(`[Hunter.io Discover Quota Exceeded]: HTTP ${response.status}`);
-    } else if (response.ok) {
-      const data = await response.json();
-      const rawCompanies = Array.isArray(data.data)
-        ? data.data
-        : Array.isArray(data.data?.companies)
-        ? data.data.companies
-        : [];
-
-      for (const comp of rawCompanies) {
-        const dom = comp.domain || extractDomain(comp.website);
-        const name = comp.name || comp.organization || `${city} ${businessType}`;
-        const candidate = {
-          id: `hunter-${(dom || name).toLowerCase().replace(/[^a-z0-9]/g, '')}`,
-          name,
-          website: comp.website || (dom ? `https://${dom}` : ''),
-          domain: dom,
-          address: [comp.street, comp.city || city, comp.country || country].filter(Boolean).join(', ') || `${city}, ${country}`,
-          phone: comp.phone_number || comp.phone || '—',
-          businessType: comp.industry || businessType,
-          city: comp.city || city,
-          country: comp.country || country,
-          emails: Array.isArray(comp.emails) ? comp.emails : [],
-        };
-
-        if (isPlaceDuplicate(candidate, seenMap, existingLeads, uniqueCompanies)) {
-          duplicatesSkipped++;
-        } else {
-          uniqueCompanies.push(candidate);
-          if (uniqueCompanies.length >= neededCount) break;
-        }
-      }
-    } else {
-      console.warn(`[Hunter Discover API status ${response.status}]`);
+  let filters = null;
+  let previousPage = '';
+  for (let offset = 0; offset < 1000 && companies.length < neededCount; offset += 100) {
+    const result = await requestHunter('discover', { body: {
+      ...(offset > 0 && filters ? filters : { query: `${businessType} in ${city}, ${country}` }),
+      ...(offset > 0 ? { offset } : {}),
+    } });
+    if (result.quotaExceeded) hunterQuotaExceeded = true;
+    if (!result.ok) {
+      const ids = result.errors.map(error => error.id).filter(Boolean).join(', ');
+      const error = `Hunter Discover failed (HTTP ${result.status}${ids ? `: ${ids}` : ''}).`;
+      if (offset > 0) warnings.push(error + ' Pagination may require a Premium plan.');
+      else providerError = error;
+      break;
     }
-  } catch (err) {
-    console.warn(`[Hunter Discover Request Error]: ${err.message}`);
+    filters ||= result.meta?.filters;
+    const raw = Array.isArray(result.data) ? result.data : result.data?.companies || [];
+    const pageSignature = JSON.stringify(raw.map(company => company.domain || company.organization || company.name));
+    if (offset > 0 && pageSignature === previousPage) { warnings.push('Hunter repeated a results page; pagination stopped.'); break; }
+    previousPage = pageSignature;
+    for (const company of raw) {
+      const domain = company.domain || extractDomain(company.website);
+      const name = company.name || company.organization || domain;
+      if (!name) continue;
+      const candidate = {
+        id: `hunter-${(domain || name).toLowerCase().replace(/[^a-z0-9]/g, '')}`,
+        name, domain, website: company.website || (domain ? `https://${domain}` : ''),
+        address: [company.street, company.city, company.country].filter(Boolean).join(', '),
+        city: company.city || '', country: company.country || '',
+        targetCity: city, targetCountry: country,
+        phone: company.phone_number || company.phone || '',
+        businessType: company.industry || businessType,
+        emails: Array.isArray(company.emails) ? company.emails : company.email ? [company.email] : [],
+      };
+      if (isPlaceDuplicate(candidate, seenMap, existingLeads, companies)) duplicatesSkipped++;
+      else companies.push(candidate);
+      if (companies.length >= neededCount) break;
+    }
+    if (raw.length < 100) break;
   }
-
-  // 2. Secondary fallback: Hunter domain-search by company keywords
-  if (uniqueCompanies.length < neededCount && !hunterQuotaExceeded) {
-    try {
-      const companyQuery = `${businessType} in ${city}`;
-      const searchUrl = `https://api.hunter.io/v2/domain-search?company=${encodeURIComponent(companyQuery)}&limit=10&api_key=${encodeURIComponent(config.HUNTER_API_KEY)}`;
-      const searchResp = await fetch(searchUrl, { signal: AbortSignal.timeout(8000) });
-      if (searchResp.ok) {
-        const data = await searchResp.json();
-        if (data.data?.domain) {
-          const dom = data.data.domain;
-          const candidate = {
-            id: `hunter-${dom.replace(/[^a-z0-9]/g, '')}`,
-            name: data.data.organization || `${city} ${businessType}`,
-            website: `https://${dom}`,
-            domain: dom,
-            address: `${city}, ${country}`,
-            phone: '—',
-            businessType,
-            city,
-            country,
-            emails: Array.isArray(data.data.emails) ? data.data.emails : [],
-          };
-          if (!isPlaceDuplicate(candidate, seenMap, existingLeads, uniqueCompanies)) {
-            uniqueCompanies.push(candidate);
-          }
-        }
-      }
-    } catch {}
-  }
-
-  return {
-    companies: uniqueCompanies.slice(0, neededCount),
-    duplicatesSkipped,
-    providerError: uniqueCompanies.length === 0 ? providerError : null,
-  };
+  return { companies: companies.slice(0, neededCount), duplicatesSkipped, providerError, warnings };
 }
 
 export async function processHunterCompany(company, idx, { cleanCity, cleanCountry, cleanType, today }) {
-  const companyId = company.id || `hunter-${Date.now()}-${idx}`;
-  const name = company.name || `${cleanCity} ${cleanType} #${idx + 1}`;
-  const address = company.address || `${cleanCity}, ${cleanCountry}`;
-  const phone = company.phone || '—';
-  const website = company.website || '';
-  const domain = company.domain || extractDomain(website);
-
-  let email = '—';
+  const domain = company.domain || extractDomain(company.website);
+  let emails = (company.emails || []).map(item => typeof item === 'string' ? { value: item } : item);
+  let warning = '';
+  if (!emails.length && domain) {
+    try { emails = await findEmails(domain, { strict: true }); }
+    catch (error) { warning = `${company.name || domain}: ${error.message}`; }
+  }
+  emails = emails.filter(item => typeof (item?.value || item?.email) === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(item.value || item.email));
+  const priority = item => (item.verification?.status === 'valid' ? 1000 : 0) + (/procurement|purchasing|sales|export/i.test(`${item.department || ''} ${item.value || item.email}`) ? 100 : 0) + (Number(item.confidence) || 0);
+  emails.sort((a, b) => priority(b) - priority(a));
+  let selected = null;
   let emailStatus = 'not_found';
-
-  let emails = Array.isArray(company.emails) ? company.emails : [];
-
-  if (emails.length === 0 && domain && !hunterQuotaExceeded && config.HUNTER_API_KEY) {
-    emails = await findEmails(domain);
+  const rank = { deliverable: 4, risky: 3, unknown: 2, invalid: 1 };
+  for (const candidate of emails.slice(0, 3)) {
+    const status = await verifyEmail(candidate.value || candidate.email);
+    const mapped = ['valid', 'deliverable'].includes(status) ? 'deliverable' : ['accept_all', 'webmail', 'disposable'].includes(status) ? 'risky' : status === 'invalid' ? 'invalid' : 'unknown';
+    if (!selected || rank[mapped] > rank[emailStatus]) { selected = candidate; emailStatus = mapped; }
+    if (mapped === 'deliverable') break;
   }
-
-  const bestEmailItem = emails.find((item) => typeof (item?.value || item?.email) === 'string' && (item.value || item.email).includes('@'));
-  const bestEmail = bestEmailItem?.value || bestEmailItem?.email;
-
-  if (bestEmail) {
-    email = bestEmail;
-    if (config.HUNTER_API_KEY && !hunterQuotaExceeded) {
-      const status = await verifyEmail(bestEmail);
-      emailStatus =
-        status === 'valid' || status === 'deliverable'
-          ? 'deliverable'
-          : status === 'accept_all' || status === 'webmail'
-          ? 'risky'
-          : status === 'invalid'
-          ? 'invalid'
-          : 'deliverable';
-    } else {
-      emailStatus = 'deliverable';
-    }
-  }
-
-  const phoneStatus = phone && phone !== '—' ? 'valid' : 'invalid';
-
-  const leadObj = {
-    id: companyId,
-    name,
-    address,
-    city: cleanCity,
-    country: cleanCountry,
+  const publishedPhone = value => typeof value === 'string' && value.replace(/\D/g, '').length >= 6;
+  const phone = publishedPhone(company.phone) ? company.phone : (publishedPhone(selected?.phone_number) ? selected.phone_number : emails.find(item => publishedPhone(item.phone_number))?.phone_number || '—');
+  return { domain, warning, leadObj: {
+    id: company.id || `hunter-${Date.now()}-${idx}`,
+    name: company.name || domain || 'Unknown company',
+    address: company.address || '', city: company.city || '', country: company.country || '',
+    targetCity: company.targetCity || cleanCity, targetCountry: company.targetCountry || cleanCountry,
     businessType: company.businessType || cleanType,
-    phone,
-    phoneStatus,
-    email,
-    emailStatus,
-    website: website || (domain ? `https://${domain}` : '#'),
-    foundAt: today,
-    source: 'hunter',
-  };
-
-  return { leadObj, domain };
+    phone, phoneStatus: publishedPhone(phone) ? 'valid' : 'invalid',
+    email: selected?.value || selected?.email || '—', emailStatus,
+    contactName: selected ? [selected.first_name, selected.last_name].filter(Boolean).join(' ') : '',
+    website: company.website || (domain ? `https://${domain}` : ''),
+    foundAt: today, source: 'live', discoveryEngine: 'hunter', emailVerification: 'hunter_verifier',
+  } };
 }
 
-export async function findEmails(domain) {
-  if (!domain || !config.HUNTER_API_KEY || !loadHunterSetting()) return [];
-  if (isSocialOrDirectoryDomain(domain)) return [];
-  if (hunterQuotaExceeded) return [];
-
-  const url = `https://api.hunter.io/v2/domain-search?domain=${encodeURIComponent(domain)}&api_key=${encodeURIComponent(config.HUNTER_API_KEY)}&limit=3`;
-  try {
-    const response = await fetch(url, { signal: AbortSignal.timeout(10000) });
-    if (response.status === 429 || response.status === 402) {
-      hunterQuotaExceeded = true;
-      console.warn(`[Hunter.io Quota Exceeded]: Hunter.io limit reached (HTTP ${response.status}). Activating website email scraper fallback.`);
-      return [];
-    }
-    if (!response.ok) {
-      console.warn(`[Hunter.io domain-search status ${response.status}]`);
-      return [];
-    }
-    const data = await response.json();
-    if (Array.isArray(data?.errors) && data.errors.some(err => err.id?.includes('limit') || err.code === 429 || err.code === 402)) {
-      hunterQuotaExceeded = true;
-      console.warn('[Hunter.io Quota Exceeded]: Hunter.io credit/quota limit reached in response payload. Activating website email scraper fallback.');
-      return [];
-    }
-    return Array.isArray(data.data?.emails) ? data.data.emails : [];
-  } catch (e) {
-    console.warn(`[Hunter.io findEmails error]: ${e.message}`);
+export async function findEmails(domain, { strict = false } = {}) {
+  if (!domain || !loadHunterSetting() || hunterQuotaExceeded || isSocialOrDirectoryDomain(domain)) return [];
+  const result = await requestHunter('domain-search', { params: { domain, limit: 10 } });
+  if (result.quotaExceeded) hunterQuotaExceeded = true;
+  if (!result.ok) {
+    if (result.quotaExceeded) return [];
+    if (strict) throw new Error(`Hunter Domain Search failed (HTTP ${result.status}).`);
     return [];
   }
+  return Array.isArray(result.data?.emails) ? result.data.emails : [];
 }
 
 export async function verifyEmail(email) {
-  if (!email || !config.HUNTER_API_KEY || !loadHunterSetting() || hunterQuotaExceeded) return 'unknown';
-  const url = `https://api.hunter.io/v2/email-verifier?email=${encodeURIComponent(email)}&api_key=${encodeURIComponent(config.HUNTER_API_KEY)}`;
+  if (!email || !loadHunterSetting() || hunterQuotaExceeded) return 'unknown';
+  const result = await requestHunter('email-verifier', { params: { email } });
+  if (result.quotaExceeded) hunterQuotaExceeded = true;
+  return result.ok && typeof result.data?.status === 'string' ? result.data.status : 'unknown';
+}
+
+export async function scrapeWebsiteContacts(websiteUrl, domain) {
+  const targetDomain = domain || extractDomain(websiteUrl);
+  if (isSocialOrDirectoryDomain(targetDomain)) return { emails: [], phones: [], status: 'not_a_business_site' };
+  const baseUrl = websiteUrl || (targetDomain ? `https://${targetDomain}` : '');
+  if (!baseUrl) return { emails: [], phones: [], status: 'missing_website' };
   try {
-    const response = await fetch(url, { signal: AbortSignal.timeout(10000) });
-    if (response.status === 429 || response.status === 402) {
-      hunterQuotaExceeded = true;
-      console.warn(`[Hunter.io Quota Exceeded]: Hunter.io limit reached during email verification (HTTP ${response.status}). Web scraper fallback is active.`);
-      return 'unknown';
-    }
-    if (!response.ok) return 'unknown';
-    const data = await response.json();
-    return typeof data.data?.status === 'string' ? data.data.status : 'unknown';
-  } catch (e) {
-    return 'unknown';
+    const result = await scrapeEmailsForWebsite(baseUrl);
+    return {
+      emails: (result.emails || []).map(candidate => ({ ...candidate, value: candidate.email, source: 'website' })),
+      phones: result.phones || [],
+      status: result.status,
+      failure: result.failure,
+    };
+  } catch {
+    return { emails: [], phones: [], status: 'unreachable' };
   }
 }
 
 export async function scrapeEmailsFromWebsite(websiteUrl, domain) {
-  const targetDomain = domain || extractDomain(websiteUrl);
-  if (isSocialOrDirectoryDomain(targetDomain)) return [];
-
-  let baseUrl = websiteUrl;
-  if (!baseUrl && targetDomain) {
-    baseUrl = `https://${targetDomain}`;
-  }
-  if (!baseUrl) return [];
-  if (!baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) {
-    baseUrl = `https://${baseUrl}`;
-  }
-
-  // 1. Primary: Use dedicated emailScraper engine with contact crawling and MX verification
-  try {
-    const scrapedResult = await scrapeEmailsForWebsite(baseUrl);
-    if (scrapedResult && Array.isArray(scrapedResult.emails) && scrapedResult.emails.length > 0) {
-      return scrapedResult.emails.map((candidate) => ({
-        value: candidate.email,
-        email: candidate.email,
-        source: 'website',
-        confidence: candidate.confidence,
-        score: candidate.score,
-        hasMx: candidate.hasMx,
-        type: candidate.type,
-        sameDomain: candidate.sameDomain,
-        pages: candidate.pages,
-      }));
-    }
-  } catch (e) {
-    console.warn(`[emailScraper discovery error]: ${e.message}`);
-  }
-
-  // 2. Secondary fallback: direct page scan if advanced crawler returned 0 candidates
-  let origin;
-  try {
-    origin = new URL(baseUrl).origin;
-  } catch {
-    return [];
-  }
-
-  const urlsToTry = [origin, `${origin}/contact`, `${origin}/contact-us`, `${origin}/about`];
-  const foundEmails = new Set();
-  const emailRegex = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g;
-  const IGNORED_EXTENSIONS = /\.(png|jpe?g|gif|svg|webp|css|js|woff2?|ttf|eot|ico|pdf|zip)$/i;
-  const IGNORED_DOMAINS = new Set([
-    'sentry.io', 'wixpress.com', 'example.com', 'domain.com', 'email.com',
-    'yourdomain.com', 'schema.org', 'wordpress.org', 'cloudflare.com', 'googleapis.com',
-    'gravatar.com', 'github.com', 'google.com'
-  ]);
-
-  for (const pageUrl of urlsToTry) {
-    try {
-      const resp = await fetch(pageUrl, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (compatible; SpiceCoastBot/1.0; +https://thespicecoast.com)',
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        },
-        signal: AbortSignal.timeout(5000),
-      });
-      if (!resp.ok) continue;
-      const cType = resp.headers?.get ? (resp.headers.get('content-type') || '') : '';
-      if (cType && !cType.includes('text/html') && !cType.includes('application/xhtml')) continue;
-
-      const html = typeof resp.text === 'function' ? await resp.text() : '';
-      // Mailto links
-      const mailtoMatches = [...html.matchAll(/mailto:([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/gi)];
-      for (const m of mailtoMatches) {
-        const mail = m[1].toLowerCase().trim();
-        if (!IGNORED_EXTENSIONS.test(mail)) {
-          const dom = mail.split('@')[1];
-          if (!IGNORED_DOMAINS.has(dom)) foundEmails.add(mail);
-        }
-      }
-
-      // Text matches
-      const textMatches = html.match(emailRegex) || [];
-      for (const raw of textMatches) {
-        const mail = raw.toLowerCase().trim();
-        if (!IGNORED_EXTENSIONS.test(mail)) {
-          const dom = mail.split('@')[1];
-          if (!IGNORED_DOMAINS.has(dom)) foundEmails.add(mail);
-        }
-      }
-
-      if (foundEmails.size > 0) break;
-    } catch {
-      // Continue to next URL
-    }
-  }
-
-  const list = Array.from(foundEmails);
-  if (list.length === 0) return [];
-
-  return list.sort((a, b) => {
-    const aMatch = targetDomain && a.endsWith(`@${targetDomain}`) ? 1 : 0;
-    const bMatch = targetDomain && b.endsWith(`@${targetDomain}`) ? 1 : 0;
-    if (aMatch !== bMatch) return bMatch - aMatch;
-    const priority = ['info@', 'contact@', 'sales@', 'hello@', 'office@', 'enquiry@', 'support@'];
-    const aPrio = priority.some(p => a.startsWith(p)) ? 1 : 0;
-    const bPrio = priority.some(p => b.startsWith(p)) ? 1 : 0;
-    return bPrio - aPrio;
-  }).map(value => ({ value, email: value, source: 'website' }));
+  return (await scrapeWebsiteContacts(websiteUrl, domain)).emails;
 }
 
 /**
@@ -624,55 +429,26 @@ async function processLivePlace(place, idx, { cleanCity, cleanCountry, cleanType
   const placeId = place.id || `live-${Date.now()}-${idx}`;
   const name = place.displayName?.text || `${cleanCity} ${cleanType} ${idx + 1}`;
   const address = place.formattedAddress || `${cleanCity}, ${cleanCountry}`;
-  const phone = place.nationalPhoneNumber || '—';
+  let phone = place.nationalPhoneNumber || place.internationalPhoneNumber || '—';
   const website = place.websiteUri || '';
   const domain = extractDomain(website);
 
   let email = '—';
   let emailStatus = 'not_found';
 
+  let contactDiscovery = { status: 'missing_website' };
   if (domain || website) {
-    let emails = [];
-    // 1. Query Hunter.io if key is configured, hunter is enabled, and monthly quota / credits are not exceeded
-    if (domain && !isSocialOrDirectoryDomain(domain) && config.HUNTER_API_KEY && hunterEnabled && !hunterQuotaExceeded) {
-      emails = await findEmails(domain);
-      if (emails.length > 0) {
-        await new Promise((r) => setTimeout(r, 200));
-      }
-    }
-
-    // 2. If Hunter is disabled, has no results, OR Hunter credits/quota are exhausted, use inbuilt web scraper
-    if (emails.length === 0 && (website || domain)) {
-      const scraped = await scrapeEmailsFromWebsite(website, domain);
-      if (scraped.length > 0) {
-        emails = scraped;
-      }
-    }
-
-    const bestEmailItem = emails.find((item) => typeof item?.value === 'string' && item.value.includes('@'));
-    const bestEmail = bestEmailItem?.value;
-    if (bestEmail) {
-      let status = 'unknown';
-      if (bestEmailItem.source === 'website' || !hunterEnabled) {
-        // Web scraper candidates already check MX records and scoring
-        status = bestEmailItem.hasMx === false ? 'invalid' : 'deliverable';
-      } else if (config.HUNTER_API_KEY && !hunterQuotaExceeded) {
-        status = await verifyEmail(bestEmail);
-        await new Promise((r) => setTimeout(r, 200));
-      } else {
-        status = 'deliverable';
-      }
-      email = bestEmail;
-      emailStatus =
-        status === 'valid' || status === 'deliverable'
-          ? 'deliverable'
-          : status === 'accept_all' || status === 'webmail'
-          ? 'risky'
-          : status === 'invalid' ? 'invalid' : 'deliverable';
+    contactDiscovery = await scrapeWebsiteContacts(website, domain);
+    if (!phone || phone === '—') phone = contactDiscovery.phones?.[0] || phone;
+    const candidates = contactDiscovery.emails || [];
+    const best = candidates.find(item => item.hasMx !== false) || candidates[0];
+    if (best) {
+      email = best.value;
+      emailStatus = best.hasMx === true ? 'mx_valid' : best.hasMx === false ? 'invalid' : 'unknown';
     }
   }
 
-  const phoneStatus = phone && phone !== '—' ? 'valid' : 'invalid';
+  const phoneStatus = typeof phone === 'string' && phone.replace(/\D/g, '').length >= 6 ? 'valid' : 'invalid';
 
   const leadObj = {
     id: placeId,
@@ -688,9 +464,17 @@ async function processLivePlace(place, idx, { cleanCity, cleanCountry, cleanType
     website: website || (domain ? `https://${domain}` : '#'),
     foundAt: today,
     source: 'live',
+    emailVerification: 'domain_mx',
+    contactDiscoveryStatus: contactDiscovery.status,
   };
 
   return { leadObj, domain };
+}
+
+export function hasPublishedContact(lead) {
+  const email = typeof lead.email === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(lead.email.trim());
+  const phone = typeof lead.phone === 'string' && lead.phone.replace(/\D/g, '').length >= 6;
+  return Boolean(email || phone);
 }
 
 export async function executeLeadSearch(options, onProgress = () => {}) {
@@ -722,6 +506,11 @@ async function runLeadSearch({ businessType, city, country, requestedCount = 20,
   }
 
   const hunterSetting = loadHunterSetting();
+  if (engine && !['hunter', 'scraper'].includes(engine)) {
+    const err = new Error('Discovery engine must be hunter or scraper.');
+    err.statusCode = 400;
+    throw err;
+  }
   const selectedEngine = engine || (hunterSetting ? 'hunter' : 'scraper');
   const isHunterEngine = selectedEngine === 'hunter';
 
@@ -739,7 +528,7 @@ async function runLeadSearch({ businessType, city, country, requestedCount = 20,
   // Live search validation: verify keys based on chosen discovery engine
   if (mode === 'live') {
     if (isHunterEngine) {
-      if (!config.HUNTER_API_KEY && !hunterQuotaExceeded) {
+      if (!config.HUNTER_API_KEY) {
         const err = new Error('Hunter.io API key is not configured for Hunter Native Discovery.');
         err.statusCode = 503;
         throw err;
@@ -782,7 +571,9 @@ async function runLeadSearch({ businessType, city, country, requestedCount = 20,
 
   const processedLeads = [];
   let duplicatesSkipped = 0;
-  let isLiveMode = false;
+  let contactsMissing = 0;
+  const warnings = [];
+  let unreadableSites = 0;
 
   // Execute Live APIs
   if (mode === 'live') {
@@ -803,11 +594,11 @@ async function runLeadSearch({ businessType, city, country, requestedCount = 20,
         throw err;
       }
 
+      warnings.push(...(hunterRes.warnings || []));
       const companies = hunterRes.companies || [];
       duplicatesSkipped = hunterRes.duplicatesSkipped || 0;
 
       if (companies && companies.length > 0) {
-        isLiveMode = true;
         const maxToProcess = Math.min(companies.length, remaining);
         const companiesToProcess = companies.slice(0, maxToProcess);
 
@@ -835,7 +626,7 @@ async function runLeadSearch({ businessType, city, country, requestedCount = 20,
           finishedWorkers++;
 
           const emailInfo = res?.leadObj?.email && res.leadObj.email !== '—'
-            ? `found verified ${res.leadObj.email}`
+            ? `found contact ${res.leadObj.email}`
             : 'no email published';
           onProgress({
             step: 'place_enriched',
@@ -850,6 +641,8 @@ async function runLeadSearch({ businessType, city, country, requestedCount = 20,
 
         for (const res of results) {
           if (!res?.leadObj) continue;
+          if (res.warning) warnings.push(res.warning);
+          if (!hasPublishedContact(res.leadObj)) { contactsMissing += 1; continue; }
           const { leadObj, domain } = res;
           usedToday += 1;
 
@@ -880,7 +673,6 @@ async function runLeadSearch({ businessType, city, country, requestedCount = 20,
       duplicatesSkipped = searchRes.duplicatesSkipped || 0;
 
       if (places && places.length > 0) {
-        isLiveMode = true;
         const maxToProcess = Math.min(places.length, remaining);
         const placesToProcess = places.slice(0, maxToProcess);
 
@@ -925,8 +717,11 @@ async function runLeadSearch({ businessType, city, country, requestedCount = 20,
 
         for (const res of results) {
           if (!res?.leadObj) continue;
+          if (["blocked_by_site", "robots_disallowed", "unreachable", "rejected_address", "js_rendered"].includes(res.leadObj.contactDiscoveryStatus)) unreadableSites += 1;
+          if (res.warning) warnings.push(res.warning);
+          if (!hasPublishedContact(res.leadObj)) { contactsMissing += 1; continue; }
           const { leadObj, domain } = res;
-          leadObj.source = 'scraper';
+          leadObj.discoveryEngine = 'scraper';
           usedToday += 1;
 
           seenMap[leadObj.id] = {
@@ -970,6 +765,9 @@ async function runLeadSearch({ businessType, city, country, requestedCount = 20,
     }
   }
 
+  if (selectedEngine === 'hunter' && hunterQuotaExceeded) warnings.push('Hunter usage credits are exhausted. Remaining email lookups were stopped; available contacts were retained. Admin can restore Hunter credits and retry, or manually select scraper.');
+  if (unreadableSites) warnings.push(`Website contacts could not be read for ${unreadableSites} businesses. Available phone numbers were retained.`);
+
   // Atomic Batch Transaction: write all discovered leads, update daily usage, record search, and update seen places
   const newSearchRecord = {
     id: Date.now(),
@@ -977,7 +775,7 @@ async function runLeadSearch({ businessType, city, country, requestedCount = 20,
     count: processedLeads.length,
     duplicatesSkipped,
     date: today,
-    mode: isLiveMode ? 'live' : 'simulated',
+    mode,
   };
 
   insertLeadsBatch(processedLeads, {
@@ -999,7 +797,9 @@ async function runLeadSearch({ businessType, city, country, requestedCount = 20,
     leads: processedLeads,
     count: processedLeads.length,
     duplicatesSkipped,
-    mode: isLiveMode ? 'live' : 'simulated',
+    contactsMissing,
+    warnings,
+    mode,
     usage: {
       date: today,
       count: usedToday,

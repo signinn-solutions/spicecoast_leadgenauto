@@ -9,6 +9,8 @@ import {
   Loader2,
   CheckCircle2,
   AlertCircle,
+  AlertTriangle,
+  Info,
   Zap,
   Sliders,
   Building2,
@@ -34,7 +36,7 @@ export default function DiscoveryView({
   remainingLeads = 200,
   lastSearchInfo,
   onViewResults,
-  discoveryEngine = "hunter",
+  discoveryEngine = "scraper",
   onToggleEngine,
   isTogglingHunter = false,
 }) {
@@ -55,9 +57,8 @@ export default function DiscoveryView({
       {/* Header Info */}
       <div className="lf-section-header">
         <div>
-          <h2 className="lf-section-title">Lead Discovery & Prospecting Engine</h2>
           <p className="lf-section-subtitle">
-            Autonomous B2B sourcing using Google Places Scraper or Hunter.io Native Company Discovery.
+            Choose a buyer segment and location to find contacts.
           </p>
         </div>
         <div className="lf-quota-badge-top">
@@ -66,114 +67,134 @@ export default function DiscoveryView({
         </div>
       </div>
 
-      {/* Discovery Engine Switcher Card */}
-      <div className="lf-panel" style={{ padding: "16px 20px", marginBottom: "18px", border: isHunter ? "1px solid rgba(124, 58, 237, 0.3)" : "1px solid rgba(59, 130, 246, 0.3)" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px" }}>
-          <div>
-            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
-              <span className={`lf-badge-pill ${isHunter ? "purple" : "blue"}`} style={{ display: "inline-flex", alignItems: "center", gap: "5px" }}>
-                {isHunter ? <Zap size={12} /> : <Globe size={12} />}
-                <span>Active Discovery Mode: {isHunter ? "Hunter.io Native Discovery" : "Google Places + Inbuilt Web Scraper"}</span>
-              </span>
-            </div>
-            <div style={{ fontSize: "13px", color: "var(--text-muted)" }}>
-              {isHunter ? (
-                <span>
-                  <strong>Starting Point:</strong> Hunter.io Company & Domain Discover database &bull;{" "}
-                  <strong>Email Extraction:</strong> Hunter verified executive contacts
-                </span>
-              ) : (
-                <span>
-                  <strong>Starting Point:</strong> Google Places API listing seed &bull;{" "}
-                  <strong>Email Extraction:</strong> Inbuilt deep website crawler & live DNS MX validation (0 Hunter credits used)
-                </span>
-              )}
-            </div>
-          </div>
-
-          {/* Engine Switch Button Group */}
-          <div style={{ display: "flex", alignItems: "center", background: "var(--bg-surface-2)", padding: "4px", borderRadius: "var(--radius-md)", border: "1px solid var(--border-subtle)" }}>
-            <button
-              type="button"
-              className={`lf-engine-switch-btn ${!isHunter ? "active" : ""}`}
-              onClick={() => onToggleEngine && onToggleEngine("scraper")}
-              disabled={searching || isTogglingHunter}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "6px",
-                padding: "6px 12px",
-                fontSize: "12px",
-                fontWeight: "600",
-                borderRadius: "var(--radius-sm)",
-                border: "none",
-                cursor: "pointer",
-                background: !isHunter ? "var(--bg-surface-1)" : "transparent",
-                color: !isHunter ? "#2563eb" : "var(--text-muted)",
-                boxShadow: !isHunter ? "0 1px 3px rgba(0,0,0,0.08)" : "none",
-                transition: "all 0.2s ease",
-              }}
-            >
-              <Globe size={13} />
-              <span>Google Places Scraper</span>
-            </button>
-
-            <button
-              type="button"
-              className={`lf-engine-switch-btn ${isHunter ? "active" : ""}`}
-              onClick={() => onToggleEngine && onToggleEngine("hunter")}
-              disabled={searching || isTogglingHunter}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "6px",
-                padding: "6px 12px",
-                fontSize: "12px",
-                fontWeight: "600",
-                borderRadius: "var(--radius-sm)",
-                border: "none",
-                cursor: "pointer",
-                background: isHunter ? "var(--bg-surface-1)" : "transparent",
-                color: isHunter ? "#7c3aed" : "var(--text-muted)",
-                boxShadow: isHunter ? "0 1px 3px rgba(0,0,0,0.08)" : "none",
-                transition: "all 0.2s ease",
-              }}
-            >
-              <Zap size={13} />
-              <span>Hunter.io Discovery</span>
-            </button>
-          </div>
+      {lastSearchInfo?.warnings?.length > 0 && (
+        <div className="lf-panel" role="status">
+          {lastSearchInfo.warnings.map((warning, index) => <p className="lf-panel-desc" key={index}>{warning}</p>)}
         </div>
-      </div>
-
+      )}
       {/* Last Search Feedback Banner */}
       {lastSearchInfo && (
-        <div className="lf-search-complete-banner">
-          <div className="lf-banner-left">
-            <CheckCircle2 size={18} className="text-emerald" />
-            <div>
-              <div className="lf-banner-title">
-                Search Complete &bull; {lastSearchInfo.mode === "hunter_discover" || isHunter ? "Hunter.io Native Engine" : "Google Places Scraper Engine"}
-              </div>
-              <div className="lf-banner-text">
-                Saved <strong>{lastSearchInfo.count}</strong> new business record(s).
-                {lastSearchInfo.duplicatesSkipped > 0 ? (
-                  <> Automatically skipped <strong>{lastSearchInfo.duplicatesSkipped}</strong> existing database duplicate(s).</>
-                ) : (
-                  <> Zero duplicates detected in local SQLite storage.</>
-                )}
+        lastSearchInfo.count > 0 ? (
+          <div className="lf-search-complete-banner">
+            <div className="lf-banner-left">
+              <CheckCircle2 size={18} className="text-emerald" />
+              <div>
+                <div className="lf-banner-title">
+                  Search complete
+                </div>
+                <div className="lf-banner-text">
+                  Added <strong>{lastSearchInfo.count}</strong> new contact{lastSearchInfo.count === 1 ? "" : "s"} to your CRM.
+                  {lastSearchInfo.duplicatesSkipped > 0 && (
+                    <> Skipped <strong>{lastSearchInfo.duplicatesSkipped}</strong> existing contact{lastSearchInfo.duplicatesSkipped === 1 ? "" : "s"}.</>
+                  )}
+                </div>
               </div>
             </div>
+            <button
+              type="button"
+              className="lf-btn-primary sm"
+              onClick={onViewResults}
+            >
+              <span>View Leads in CRM</span>
+              <ArrowRight size={14} />
+            </button>
           </div>
-          <button
-            type="button"
-            className="lf-btn-primary sm"
-            onClick={onViewResults}
-          >
-            <span>View Leads in CRM</span>
-            <ArrowRight size={14} />
-          </button>
-        </div>
+        ) : lastSearchInfo.duplicatesSkipped > 0 ? (
+          <div className="lf-search-complete-banner" style={{ borderLeft: "4px solid #3b82f6", background: "rgba(59, 130, 246, 0.05)" }}>
+            <div className="lf-banner-left">
+              <Info size={20} className="text-blue" />
+              <div>
+                <div className="lf-banner-title" style={{ color: "#1d4ed8" }}>
+                  All Discovered Prospects Already in Your CRM
+                </div>
+                <div className="lf-banner-text">
+                  Found matching businesses for this search, but all <strong>{lastSearchInfo.duplicatesSkipped}</strong> record(s) already exist in your local CRM database. Duplicates were automatically skipped to prevent redundant outreach.
+                </div>
+              </div>
+            </div>
+            <button
+              type="button"
+              className="lf-btn-secondary sm"
+              onClick={onViewResults}
+              style={{ borderColor: "rgba(59, 130, 246, 0.4)", color: "#2563eb" }}
+            >
+              <span>View in CRM</span>
+              <ArrowRight size={14} />
+            </button>
+          </div>
+        ) : (
+          <div className="lf-search-complete-banner" style={{ borderLeft: "4px solid #f59e0b", background: "rgba(245, 158, 11, 0.06)", flexDirection: "column", alignItems: "stretch", gap: "12px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "12px" }}>
+              <div className="lf-banner-left" style={{ alignItems: "flex-start" }}>
+                <AlertTriangle size={20} style={{ color: "#d97706", marginTop: "2px", flexShrink: 0 }} />
+                <div>
+                  <div className="lf-banner-title" style={{ color: "#b45309" }}>
+                    {lastSearchInfo.contactsMissing > 0 ? "No published contact details found" : "No new contacts found"}
+                  </div>
+                  <div className="lf-banner-text" style={{ color: "#475569" }}>
+                    No new contacts were saved for <em>"{lastSearchInfo.query?.businessType || businessType}"</em> in <em>{lastSearchInfo.query?.city || city}, {lastSearchInfo.query?.country || country}</em>.
+                    {lastSearchInfo.contactsMissing > 0
+                      ? ` Found ${lastSearchInfo.contactsMissing} businesses without a published phone or email.`
+                      : " Try a broader buyer segment or another location."}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Quick 1-Click Alternative Queries */}
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", paddingTop: "8px", borderTop: "1px solid rgba(245, 158, 11, 0.2)" }}>
+              <span style={{ fontSize: "11.5px", fontWeight: "600", color: "#b45309", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                Adjust your search:
+              </span>
+              <button
+                type="button"
+                className="lf-btn-secondary sm"
+                onClick={() => {
+                  setBusinessType("Spice & Food Ingredient Importer");
+                }}
+                style={{ fontSize: "11px", padding: "4px 9px", background: "#ffffff" }}
+              >
+                <span>Broader: Spice & Food Importers</span>
+              </button>
+              <button
+                type="button"
+                className="lf-btn-secondary sm"
+                onClick={() => {
+                  setCity("Hamburg");
+                  setCountry("Germany");
+                }}
+                style={{ fontSize: "11px", padding: "4px 9px", background: "#ffffff" }}
+              >
+                <MapPin size={11} />
+                <span>Hamburg, Germany</span>
+              </button>
+              <button
+                type="button"
+                className="lf-btn-secondary sm"
+                onClick={() => {
+                  setCity("Rotterdam");
+                  setCountry("Netherlands");
+                }}
+                style={{ fontSize: "11px", padding: "4px 9px", background: "#ffffff" }}
+              >
+                <MapPin size={11} />
+                <span>Rotterdam, Netherlands</span>
+              </button>
+              <button
+                type="button"
+                className="lf-btn-secondary sm"
+                onClick={() => {
+                  setCity("Dubai");
+                  setCountry("UAE");
+                }}
+                style={{ fontSize: "11px", padding: "4px 9px", background: "#ffffff" }}
+              >
+                <MapPin size={11} />
+                <span>Dubai, UAE</span>
+              </button>
+            </div>
+          </div>
+        )
       )}
 
       {/* Search Builder Card */}
@@ -196,7 +217,9 @@ export default function DiscoveryView({
                 disabled={searching}
                 required
               />
-              <div className="lf-preset-groups">
+              <details className="lf-preset-disclosure">
+                <summary>Browse buyer segments</summary>
+                <div className="lf-preset-groups">
                 {SPICE_PRESET_CATEGORIES.map((category, catIdx) => (
                   <div key={catIdx} className="lf-preset-group">
                     <div className="lf-preset-group-title">{category.name}</div>
@@ -215,7 +238,8 @@ export default function DiscoveryView({
                     </div>
                   </div>
                 ))}
-              </div>
+                </div>
+              </details>
             </div>
 
             {/* City */}
@@ -324,12 +348,12 @@ export default function DiscoveryView({
               {searching ? (
                 <>
                   <Loader2 size={18} className="spin" />
-                  <span>Harvesting via {isHunter ? "Hunter Native Discover" : "Google Places Scraper"}...</span>
+                  <span>Finding contacts...</span>
                 </>
               ) : (
                 <>
                   <Search size={18} />
-                  <span>Harvest {count} B2B Leads ({isHunter ? "Hunter Native" : "Places Scraper"})</span>
+                  <span>Find {count} contacts</span>
                 </>
               )}
             </button>

@@ -184,6 +184,13 @@ export async function updateUser(id, { name, role, status, password, notes }, ac
   const updatedStatus = status !== undefined ? status : user.status;
   const updatedNotes = notes !== undefined ? notes : user.notes;
 
+  if (user.email.toLowerCase() === actorEmail.toLowerCase() &&
+      (updatedRole !== user.role || updatedStatus !== user.status)) {
+    const err = new Error('You cannot change your own role or suspend your own account.');
+    err.statusCode = 400;
+    throw err;
+  }
+
   if (!['superadmin', 'user'].includes(updatedRole)) {
     const err = new Error('Invalid role specified.');
     err.statusCode = 400;

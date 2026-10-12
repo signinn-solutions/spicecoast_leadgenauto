@@ -212,36 +212,11 @@ export default function SystemHealthView({
               )}
             </div>
           </div>
-          <div className="lf-engine-status-action">
-            <button
-              type="button"
-              className={`lf-btn-secondary sm ${hunterEnabled ? "btn-to-scraper" : "btn-to-hunter"}`}
-              onClick={() => onToggleHunter && onToggleHunter(!hunterEnabled)}
-              disabled={isTogglingHunter}
-            >
-              {isTogglingHunter ? (
-                <>
-                  <Loader2 size={13} className="lf-spin" />
-                  <span>Updating...</span>
-                </>
-              ) : hunterEnabled ? (
-                <>
-                  <Globe size={13} />
-                  <span>Switch to Inbuilt Scraper</span>
-                </>
-              ) : (
-                <>
-                  <Zap size={13} />
-                  <span>Enable Hunter.io API</span>
-                </>
-              )}
-            </button>
-          </div>
         </div>
       </section>
 
       {/* Integration Status Cards */}
-      <div className="lf-integration-grid" style={{ marginTop: 24 }}>
+      <div className="lf-integration-grid">
         {integrations.map((item, idx) => (
           <div key={idx} className="lf-panel lf-integration-card">
             <div className="lf-integration-header">
@@ -269,7 +244,7 @@ export default function SystemHealthView({
       </div>
 
       {/* Database & Storage Stats */}
-      <div className="lf-dashboard-grid-2" style={{ marginTop: 24 }}>
+      <div className="lf-dashboard-grid-2">
         <section className="lf-panel">
           <div className="lf-panel-header">
             <div>

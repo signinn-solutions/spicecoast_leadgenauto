@@ -75,16 +75,11 @@ export default function DashboardView({
       {/* Top Banner */}
       <div className="lf-hero-banner">
         <div className="lf-hero-content">
-          <div className="lf-hero-badge">
-            <Sparkles size={13} className="text-amber" />
-            <span>Autonomous Commercial B2B Pipeline</span>
-          </div>
           <h2 className="lf-hero-title">
-            Direct Origin Sourcing to International Importers
+            Build your buyer pipeline
           </h2>
           <p className="lf-hero-text">
-            Discover verified spice distributors across Europe, the Middle East, and the Americas.
-            Synthesize bespoke DeepSeek B2B proposals and automate inbound inquiry triage with zero manual friction.
+            Find spice buyers, review outreach drafts, and follow up on replies.
           </p>
           <div className="lf-hero-actions">
             <button
@@ -93,7 +88,7 @@ export default function DashboardView({
               onClick={() => onNavigate("search")}
             >
               <Search size={16} />
-              <span>Launch Lead Prospector</span>
+              <span>Find buyers</span>
               <ChevronRight size={15} />
             </button>
             <button
@@ -144,7 +139,7 @@ export default function DashboardView({
           tabIndex={0}
         >
           <div className="lf-stat-top">
-            <span className="lf-stat-title">Email Deliverability</span>
+            <span className="lf-stat-title">Mailbox Verification Rate</span>
             <div className="lf-stat-icon-wrap emerald">
               <CheckCircle2 size={18} />
             </div>
@@ -156,7 +151,7 @@ export default function DashboardView({
             <span className="lf-pill-badge emerald">
               {deliverableEmails} deliverable
             </span>
-            <span className="lf-stat-subtext">Verified via Hunter.io</span>
+            <span className="lf-stat-subtext">Live contact records</span>
           </div>
         </div>
 
@@ -253,8 +248,8 @@ export default function DashboardView({
             <div className="lf-step-count lf-mono text-emerald">
               {deliverableEmails}
             </div>
-            <div className="lf-step-name">Deliverable Inboxes</div>
-            <div className="lf-step-sub">Hunter.io Validation</div>
+            <div className="lf-step-name">Mailbox-verified Emails</div>
+            <div className="lf-step-sub">Mailbox-level verification</div>
           </div>
 
           <div className="lf-step-arrow">&rarr;</div>
@@ -314,7 +309,7 @@ export default function DashboardView({
         <section className="lf-panel">
           <div className="lf-panel-header">
             <div>
-              <h3 className="lf-panel-title">1-Click Target Market Discovery</h3>
+              <h3 className="lf-panel-title">Suggested markets</h3>
               <p className="lf-panel-desc">
                 High-yield international trade hubs ready for immediate prospecting
               </p>

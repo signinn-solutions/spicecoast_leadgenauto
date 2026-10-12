@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import spiceCoastLogo from '../assets/spice-coast-logo.png';
 import LeadFinderApp from '../App.jsx';
 import { apiFetch, setSessionToken } from '../api.js';
-import { Sprout, Lock, Loader2 } from 'lucide-react';
+import { Lock, Loader2 } from 'lucide-react';
 
 export default function AuthGate() {
   const [session, setSession] = useState(null);
@@ -85,12 +86,10 @@ export default function AuthGate() {
   }
 
   return (
-    <main className="lf-loading-screen" style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', background: 'var(--bg-main)' }}>
-      <section className="lf-panel lf-auth-card" aria-labelledby="auth-title" style={{ width: '100%', maxWidth: '460px', padding: '32px 28px', borderRadius: 'var(--radius-xl)', boxShadow: 'var(--shadow-xl)', border: '1px solid var(--border-card)', background: 'var(--bg-surface-1)' }}>
+    <main className="lf-loading-screen" style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', background: 'var(--bg-base)' }}>
+      <section className="lf-panel lf-auth-card" aria-labelledby="auth-title" style={{ width: '100%', maxWidth: '460px', padding: '32px 28px', borderRadius: 'var(--radius-xl)', boxShadow: 'var(--shadow-lg)', border: '1px solid var(--border-card)', background: 'var(--bg-surface-1)' }}>
         <div style={{ textAlign: 'center', marginBottom: '24px' }}>
-          <div style={{ width: '52px', height: '52px', borderRadius: '14px', background: 'linear-gradient(135deg, #d97706, #7c3aed)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: '#fff', marginBottom: '14px', boxShadow: '0 8px 16px rgba(217, 119, 6, 0.25)' }}>
-            <Sprout size={28} />
-          </div>
+          <img className="lf-auth-logo" src={spiceCoastLogo} alt="SpiceCoast" width="190" height="89" />
           <h1 id="auth-title" style={{ fontSize: '24px', fontWeight: '700', margin: '0 0 6px 0', color: 'var(--text-main)', letterSpacing: '-0.5px' }}>
             SpiceCoast Operations
           </h1>

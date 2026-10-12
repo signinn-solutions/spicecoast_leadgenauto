@@ -58,7 +58,7 @@ export default function LeadDetailDrawer({
 
   const isLive = lead.source === "live";
   const hasDeliverableEmail =
-    lead.emailStatus === "deliverable" || lead.emailStatus === "valid";
+    lead.emailStatus === "deliverable" || lead.emailStatus === "valid" || lead.emailStatus === "mx_valid";
   const isSent = lead.coldMailDraft?.status === "sent";
 
   const handleCopy = async (text, key) => {
@@ -120,7 +120,7 @@ export default function LeadDetailDrawer({
         <div className="lf-drawer-body">
           {/* Company Dossier Card */}
           <div className="lf-dossier-card">
-            <h3 className="lf-card-section-title">Verified Contact Dossier</h3>
+            <h3 className="lf-card-section-title">Contact Details</h3>
 
             <div className="lf-dossier-row">
               <div className="lf-dossier-label">
@@ -209,7 +209,7 @@ export default function LeadDetailDrawer({
                         : "red"
                     }`}
                   >
-                    {lead.emailStatus}
+                    {lead.emailStatus === "mx_valid" ? "Published / MX confirmed" : lead.emailStatus}
                   </span>
                 )}
               </div>
@@ -281,7 +281,7 @@ export default function LeadDetailDrawer({
                 </button>
                 {!hasDeliverableEmail && (
                   <span className="lf-field-warning">
-                    * Requires deliverable verified email to generate outreach.
+                    * Requires an email with a receiving mail domain to generate outreach.
                   </span>
                 )}
               </div>
@@ -290,7 +290,7 @@ export default function LeadDetailDrawer({
                 {/* Subject Line */}
                 <div className="lf-pitch-field">
                   <div className="lf-field-label-row">
-                    <label>Subject Line</label>
+                    <label htmlFor="lead-pitch-subject">Subject Line</label>
                     <button
                       type="button"
                       className="lf-btn-ghost-sm"
@@ -324,7 +324,7 @@ export default function LeadDetailDrawer({
                 {/* Email Body */}
                 <div className="lf-pitch-field">
                   <div className="lf-field-label-row">
-                    <label>Personalized Body (Direct Origin Specification)</label>
+                    <label htmlFor="lead-pitch-body">Message</label>
                     <button
                       type="button"
                       className="lf-btn-ghost-sm"
@@ -344,6 +344,7 @@ export default function LeadDetailDrawer({
                     </button>
                   </div>
                   <textarea
+                    id="lead-pitch-body"
                     className="lf-textarea"
                     rows={8}
                     value={body}

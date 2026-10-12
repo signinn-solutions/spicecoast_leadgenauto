@@ -1,28 +1,42 @@
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback, useRef, lazy, Suspense } from "react";
 import Sidebar from "./components/Sidebar.jsx";
 import Header from "./components/Header.jsx";
-import DashboardView from "./components/DashboardView.jsx";
-import DiscoveryView from "./components/DiscoveryView.jsx";
-import LeadsView from "./components/LeadsView.jsx";
-import LeadDetailDrawer from "./components/LeadDetailDrawer.jsx";
-import OutreachView from "./components/OutreachView.jsx";
-import ColdMailModal from "./components/ColdMailModal.jsx";
-import MailboxView from "./components/MailboxView.jsx";
-import AnalyticsView from "./components/AnalyticsView.jsx";
-import SystemHealthView from "./components/SystemHealthView.jsx";
-import SuperadminView from "./components/SuperadminView.jsx";
+const DashboardView = lazy(() => import("./components/DashboardView.jsx"));
+const DiscoveryView = lazy(() => import("./components/DiscoveryView.jsx"));
+const LeadsView = lazy(() => import("./components/LeadsView.jsx"));
+const LeadDetailDrawer = lazy(() => import("./components/LeadDetailDrawer.jsx"));
+const OutreachView = lazy(() => import("./components/OutreachView.jsx"));
+const ColdMailModal = lazy(() => import("./components/ColdMailModal.jsx"));
+const MailboxView = lazy(() => import("./components/MailboxView.jsx"));
+const AnalyticsView = lazy(() => import("./components/AnalyticsView.jsx"));
+const SuperadminView = lazy(() => import("./components/SuperadminView.jsx"));
 import Toast from "./components/Toast.jsx";
 import { Loader2 } from "lucide-react";
 import { apiFetch as fetch } from './api.js';
+import { createRequestCache, PAGE_RESOURCES, WORKSPACE_RESOURCES } from './requestCache.js';
 
 export default function LeadFinderApp({ onLogout, currentUser = null }) {
+  const isSuperadmin = currentUser?.role === "superadmin";
+
   // Navigation & Shell State
-  const [activeView, setActiveView] = useState("dashboard"); // dashboard, search, results, outreach, mailbox, analytics, health
+  const [activeView, setActiveView] = useState(() => (isSuperadmin ? "admin" : "dashboard"));
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
+  useEffect(() => {
+    if (isSuperadmin) {
+      if (activeView !== "admin") {
+        setActiveView("admin");
+      }
+    } else {
+      if (activeView === "admin" || activeView === "health") {
+        setActiveView("dashboard");
+      }
+    }
+  }, [isSuperadmin, activeView]);
+
   // Global Workspace State
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!isSuperadmin);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [serverOnline, setServerOnline] = useState(true);
   const [notice, setNotice] = useState(null);
@@ -41,7 +55,7 @@ export default function LeadFinderApp({ onLogout, currentUser = null }) {
   const [count, setCount] = useState(15);
   const [searching, setSearching] = useState(false);
   const [lastSearchInfo, setLastSearchInfo] = useState(null);
-  const [discoveryEngine, setDiscoveryEngine] = useState("hunter");
+  const [discoveryEngine, setDiscoveryEngine] = useState("scraper");
 
   // Mailbox & Outreach State
   const [mailboxStatus, setMailboxStatus] = useState({
@@ -80,67 +94,71 @@ export default function LeadFinderApp({ onLogout, currentUser = null }) {
   const [isTogglingAutoSend, setIsTogglingAutoSend] = useState(false);
   const [isTogglingHunter, setIsTogglingHunter] = useState(false);
   const [searchProgress, setSearchProgress] = useState(null);
-  const refreshPromiseRef = useRef(null);
+  const requestCacheRef = useRef(null);
+  const activeViewRef = useRef(activeView);
+  activeViewRef.current = activeView;
+  const refreshCountRef = useRef(0);
   const lastFetchErrorRef = useRef(false);
+  const pageErrorsRef = useRef(new Map());
 
   // The server returns today's usage in its own local date; avoid a UTC day rollover.
   const localNow = new Date();
   const todayStr = leadUsage.date || `${localNow.getFullYear()}-${String(localNow.getMonth() + 1).padStart(2, "0")}-${String(localNow.getDate()).padStart(2, "0")}`;
   const remainingLeads = Math.max(0, (leadUsage.limit ?? 200) - (leadUsage.count ?? 0));
 
-  // Primary Data Fetch
-  const fetchAllData = useCallback((isSilent = false) => {
-    if (refreshPromiseRef.current) return refreshPromiseRef.current;
-    if (!isSilent) setIsRefreshing(true);
-    const request = (async () => {
-      try {
-        const urls = ["/api/status", "/api/leads", "/api/mailbox/status", "/api/mailbox/messages", "/api/mailbox/outreach", "/api/mailbox/lifecycle"];
-        const responses = await Promise.all(urls.map((url) => fetch(url, { signal: AbortSignal.timeout(10000) })));
-        const failed = responses.find((response) => !response.ok);
-        if (failed) throw new Error(`API returned HTTP ${failed.status}.`);
-        const [statusData, leadsData, mailboxData, messagesData, outreachData, lifecycleData] = await Promise.all(responses.map((response) => response.json()));
-        setServerOnline(true);
-        lastFetchErrorRef.current = false;
-        setServerStatus(statusData);
-        setLeadUsage({ date: statusData.date, count: statusData.count, limit: statusData.limit });
-        setAllLeads(leadsData.all_leads || []);
-        setSearchHistory(leadsData.search_history || []);
-        setMailboxStatus(mailboxData);
-        setMailboxMessages(messagesData.messages || []);
-        setOutreachList(outreachData.outreach || []);
-        setMailLifecycle(lifecycleData);
-      } catch (error) {
-        setServerOnline(false);
-        if (!isSilent || !lastFetchErrorRef.current) {
-          setNotice({ type: "error", title: "Connection Error", text: `Unable to refresh SpiceCoast data: ${error.message}` });
-        }
-        lastFetchErrorRef.current = true;
-      } finally {
-        setLoading(false);
-        if (!isSilent) setIsRefreshing(false);
+  if (!requestCacheRef.current) {
+    requestCacheRef.current = createRequestCache(fetch, (url, data) => {
+      if (url === WORKSPACE_RESOURCES.status) {
+        setServerStatus(data);
+        setDiscoveryEngine(data.hunter_enabled === true ? "hunter" : "scraper");
+        setLeadUsage({ date: data.date, count: data.count, limit: data.limit });
+      } else if (url === WORKSPACE_RESOURCES.leads) {
+        setAllLeads(data.all_leads || []);
+        setSearchHistory(data.search_history || []);
+      } else if (url === WORKSPACE_RESOURCES.mailboxStatus) setMailboxStatus(data);
+      else if (url === WORKSPACE_RESOURCES.messages) setMailboxMessages(data.messages || []);
+      else if (url === WORKSPACE_RESOURCES.outreach) setOutreachList(data.outreach || []);
+      else if (url === WORKSPACE_RESOURCES.lifecycle) setMailLifecycle(data);
+    });
+  }
+
+  const loadPageData = useCallback(async ({ force = false, silent = false, resources } = {}) => {
+    const page = activeViewRef.current;
+    const names = resources || PAGE_RESOURCES[page] || [];
+    if (!names.length) { setLoading(false); return; }
+    if (!silent) { refreshCountRef.current += 1; setIsRefreshing(true); }
+    try {
+      await requestCacheRef.current.loadMany(names.map(name => WORKSPACE_RESOURCES[name]), { force });
+      pageErrorsRef.current.delete(page);
+      setServerOnline(true);
+      lastFetchErrorRef.current = false;
+    } catch (error) {
+      pageErrorsRef.current.set(page, error.message);
+      setServerOnline(false);
+      if (!silent || !lastFetchErrorRef.current) {
+        setNotice({ type: "error", title: "Connection Error", text: `Unable to load page data: ${error.message}` });
       }
-    })();
-    refreshPromiseRef.current = request;
-    request.finally(() => { if (refreshPromiseRef.current === request) refreshPromiseRef.current = null; });
-    return request;
+      lastFetchErrorRef.current = true;
+    } finally {
+      setLoading(false);
+      if (!silent) {
+        refreshCountRef.current -= 1;
+        setIsRefreshing(refreshCountRef.current > 0);
+      }
+    }
   }, []);
 
-  // Mount effect
-  useEffect(() => {
-    fetchAllData();
-  }, [fetchAllData]);
+  const refreshAffected = useCallback((names, { reload = true } = {}) => {
+    requestCacheRef.current.invalidate(names.map(name => WORKSPACE_RESOURCES[name]));
+    const visible = (PAGE_RESOURCES[activeViewRef.current] || []).filter(name => names.includes(name));
+    if (reload && visible.length) return loadPageData({ silent: true, resources: visible });
+    return Promise.resolve();
+  }, [loadPageData]);
 
-  // Poll after each request settles, so slow requests cannot stack up.
+  // Navigation and explicit actions trigger reads; idle/hidden pages do not poll.
   useEffect(() => {
-    let active = true;
-    let timer;
-    const poll = async () => {
-      await fetchAllData(true);
-      if (active) timer = setTimeout(poll, 4000);
-    };
-    timer = setTimeout(poll, 4000);
-    return () => { active = false; clearTimeout(timer); };
-  }, [fetchAllData]);
+    loadPageData();
+  }, [activeView, loadPageData]);
 
   // Lead Discovery Search Handler
   const handleSearch = async (e) => {
@@ -188,16 +206,31 @@ export default function LeadFinderApp({ onLogout, currentUser = null }) {
       setLastSearchInfo({
         count: leads.length,
         duplicatesSkipped: data.duplicatesSkipped || 0,
+        contactsMissing: data.contactsMissing || 0,
+        warnings: data.warnings || [],
         mode: data.mode,
+        query: { businessType, city, country, count },
       });
 
-      setNotice({
-        type: "success",
-        title: "Discovery Complete",
-        text: `Harvested ${leads.length} new unique lead(s) for ${city}, ${country}.`,
-      });
+      if (leads.length > 0) {
+        setNotice({
+          type: "success",
+          title: "Discovery Complete",
+          text: `Harvested ${leads.length} new unique lead(s) for ${city}, ${country}.`,
+        });
+      } else {
+        setNotice({
+          type: "info",
+          title: "No New Leads Discovered",
+          text: data.duplicatesSkipped > 0
+            ? `Found matching companies, but all ${data.duplicatesSkipped} already exist in your CRM.`
+            : data.contactsMissing > 0
+            ? `Found businesses, but ${data.contactsMissing} had no published phone or email. Try another buyer segment or location.`
+            : `No matching B2B listings found for "${businessType}" in ${city}, ${country}. Try broader keywords or an alternative trade hub.`,
+        });
+      }
 
-      fetchAllData(true);
+      refreshAffected(["status", "leads"]);
     };
 
     setSearching(true);
@@ -219,7 +252,6 @@ export default function LeadFinderApp({ onLogout, currentUser = null }) {
           country: country.trim(),
           count,
           mode: "live",
-          engine: discoveryEngine,
         }),
       });
 
@@ -239,7 +271,7 @@ export default function LeadFinderApp({ onLogout, currentUser = null }) {
           const finishSuccess = (result) => {
             if (settled) return;
             settled = true;
-            if (pollTimer) clearInterval(pollTimer);
+            if (pollTimer) clearTimeout(pollTimer);
             applySearchSuccess(result);
             resolve();
           };
@@ -247,7 +279,7 @@ export default function LeadFinderApp({ onLogout, currentUser = null }) {
           const finishError = (err) => {
             if (settled) return;
             settled = true;
-            if (pollTimer) clearInterval(pollTimer);
+            if (pollTimer) clearTimeout(pollTimer);
             reject(err);
           };
 
@@ -294,26 +326,22 @@ export default function LeadFinderApp({ onLogout, currentUser = null }) {
           // 2. Fallback polling mechanism if SSE closes or fails
           function startPolling() {
             if (settled || pollTimer) return;
-            pollTimer = setInterval(async () => {
+            const poll = async () => {
               try {
-                const pollRes = await fetch(`/api/jobs/${initialData.jobId}`);
-                if (!pollRes.ok) throw new Error("Job polling error");
-                const jobData = await pollRes.json();
-                setSearchProgress((prev) => ({
-                  ...prev,
-                  ...jobData.progress,
-                  logs: jobData.logs || prev?.logs || [],
-                }));
-                if (jobData.status === "completed") {
-                  finishSuccess(jobData.result);
-                } else if (jobData.status === "failed") {
-                  finishError(new Error(jobData.error || "Search failed"));
-                }
-              } catch (e) {
-                finishError(e);
+                const response = await fetch(`/api/jobs/${initialData.jobId}`, { signal: AbortSignal.timeout(10000) });
+                if (!response.ok) throw new Error("Job polling error");
+                const jobData = await response.json();
+                setSearchProgress((prev) => ({ ...prev, ...jobData.progress, logs: jobData.logs || prev?.logs || [] }));
+                if (jobData.status === "completed") finishSuccess(jobData.result);
+                else if (jobData.status === "failed") finishError(new Error(jobData.error || "Search failed"));
+              } catch (error) {
+                finishError(error);
               }
-            }, 1000);
+              if (!settled) pollTimer = setTimeout(poll, 1000);
+            };
+            pollTimer = setTimeout(poll, 1000);
           }
+
         });
       } else {
         // Direct synchronous response
@@ -399,15 +427,13 @@ export default function LeadFinderApp({ onLogout, currentUser = null }) {
 
         if (!silent) {
           setNotice({
-            type: "success",
+            type: draft?.source === "template_fallback" ? "warning" : "success",
             title: draft?.source === "template_fallback" ? "Template Fallback Draft" : "Draft Prepared",
-            text: `Outreach draft prepared for ${lead.name}. Review it before sending.`,
+            text: draft?.fallbackReason || `Outreach draft prepared for ${lead.name}. Review it before sending.`,
           });
         }
 
-        if (!silent) {
-          fetchAllData(true);
-        }
+        refreshAffected(["leads", "outreach"], { reload: !silent });
         return { draft, outreachRecord: data.outreachRecord };
       } else {
         const err = await res.json().catch(() => ({}));
@@ -478,7 +504,7 @@ export default function LeadFinderApp({ onLogout, currentUser = null }) {
           title: "Draft Saved",
           text: "Cold outreach draft changes preserved in database.",
         });
-        fetchAllData(true);
+        refreshAffected(["leads", "outreach"]);
         return true;
       } else {
         const err = await res.json().catch(() => ({}));
@@ -544,13 +570,14 @@ export default function LeadFinderApp({ onLogout, currentUser = null }) {
           setActiveReviewDraft(null);
         }
 
+        refreshAffected(["leads", "outreach", "lifecycle", "mailboxStatus"], { reload: false });
         if (!silent) {
           setNotice({
             type: "success",
             title: "Outreach Dispatched",
             text: `Email dispatched to ${toEmail} via Hostinger API.`,
           });
-          fetchAllData(true);
+          refreshAffected(["leads", "outreach", "lifecycle", "mailboxStatus"]);
         }
         return true;
       } else {
@@ -606,7 +633,7 @@ export default function LeadFinderApp({ onLogout, currentUser = null }) {
           title: "Reply Dispatched",
           text: `Response sent to ${msg.sender}.`,
         });
-        fetchAllData(true);
+        refreshAffected(["messages", "lifecycle", "mailboxStatus"]);
       } else {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.error || "Failed to dispatch reply.");
@@ -642,7 +669,7 @@ export default function LeadFinderApp({ onLogout, currentUser = null }) {
           title: "Inbound Processed",
           text: `Test inquiry from ${payload.from_name || payload.from || "the sample sender"} was drafted.`,
         });
-        fetchAllData(true);
+        refreshAffected(["messages", "lifecycle", "mailboxStatus"]);
       } else {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.error || "Simulation processing failed.");
@@ -674,7 +701,7 @@ export default function LeadFinderApp({ onLogout, currentUser = null }) {
           title: "Follow-Up Dispatched",
           text: `Follow-up email dispatched to ${to}.`,
         });
-        fetchAllData(true);
+        refreshAffected(["leads", "outreach", "messages", "lifecycle", "mailboxStatus"]);
         return true;
       } else {
         const err = await res.json().catch(() => ({}));
@@ -707,7 +734,7 @@ export default function LeadFinderApp({ onLogout, currentUser = null }) {
           title: "Follow-Up Draft Saved",
           text: "Changes saved to follow-up draft.",
         });
-        fetchAllData(true);
+        refreshAffected(["lifecycle"]);
         return true;
       } else {
         const err = await res.json().catch(() => ({}));
@@ -738,7 +765,7 @@ export default function LeadFinderApp({ onLogout, currentUser = null }) {
           title: "Lead Reopened",
           text: "Lead has been restored and queued for follow-up.",
         });
-        fetchAllData(true);
+        refreshAffected(["lifecycle", "leads"]);
         return true;
       } else {
         const err = await res.json().catch(() => ({}));
@@ -767,6 +794,7 @@ export default function LeadFinderApp({ onLogout, currentUser = null }) {
 
       if (res.ok) {
         setMailboxStatus((prev) => ({ ...prev, auto_send: nextState }));
+        refreshAffected(["mailboxStatus"], { reload: false });
         setNotice({
           type: "success",
           title: nextState ? "Auto-Send Activated" : "Review-First Mode",
@@ -905,6 +933,11 @@ export default function LeadFinderApp({ onLogout, currentUser = null }) {
     );
   }
 
+  const pageHasData = requestCacheRef.current.hasLoaded(
+    (PAGE_RESOURCES[activeView] || []).map(name => WORKSPACE_RESOURCES[name])
+  );
+  const pageError = pageErrorsRef.current.get(activeView);
+
   const isLiveOutreach = (item) => {
     if (item.source !== "live") return false;
     const found = allLeads.find((l) => l.id === item.leadId);
@@ -948,7 +981,7 @@ export default function LeadFinderApp({ onLogout, currentUser = null }) {
           onLogout={onLogout}
           activeView={activeView}
           onOpenMobileSidebar={() => setIsMobileSidebarOpen(true)}
-          onRefresh={() => fetchAllData(false)}
+          onRefresh={() => loadPageData({ force: true })}
           isRefreshing={isRefreshing}
           mailboxStatus={mailboxStatus}
           onToggleAutoSend={handleToggleAutoSend}
@@ -959,6 +992,15 @@ export default function LeadFinderApp({ onLogout, currentUser = null }) {
 
         {/* View Router */}
         <main className="lf-main-content">
+          <Suspense fallback={<div className="lf-loading" role="status">Loading page...</div>}>
+          {!pageHasData ? (
+            pageError && !isRefreshing ? (
+              <section className="lf-panel">
+                <p role="alert">{pageError}</p>
+                <button type="button" className="lf-btn-secondary" onClick={() => loadPageData({ force: true })}>Retry</button>
+              </section>
+            ) : <div className="lf-loading" role="status">Loading page data...</div>
+          ) : <>
           {activeView === "dashboard" && (
             <DashboardView
               allLeads={allLeads}
@@ -1032,7 +1074,7 @@ export default function LeadFinderApp({ onLogout, currentUser = null }) {
                 )
               }
               isSendingId={isSendingPitchId}
-              onRefresh={() => fetchAllData(false)}
+              onRefresh={() => loadPageData({ resources: ["leads", "outreach"] })}
               queueLeads={outreachQueueLeads}
               onClearQueue={() => setOutreachQueueLeads([])}
               onGeneratePitch={handleGeneratePitch}
@@ -1045,7 +1087,7 @@ export default function LeadFinderApp({ onLogout, currentUser = null }) {
               mailboxStatus={mailboxStatus}
               mailLifecycle={mailLifecycle}
               mailboxMessages={mailboxMessages}
-              onRefresh={() => fetchAllData(false)}
+              onRefresh={() => loadPageData({ force: true })}
               isRefreshing={isRefreshing}
               onSendReply={handleSendMailboxReply}
               isSendingReplyId={isSendingReplyId}
@@ -1068,28 +1110,20 @@ export default function LeadFinderApp({ onLogout, currentUser = null }) {
             />
           )}
 
-          {activeView === "health" && (
-            <SystemHealthView
-              serverStatus={serverStatus}
-              mailboxStatus={mailboxStatus}
-              allLeads={allLeads}
-              outreachList={outreachList}
-              mailboxMessages={mailboxMessages}
-              onCopyWebhook={handleCopyWebhook}
-              onToggleHunter={handleToggleHunter}
-              isTogglingHunter={isTogglingHunter}
-            />
-          )}
-
-          {activeView === "admin" && (
+          {activeView === "admin" && isSuperadmin && (
             <SuperadminView
               currentUser={currentUser}
               onNotify={setNotice}
+              mailboxStatus={mailboxStatus}
+              onCopyWebhook={handleCopyWebhook}
             />
           )}
+          </>}
+          </Suspense>
         </main>
       </div>
 
+      <Suspense fallback={<div className="lf-loading" role="status">Loading details...</div>}>
       {/* Slide-over Lead Detail Drawer */}
       {selectedLead && (
         <LeadDetailDrawer
@@ -1117,6 +1151,7 @@ export default function LeadFinderApp({ onLogout, currentUser = null }) {
           mailboxAddress={mailboxStatus.mailbox}
         />
       )}
+      </Suspense>
     </div>
   );
 }

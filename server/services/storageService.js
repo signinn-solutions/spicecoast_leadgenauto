@@ -92,13 +92,20 @@ function leadToRow(lead) {
   };
 }
 
+function normalizeLiveSource(lead) {
+  if (['hunter', 'scraper', 'scraper_fallback'].includes(lead.source)) {
+    return { ...lead, discoveryEngine: lead.discoveryEngine || lead.source, source: 'live' };
+  }
+  return lead;
+}
+
 function rowToLead(row) {
   if (!row) return null;
   let extra = {};
   if (row.data) {
     try { extra = JSON.parse(row.data); } catch {}
   }
-  return {
+  return normalizeLiveSource({
     ...extra,
     id: row.id,
     name: row.name,
@@ -117,7 +124,7 @@ function rowToLead(row) {
     first_contacted_at: row.first_contacted_at,
     last_contacted_at: row.last_contacted_at,
     foundAt: row.created_at ? (row.created_at.length > 10 ? row.created_at.slice(0, 10) : row.created_at) : getTodayDateString(),
-  };
+  });
 }
 
 export function getDatabase() {
@@ -230,7 +237,7 @@ export function getDatabase() {
         insertDataset.run(name, JSON.stringify(value));
       }
       setting.run('auto_send', JSON.stringify(Boolean(config.AUTO_SEND)));
-      setting.run('hunter_enabled', JSON.stringify(true));
+      setting.run('hunter_enabled', JSON.stringify(false));
     })();
 
     // Populate normalized leads table from legacy files / datasets if empty
@@ -570,7 +577,7 @@ export function saveSeenPlaces(value) { save('seen_places', value); }
 
 export function loadMailboxHistory() { const value = load('mailbox_history'); return Array.isArray(value) ? value : []; }
 export function saveMailboxHistory(value) { save('mailbox_history', (Array.isArray(value) ? value : []).slice(0, 150)); }
-export function loadOutreachHistory() { const value = load('outreach_history'); return Array.isArray(value) ? value : []; }
+export function loadOutreachHistory() { const value = load('outreach_history'); return Array.isArray(value) ? value.map(normalizeLiveSource) : []; }
 export function saveOutreachHistory(value) { save('outreach_history', (Array.isArray(value) ? value : []).slice(0, 200)); }
 
 export function loadAutoSendSetting() {
@@ -584,7 +591,7 @@ export function saveAutoSendSetting(value) {
 
 export function loadHunterSetting() {
   const row = getDatabase().prepare('SELECT value FROM settings WHERE name = ?').get('hunter_enabled');
-  return row ? Boolean(JSON.parse(row.value)) : true;
+  return row ? Boolean(JSON.parse(row.value)) : false;
 }
 export function saveHunterSetting(value) {
   getDatabase().prepare('INSERT INTO settings (name, value) VALUES (?, ?) ON CONFLICT(name) DO UPDATE SET value = excluded.value')

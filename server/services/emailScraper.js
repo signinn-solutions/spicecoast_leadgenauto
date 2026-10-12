@@ -33,6 +33,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const DEFAULTS = {
+  totalBudgetMs: 20000,
   maxPages: 6,              // pages successfully read per site (homepage + contact-type pages)
   maxAttempts: 12,          // hard cap on requests per site, including guesses that 404
   timeoutMs: 10000,         // 10s is plenty; 15s was stalling on dead hosts
@@ -163,12 +164,19 @@ export function isPrivateIp(ip) {
   return true;
 }
 
-async function assertPublicHost(hostname) {
+async function assertPublicHost(hostname, timeoutMs = 3000) {
   if (net.isIP(hostname)) {
     if (isPrivateIp(hostname)) throw new Error('blocked private address');
     return;
   }
-  const addrs = await dns.lookup(hostname, { all: true });
+  let timer;
+  let addrs;
+  try {
+    addrs = await Promise.race([
+      dns.lookup(hostname, { all: true }),
+      new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('DNS lookup timed out')), Math.max(1, timeoutMs)); }),
+    ]);
+  } finally { clearTimeout(timer); }
   if (!addrs.length || addrs.some((a) => isPrivateIp(a.address))) {
     throw new Error('blocked private address');
   }
@@ -233,11 +241,12 @@ async function fetchOnce(url, opts, { typeRe = HTML_TYPE_RE, sniff = true } = {}
   let current = url;
   const t0 = Date.now();
   for (let hop = 0; hop <= opts.maxRedirects; hop++) {
+    if (Date.now() >= opts.deadline) throw new FetchError("timeout", "Website crawl time budget exceeded");
     const u = new URL(current);
     if (!['http:', 'https:'].includes(u.protocol)) throw new FetchError('unsupported', 'unsupported protocol');
     if (!opts.allowPrivateHosts) {
       try {
-        await assertPublicHost(u.hostname);
+        await assertPublicHost(u.hostname, Math.min(3000, opts.deadline - Date.now()));
       } catch (e) {
         throw e.message === 'blocked private address' ? new FetchError('private', 'blocked private address') : classifyFetchError(e);
       }
@@ -247,7 +256,7 @@ async function fetchOnce(url, opts, { typeRe = HTML_TYPE_RE, sniff = true } = {}
     try {
       res = await fetch(current, {
         redirect: 'manual',
-        signal: AbortSignal.timeout(opts.timeoutMs),
+        signal: AbortSignal.timeout(Math.max(1, Math.min(opts.timeoutMs, opts.deadline - Date.now()))),
         headers: {
           'user-agent': opts.userAgent,
           accept: 'text/html,application/xhtml+xml,text/plain;q=0.8',
@@ -621,7 +630,7 @@ const confidenceOf = (score) => (score >= 85 ? 'high' : score >= 55 ? 'medium' :
 function hasHighConfidenceCandidate(found, siteHost) {
   for (const c of found.values()) {
     const s = scoreCandidate(c, siteHost);
-    if (s.score >= 80 && s.sameDomain) return true;
+    if (s.score >= 80 && s.sameDomain && ROLE_TIER1.has(c.email.split("@")[0])) return true;
   }
   return false;
 }
@@ -630,19 +639,22 @@ const mxCache = new Map();
 
 /** true = domain can receive mail, false = it can't, null = lookup inconclusive. */
 async function domainCanReceiveMail(domain) {
-  if (mxCache.has(domain)) return mxCache.get(domain);
+  const cached = mxCache.get(domain);
+  if (cached && Date.now() < cached.expires) return cached.value;
   let ok;
+  let timer;
   try {
-    const mx = await dns.resolveMx(domain);
-    ok = mx.some((r) => r.exchange && r.exchange !== '.');
-  } catch (e) {
-    if (e.code === 'ENODATA' || e.code === 'ENOTFOUND') {
-      try { ok = (await dns.resolve4(domain)).length > 0; } catch { ok = false; }
-    } else {
-      ok = null;
-    }
+    const mx = await Promise.race([
+      dns.resolveMx(domain),
+      new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('MX lookup timed out')), 3000); }),
+    ]);
+    ok = mx.some(record => record.exchange && record.exchange !== '.');
+  } catch (error) {
+    ok = ['ENODATA', 'ENOTFOUND'].includes(error.code) ? false : null;
+  } finally {
+    clearTimeout(timer);
   }
-  mxCache.set(domain, ok);
+  mxCache.set(domain, { value: ok, expires: Date.now() + (ok === true ? 3600000 : ok === false ? 300000 : 30000) });
   return ok;
 }
 
@@ -677,11 +689,24 @@ function fail(result, status, kind, detail) {
   return result;
 }
 
+export function extractPhoneNumbersFromHtml(html) {
+  const matches = [
+    ...String(html).matchAll(/href\s*=\s*["']tel:([^"']+)["']/gi),
+    ...String(html).matchAll(/["']telephone["']\s*:\s*["']([^"']+)["']/gi),
+  ];
+  const phones = matches.map(match => {
+    try { return decodeURIComponent(match[1]).split(';')[0].trim(); }
+    catch { return match[1].split(';')[0].trim(); }
+  }).filter(phone => /^\+?[\d\s().-]+$/.test(phone) && phone.replace(/\D/g, '').length >= 6 && phone.replace(/\D/g, '').length <= 15);
+  return [...new Set(phones)];
+}
+
 export async function scrapeEmailsForWebsite(website, options = {}) {
   const opts = { ...DEFAULTS, ...options };
+  opts.deadline = Date.now() + opts.totalBudgetMs;
   const result = {
     website, domain: null, status: 'no_email_found', failure: null, fallbackRecommended: false,
-    pagesChecked: [], emails: [], best: null, errors: [], attempts: [],
+    pagesChecked: [], emails: [], phones: [], best: null, errors: [], attempts: [],
   };
 
   let startUrl;
@@ -767,6 +792,7 @@ export async function scrapeEmailsForWebsite(website, options = {}) {
   let sawForm = false;
   const ingest = (pageHtml, pageUrl) => {
     result.pagesChecked.push(pageUrl);
+    result.phones = [...new Set([...result.phones, ...extractPhoneNumbersFromHtml(pageHtml)])].slice(0, 5);
     sawForm ||= hasContactForm(pageHtml);
     const hits = extractEmailsFromHtml(pageHtml, { siteHost });
     for (const hit of hits) {

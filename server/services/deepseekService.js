@@ -1,5 +1,6 @@
 import OpenAI from 'openai';
 import config from '../config/env.js';
+import { SPICE_COAST_BRAND_CONTEXT } from './spiceCoastBrand.js';
 
 let deepseekClient = null;
 let aiUnavailableUntil = 0;
@@ -23,7 +24,7 @@ export function getDeepseekClient() {
       deepseekClient = new OpenAI({
         apiKey: config.DEEPSEEK_API_KEY,
         baseURL: 'https://api.deepseek.com',
-        timeout: 8000,
+        timeout: 45000,
         maxRetries: 0,
       });
     } catch (e) {
@@ -49,10 +50,13 @@ export async function generateColdEmail(lead = {}, { useAI = true, force = false
   const businessType = lead.businessType || 'Spice Import & Distribution';
 
   const client = useAI && !isAiTemporarilyUnavailable() ? getDeepseekClient() : null;
+  let fallbackReason = !useAI ? 'AI generation is disabled for this lead.' : !config.DEEPSEEK_API_KEY ? 'DeepSeek API key is not configured.' : isAiTemporarilyUnavailable() ? aiUnavailableReason : 'DeepSeek returned an unusable draft.';
 
   if (useAI && client && config.DEEPSEEK_API_KEY) {
     try {
-      const prompt = `You are the International Export Sales Director for The Spice Coast (SpiceCoast), a premier origin exporter of premium spices based in Kerala, India.
+      const prompt = `You write outreach for Spice Coast's export team.
+
+${SPICE_COAST_BRAND_CONTEXT}
 
 Write a high-converting, concise, professional B2B cold outreach email to an importer/distributor.
 
@@ -65,16 +69,19 @@ Requirements:
 1. Subject Line: Catchy, professional, and personalized (under 9 words, e.g. "Direct Origin Spices Partnership: Kerala -> [City/Company]").
 2. Tone: Professional, respectful, B2B wholesale focus.
 3. Message length: Under 130 words.
-4. Key Value Props: Direct farm-to-export origin sourcing, product specifications to be confirmed by the export team (Malabar Black Pepper 550/570 GL, Alleppey Green Cardamom 7-8mm, High-Curcumin Turmeric), and container/bulk FOB & CIF shipping capabilities.
+4. Select one or two relevant benefits from the brand facts. Mention at most three relevant products; offer to discuss specifications and packaging rather than assuming exact grades or shipping terms.
 5. Call to Action: Low-friction ask (e.g. asking if we can share our new harvest catalog & export price list).
 6. Sign off cordially as:
-   The SpiceCoast Export Team
-   The Spice Coast | Cochin, Kerala, India
+   Spice Coast Export Team
+   Kochi, Kerala, India
+   https://thespicecoast.com/
    ${config.SENDER_MAILBOX}
 
-Output Format: Provide strictly valid JSON with keys "subject" and "body". Do not include markdown code block formatting if possible.
+7. Open directly with a relevant introduction; avoid "I hope this email finds you well", exaggerated sales language, or invented buyer research. If location is unknown, omit it. End with one question asking permission to share product details or discuss requirements.
+Output Format: Provide strictly valid JSON with keys "subject" and "body". Do not include markdown code blocks.
 `;
 
+      for (let attempt = 0; attempt < 2; attempt++) {
       const response = await client.chat.completions.create({
         model: config.DEEPSEEK_MODEL || 'deepseek-chat',
         messages: [
@@ -84,7 +91,8 @@ Output Format: Provide strictly valid JSON with keys "subject" and "body". Do no
           },
           { role: 'user', content: prompt },
         ],
-        max_tokens: 400,
+        response_format: { type: 'json_object' },
+        max_tokens: 1500,
         temperature: 0.7,
       });
 
@@ -104,12 +112,15 @@ Output Format: Provide strictly valid JSON with keys "subject" and "body". Do no
       } catch (err) {
         console.warn('[DeepSeek ColdMail JSON Parse Issue]:', err.message);
       }
+      fallbackReason = response.choices?.[0]?.finish_reason === 'length' ? 'DeepSeek response was truncated. Try regenerating the draft.' : 'DeepSeek returned empty or invalid draft JSON. Try regenerating the draft.';
+      }
     } catch (e) {
       const errMsg = e.message || String(e);
+      fallbackReason = e.status === 401 ? 'DeepSeek rejected the API key. Update it in the server configuration.' : e.status === 402 ? 'DeepSeek account balance is insufficient. Add credit and retry.' : e.status === 429 ? 'DeepSeek rate limit reached. Wait briefly and retry.' : e.status === 404 ? 'The configured DeepSeek model was not found. Check DEEPSEEK_MODEL.' : /timeout|timed out/i.test(errMsg) ? 'DeepSeek generation timed out. Try again.' : 'DeepSeek could not generate a draft. Check the connection and retry.';
       const isQuotaOrAuth = e.status === 402 || e.status === 401 || errMsg.includes('402') || errMsg.toLowerCase().includes('insufficient balance') || errMsg.toLowerCase().includes('quota');
       if (isQuotaOrAuth) {
         aiUnavailableUntil = Date.now() + 60000;
-        aiUnavailableReason = errMsg;
+        aiUnavailableReason = fallbackReason;
         console.warn(`[DeepSeek Circuit Breaker]: Tripped (${errMsg}). Fast-failing with local fallback template for 60s.`);
       } else {
         console.warn(`[DeepSeek ColdMail API Error]: ${errMsg}. Using fallback template.`);
@@ -118,29 +129,22 @@ Output Format: Provide strictly valid JSON with keys "subject" and "body". Do no
   }
 
   // Graceful fallback personalized cold email template
-  const locationStr = city && country ? `${city}, ${country}` : city || 'your market';
   return {
     model: 'Local template',
-    subject: `Export-Grade Direct Origin Spices for ${companyName}`,
+    fallbackReason,
+    subject: `Kerala-origin spices for ${companyName}`,
     body: `Dear Team at ${companyName},
 
-I hope this email finds you well.
+I'm reaching out from Spice Coast in Kochi, Kerala. We source, process and export Indian spices for commercial buyers, importers and distributors.
 
-I am reaching out from The Spice Coast (SpiceCoast), based in Kerala, India. We are direct-from-origin processors and exporters of premium Indian spices, supplying established importers and distributors across ${locationStr}.
+Our focus includes Alleppey Green Cardamom, Malabar Black Pepper and Cinnamon. We can discuss bulk requirements, preferred grades, moisture levels and packaging with your team.
 
-Our core export portfolio includes:
-• Malabar Black Pepper (Garbled / High Density 550GL - 570GL)
-• Alleppey Green Cardamom (Extra Bold 8mm & Bold 7.5mm)
-• High-Curcumin Alleppey Turmeric Fingers & Powder
-• Tellicherry Cloves and Ceylon Cinnamon
-
-We can discuss product specifications, available quality documentation, and FOB or CIF delivery terms for your requirements.
-
-Could we share our latest seasonal harvest specification sheet and export catalog for your review?
+May we share product details and learn more about your sourcing requirements?
 
 Warm regards,
-The SpiceCoast Export Desk
-The Spice Coast | Cochin, Kerala, India
+Spice Coast Export Team
+Kochi, Kerala, India
+https://thespicecoast.com/
 ${config.SENDER_MAILBOX}`,
   };
 }
@@ -163,7 +167,9 @@ export async function extractMetadataAndDraftReply(
 
   if (useAI && client && config.DEEPSEEK_API_KEY) {
     try {
-      const prompt = `You are the Senior B2B Export Director for The Spice Coast (SpiceCoast), a premier Indian spice exporting and trading company based in Kerala, India.
+      const prompt = `You draft replies for Spice Coast's export team.
+
+${SPICE_COAST_BRAND_CONTEXT}
 
 A prospective lead or customer just emailed our mailbox:
 - Inbound Sender: ${senderName || senderEmail} <${senderEmail}>
@@ -188,10 +194,11 @@ Tasks:
    - Write a warm, professional, concise reply (under 120 words).
    - Directly acknowledge their specific products (${subject}) and location/volume.
    - Offer to confirm product specifications and quality documentation with the export team. Do not claim certifications or guaranteed compliance.
-   - State our export desk is preparing the exact specification sheet and FOB/CIF quote.
+   - Ask for missing commercial details needed to confirm specifications and a quotation. Do not say a quote is already being prepared or promise FOB/CIF availability.
    - Sign off as:
-     The SpiceCoast Export Desk
-     The Spice Coast | Cochin, Kerala, India
+     Spice Coast Export Team
+     Kochi, Kerala, India
+     https://thespicecoast.com/
      ${config.SENDER_MAILBOX}
    - Do NOT invent specific numerical price values.
 

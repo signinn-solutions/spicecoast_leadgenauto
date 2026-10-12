@@ -9,6 +9,7 @@ import {
   resetHunterQuotaHandler,
   resetDailyUsageHandler,
   testConnectionHandler,
+  toggleEngineHandler,
   getAuditLogsHandler,
 } from '../controllers/adminController.js';
 
@@ -25,6 +26,7 @@ router.delete('/users/:id', deleteUserHandler);
 
 // System Health & Monitoring
 router.get('/system/health', getSystemHealthHandler);
+router.post('/system/engine', toggleEngineHandler);
 router.post('/system/reset-hunter-quota', resetHunterQuotaHandler);
 router.post('/system/reset-daily-usage', resetDailyUsageHandler);
 router.post('/system/test-connection', testConnectionHandler);

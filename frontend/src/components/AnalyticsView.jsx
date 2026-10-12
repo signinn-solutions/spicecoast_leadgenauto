@@ -33,11 +33,15 @@ export default function AnalyticsView({
   const notFound = liveLeads.filter(
     (l) => l.emailStatus === "not_found" || l.emailStatus === "invalid"
   ).length;
+  const mxConfirmed = liveLeads.filter(lead => lead.emailStatus === "mx_valid").length;
+  const unknown = liveLeads.length - deliverable - risky - notFound - mxConfirmed;
   const simulatedCount = allLeads.filter((lead) => lead.source === "simulated").length;
   const unconfirmedCount = allLeads.length - liveLeads.length - simulatedCount;
 
   const chartData = [
-    { name: "Deliverable", value: deliverable, color: "#10b981" },
+    { name: "Mailbox verified", value: deliverable, color: "#10b981" },
+    { name: "Published / MX confirmed", value: mxConfirmed, color: "#3b82f6" },
+    { name: "Verification unknown", value: unknown, color: "#64748b" },
     { name: "Risky / Accept All", value: risky, color: "#f59e0b" },
     { name: "Not Found", value: notFound, color: "#ef4444" },
     { name: "Simulation", value: simulatedCount, color: "#71717a" },
@@ -62,28 +66,18 @@ export default function AnalyticsView({
 
   return (
     <div className="lf-view-container lf-animate-fade">
-      {/* Top Banner */}
-      <div className="lf-section-header">
-        <div>
-          <h2 className="lf-section-title">Commercial Harvest Intelligence</h2>
-          <p className="lf-section-subtitle">
-            Deliverability distributions, geographic trade markets, and historical search query logs.
-          </p>
-        </div>
-      </div>
-
       {/* 4 Stat Cards */}
       <div className="lf-stats-grid">
         <div className="lf-stat-card">
           <span className="lf-stat-title">Total Processed Leads</span>
           <div className="lf-stat-number lf-mono">{allLeads.length}</div>
-          <span className="lf-stat-subtext">{liveLeads.length} live from Places API</span>
+          <span className="lf-stat-subtext">{liveLeads.length} live contacts</span>
         </div>
 
         <div className="lf-stat-card">
-          <span className="lf-stat-title">Verified Inboxes</span>
+          <span className="lf-stat-title">Mailbox-verified Emails</span>
           <div className="lf-stat-number lf-mono text-emerald">{deliverable}</div>
-          <span className="lf-stat-subtext">Deliverable via Hunter.io</span>
+          <span className="lf-stat-subtext">Deliverable live contacts</span>
         </div>
 
         <div className="lf-stat-card">
@@ -105,7 +99,7 @@ export default function AnalyticsView({
         <section className="lf-panel">
           <div className="lf-panel-header">
             <div>
-              <h3 className="lf-panel-title">Email Deliverability Breakdown</h3>
+              <h3 className="lf-panel-title">Email Contact Quality</h3>
               <p className="lf-panel-desc">Verification status for live contacts, plus example and unconfirmed records</p>
             </div>
           </div>
@@ -164,7 +158,7 @@ export default function AnalyticsView({
       </div>
 
       {/* Historical Searches Table */}
-      <section className="lf-panel" style={{ marginTop: 24 }}>
+      <section className="lf-panel">
         <div className="lf-panel-header">
           <div>
             <h3 className="lf-panel-title">Historical Discovery Queries</h3>
