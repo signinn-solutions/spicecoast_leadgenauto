@@ -129,6 +129,7 @@ test('POST send-coldmail rejects a simulated lead before configured transport', 
     config.MAILBOX_HISTORY_FILE = path.join(dir, 'mailbox.json');
     config.OUTREACH_HISTORY_FILE = path.join(dir, 'outreach.json');
     config.HOSTINGER_API_TOKEN = 'configured-test-token';
+    config.HOSTINGER_MAILBOX_RESOURCE_ID = 'ACtestmailbox';
     fs.writeFileSync(config.LEADS_HISTORY_FILE, JSON.stringify({
       leads: [{ id: 'sim-1', source: 'simulated', email: 'demo@example.test' }], searches: [],
     }));
@@ -162,10 +163,12 @@ test('POST send-coldmail rejects a simulated lead before configured transport', 
 
 test('Hostinger payload preserves cold subject and prefixes replies once', async () => {
   const originalToken = config.HOSTINGER_API_TOKEN;
+  const originalResource = config.HOSTINGER_MAILBOX_RESOURCE_ID;
   const originalFetch = globalThis.fetch;
   const subjects = [];
   try {
     config.HOSTINGER_API_TOKEN = 'configured-test-token';
+    config.HOSTINGER_MAILBOX_RESOURCE_ID = 'ACtestmailbox';
     globalThis.fetch = async (_url, options) => {
       subjects.push(JSON.parse(options.body).subject);
       return { ok: true, json: async () => ({ status: 'sent' }) };
@@ -176,6 +179,7 @@ test('Hostinger payload preserves cold subject and prefixes replies once', async
     assert.deepEqual(subjects, ['New spice partnership', 'Re: Price inquiry', 'Re: Price inquiry']);
   } finally {
     config.HOSTINGER_API_TOKEN = originalToken;
+    config.HOSTINGER_MAILBOX_RESOURCE_ID = originalResource;
     globalThis.fetch = originalFetch;
   }
 });
@@ -319,7 +323,7 @@ test('concurrent sends dispatch each saved draft once', async (t) => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'spicecoast-concurrent-send-'));
   const keys = [
     'DB_PATH', 'DAILY_USAGE_FILE', 'REPLY_USAGE_FILE', 'LEADS_HISTORY_FILE',
-    'SEEN_PLACES_FILE', 'MAILBOX_HISTORY_FILE', 'OUTREACH_HISTORY_FILE', 'HOSTINGER_API_TOKEN', 'GROQ_API_KEY',
+    'SEEN_PLACES_FILE', 'MAILBOX_HISTORY_FILE', 'OUTREACH_HISTORY_FILE', 'HOSTINGER_API_TOKEN', 'HOSTINGER_MAILBOX_RESOURCE_ID', 'GROQ_API_KEY',
     'NODE_ENV', 'ADMIN_EMAIL', 'ADMIN_PASSWORD_HASH',
   ];
   const original = Object.fromEntries(keys.map((key) => [key, config[key]]));
@@ -331,6 +335,7 @@ test('concurrent sends dispatch each saved draft once', async (t) => {
       config[key] = path.join(dir, `${key}.db`);
     }
     config.HOSTINGER_API_TOKEN = 'configured-test-token';
+    config.HOSTINGER_MAILBOX_RESOURCE_ID = 'ACtestmailbox';
     config.GROQ_API_KEY = '';
     config.NODE_ENV = 'development';
     config.ADMIN_EMAIL = '';
@@ -490,7 +495,7 @@ test('concurrent sends dispatch each saved draft once', async (t) => {
 test('POST /api/leads/generate-coldmail is idempotent and regenerates with force: true', async () => {
   const keys = [
     'DB_PATH', 'DAILY_USAGE_FILE', 'REPLY_USAGE_FILE', 'LEADS_HISTORY_FILE',
-    'SEEN_PLACES_FILE', 'MAILBOX_HISTORY_FILE', 'OUTREACH_HISTORY_FILE', 'HOSTINGER_API_TOKEN', 'GROQ_API_KEY',
+    'SEEN_PLACES_FILE', 'MAILBOX_HISTORY_FILE', 'OUTREACH_HISTORY_FILE', 'HOSTINGER_API_TOKEN', 'HOSTINGER_MAILBOX_RESOURCE_ID', 'GROQ_API_KEY',
     'NODE_ENV', 'ADMIN_EMAIL', 'ADMIN_PASSWORD_HASH',
   ];
   const original = Object.fromEntries(keys.map((key) => [key, config[key]]));

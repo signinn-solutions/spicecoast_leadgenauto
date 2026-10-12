@@ -46,9 +46,21 @@ test('SMTP sends one recipient with TLS safeguards and confirms acceptance witho
 
 test('Hostinger errors never leak provider response text', async () => {
   const originalToken = config.HOSTINGER_API_TOKEN;
+  const originalResource = config.HOSTINGER_MAILBOX_RESOURCE_ID;
   const originalFetch = globalThis.fetch;
   try {
     config.HOSTINGER_API_TOKEN = 'test-token';
+    config.HOSTINGER_MAILBOX_RESOURCE_ID = 'ACtestmailbox';
+    globalThis.fetch = async (url, options) => {
+      assert.match(url, /\/api\/v1\/mailboxes\/ACtestmailbox\/send$/);
+      const payload = JSON.parse(options.body);
+      assert.equal(payload.from, undefined);
+      assert.deepEqual(payload.to, ['buyer@example.test']);
+      return { ok: true, status: 204, json: async () => { throw new Error('Empty response'); } };
+    };
+    assert.equal((await sendEmailViaHostinger('buyer@example.test', 'Subject', 'Body')).status, 'sent');
+    globalThis.fetch = async () => ({ ok: false, status: 404 });
+    await assert.rejects(sendEmailViaHostinger('buyer@example.test', 'Subject', 'Body'), /mailbox was not found/);
     globalThis.fetch = async () => ({ ok: false, status: 403, text: async () => 'private token echoed here' });
     await assert.rejects(sendEmailViaHostinger('buyer@example.test', 'Subject', 'Body'),
       { message: 'Email provider rejected message (HTTP 403).' });
@@ -60,6 +72,7 @@ test('Hostinger errors never leak provider response text', async () => {
       { message: 'Email provider request failed.' });
   } finally {
     config.HOSTINGER_API_TOKEN = originalToken;
+    config.HOSTINGER_MAILBOX_RESOURCE_ID = originalResource;
     globalThis.fetch = originalFetch;
   }
 });

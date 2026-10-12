@@ -39,13 +39,14 @@ export async function sendEmailViaHostinger(toAddress, subject, body, { reply = 
   }
 
   const cleanSubject = reply && !subject.toLowerCase().startsWith('re:') ? `Re: ${subject}` : subject;
+  if (!config.HOSTINGER_SEND_ENDPOINT) throw new Error('Hostinger mailbox resource ID is missing. Configure HOSTINGER_MAILBOX_RESOURCE_ID for the sender mailbox.');
   const headers = {
     Authorization: `Bearer ${config.HOSTINGER_API_TOKEN}`,
     'Content-Type': 'application/json',
   };
   const payload = {
     to: [toAddress],
-    from: config.SENDER_MAILBOX,
+    displayName: 'Spice Coast Export Team',
     subject: cleanSubject,
     text: body,
   };
@@ -64,6 +65,7 @@ export async function sendEmailViaHostinger(toAddress, subject, body, { reply = 
   }
 
   if (!response.ok) {
+    if (response.status === 404) throw new Error('Hostinger send endpoint or mailbox was not found. Check HOSTINGER_MAILBOX_RESOURCE_ID and the token mailbox permissions.');
     throw new Error(`Email provider rejected message (HTTP ${response.status}).`);
   }
 

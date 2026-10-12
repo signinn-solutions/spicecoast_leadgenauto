@@ -31,13 +31,14 @@ export const config = {
   // Hostinger Agentic Mail API & Webhook
   HOSTINGER_API_TOKEN: process.env.HOSTINGER_API_TOKEN || '',
   HOSTINGER_WEBHOOK_BEARER_TOKEN: process.env.HOSTINGER_WEBHOOK_BEARER_TOKEN || '',
+  HOSTINGER_MAILBOX_RESOURCE_ID: process.env.HOSTINGER_MAILBOX_RESOURCE_ID || '',
   SENDER_MAILBOX: process.env.SENDER_MAILBOX || 'sales@thespicecoast.com',
 
   // Hostinger Send Endpoint
   get HOSTINGER_SEND_ENDPOINT() {
     return (
       process.env.HOSTINGER_SEND_ENDPOINT ||
-      `https://api.mail.hostinger.com/v1/mailboxes/${this.SENDER_MAILBOX}/messages`
+      (this.HOSTINGER_MAILBOX_RESOURCE_ID ? `https://api.mail.hostinger.com/api/v1/mailboxes/${encodeURIComponent(this.HOSTINGER_MAILBOX_RESOURCE_ID)}/send` : '')
     );
   },
 
