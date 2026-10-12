@@ -11,7 +11,7 @@ import {
   loadAutoSendSetting,
   withMailboxHistoryLock,
 } from './storageService.js';
-import { extractMetadataAndDraftReply } from './deepseekService.js';
+import { extractMetadataAndDraftReply } from './groqService.js';
 import { sendEmail } from './mailService.js';
 import { computeLeadEngagementScore } from './lifecycleScoringService.js';
 
@@ -141,7 +141,7 @@ async function runIncomingEmail(payload, forceBypassAuth, manualAutoSend) {
     };
   }
 
-  // Extract rich AI metadata & draft contextual reply using DeepSeek
+  // Extract rich AI metadata & draft contextual reply using Groq
   const { reply: replyText, metadata, model } = await extractMetadataAndDraftReply(
     subject,
     body,

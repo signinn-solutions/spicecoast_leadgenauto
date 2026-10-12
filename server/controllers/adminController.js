@@ -1,4 +1,5 @@
 import config from '../config/env.js';
+import { getAiSettings } from '../services/aiProvider.js';
 import { requestHunter } from '../services/hunterClient.js';
 import {
   getAllUsers,
@@ -114,11 +115,13 @@ export async function getSystemHealthHandler(req, res, next) {
         status: 'healthy',
         details: 'Native HTML crawler + DNS MX record validator ready',
       },
-      deepseek_ai: {
-        configured: Boolean(config.DEEPSEEK_API_KEY),
-        model: config.DEEPSEEK_MODEL || 'deepseek-chat',
-        status: config.DEEPSEEK_API_KEY ? 'healthy' : 'unconfigured',
-        details: config.DEEPSEEK_API_KEY ? `Connected using ${config.DEEPSEEK_MODEL}` : 'Missing API key',
+      groq_ai: {
+        provider: getAiSettings().provider,
+        label: getAiSettings().label,
+        configured: Boolean(getAiSettings().apiKey),
+        model: getAiSettings().model,
+        status: getAiSettings().apiKey ? 'healthy' : 'unconfigured',
+        details: getAiSettings().apiKey ? `Configured using ${getAiSettings().model}` : 'Missing API key',
       },
       hostinger_mail: {
         configured: Boolean(config.HOSTINGER_API_TOKEN),
@@ -248,20 +251,20 @@ export async function testConnectionHandler(req, res, next) {
       });
     }
 
-    if (service === 'deepseek') {
-      if (!config.DEEPSEEK_API_KEY) {
-        return res.status(400).json({ ok: false, error: 'DeepSeek API key is not configured.' });
+    if (service === 'groq') {
+      if (!getAiSettings().apiKey) {
+        return res.status(400).json({ ok: false, error: `${getAiSettings().label} API key is not configured.` });
       }
       try {
-        const resp = await fetch('https://api.deepseek.com/models', {
-          headers: { Authorization: `Bearer ${config.DEEPSEEK_API_KEY}` },
+        const resp = await fetch(`${getAiSettings().baseURL}/models`, {
+          headers: { Authorization: `Bearer ${getAiSettings().apiKey}` },
           signal: AbortSignal.timeout(5000),
         });
         const latency = Date.now() - startTime;
         if (!resp.ok) {
-          return res.status(200).json({ ok: false, status: resp.status, latency, error: `DeepSeek responded with HTTP ${resp.status}` });
+          return res.status(200).json({ ok: false, status: resp.status, latency, error: `${getAiSettings().label} responded with HTTP ${resp.status}` });
         }
-        return res.status(200).json({ ok: true, latency, message: 'DeepSeek AI API authenticated successfully.' });
+        return res.status(200).json({ ok: true, latency, message: `${getAiSettings().label} API authenticated successfully.` });
       } catch (err) {
         return res.status(200).json({ ok: false, latency: Date.now() - startTime, error: err.message });
       }

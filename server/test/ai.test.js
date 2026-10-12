@@ -1,12 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import config from '../config/env.js';
-import { getDeepseekClient, generateColdEmail, extractMetadataAndDraftReply, resetAiUnavailableState } from '../services/deepseekService.js';
+import { getGroqClient, generateColdEmail, extractMetadataAndDraftReply, resetAiUnavailableState } from '../services/groqService.js';
 
 test('AI metadata is safe to render and fallback drafts identify their actual source', async () => {
-  const originalKey = config.DEEPSEEK_API_KEY;
-  config.DEEPSEEK_API_KEY = 'test-key-no-network';
-  const client = getDeepseekClient();
+  const originalKey = config.GROQ_API_KEY;
+  config.GROQ_API_KEY = 'test-key-no-network';
+  const client = getGroqClient();
   const originalCreate = client.chat.completions.create;
   try {
     client.chat.completions.create = async () => ({ choices: [{ message: { content: JSON.stringify({ reply: 'Test draft', buyerName: { injected: true }, intent: ['bad'], detectedProducts: ['Pepper', { bad: true }], priority: 7 }) } }] });
@@ -23,14 +23,14 @@ test('AI metadata is safe to render and fallback drafts identify their actual so
     assert.doesNotMatch(draft.body, /ISO|HACCP/);
   } finally {
     client.chat.completions.create = originalCreate;
-    config.DEEPSEEK_API_KEY = originalKey;
+    config.GROQ_API_KEY = originalKey;
   }
 });
 
 test('Cold drafts retry unusable JSON and expose actionable provider failures', async () => {
-  const originalKey = config.DEEPSEEK_API_KEY;
-  config.DEEPSEEK_API_KEY = 'test-key-no-network';
-  const client = getDeepseekClient();
+  const originalKey = config.GROQ_API_KEY;
+  config.GROQ_API_KEY = 'test-key-no-network';
+  const client = getGroqClient();
   const originalCreate = client.chat.completions.create;
   resetAiUnavailableState();
   try {
@@ -53,12 +53,12 @@ test('Cold drafts retry unusable JSON and expose actionable provider failures', 
     assert.match(fallback.fallbackReason, /balance/);
     const unavailable = await generateColdEmail({ name: 'Buyer' });
     assert.match(unavailable.fallbackReason, /balance/);
-    config.DEEPSEEK_API_KEY = '';
+    config.GROQ_API_KEY = '';
     resetAiUnavailableState();
     assert.match((await generateColdEmail({})).fallbackReason, /not configured/);
   } finally {
     client.chat.completions.create = originalCreate;
-    config.DEEPSEEK_API_KEY = originalKey;
+    config.GROQ_API_KEY = originalKey;
     resetAiUnavailableState();
   }
 });

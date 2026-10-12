@@ -24,9 +24,9 @@ export const config = {
   // Hunter.io API
   HUNTER_API_KEY: process.env.HUNTER_API_KEY || '',
 
-  // DeepSeek AI API
-  DEEPSEEK_API_KEY: process.env.DEEPSEEK_API_KEY || '',
-  DEEPSEEK_MODEL: process.env.DEEPSEEK_MODEL || 'deepseek-chat',
+  // Groq AI API
+  GROQ_API_KEY: process.env.GROQ_API_KEY || '',
+  GROQ_MODEL: process.env.GROQ_MODEL || 'openai/gpt-oss-120b',
 
   // Hostinger Agentic Mail API & Webhook
   HOSTINGER_API_TOKEN: process.env.HOSTINGER_API_TOKEN || '',

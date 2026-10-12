@@ -9,7 +9,7 @@ import app from '../app.js';
 import { sendEmailViaHostinger } from '../services/mailService.js';
 import { processIncomingEmail } from '../services/webhookService.js';
 import { extractDomain, isPlaceDuplicate, executeLeadSearch, isSocialOrDirectoryDomain, scrapeEmailsFromWebsite } from '../services/leadFinderService.js';
-import { extractMetadataAndDraftReply, getDeepseekClient } from '../services/deepseekService.js';
+import { extractMetadataAndDraftReply, getGroqClient } from '../services/groqService.js';
 import {
   getTodayDateString, loadLeadsHistory, saveLeadsHistory, loadOutreachHistory,
   saveOutreachHistory, loadDailyUsage, saveDailyUsage, loadReplyUsage, loadMailboxHistory, saveMailboxHistory,
@@ -27,7 +27,7 @@ test('lead discovery, drafts and quota stay within isolated storage', async () =
   const originalKeys = {
     GOOGLE_API_KEY: config.GOOGLE_API_KEY,
     HUNTER_API_KEY: config.HUNTER_API_KEY,
-    DEEPSEEK_API_KEY: config.DEEPSEEK_API_KEY,
+    GROQ_API_KEY: config.GROQ_API_KEY,
     DAILY_LEAD_LIMIT: config.DAILY_LEAD_LIMIT,
   };
   const originalFetch = globalThis.fetch;
@@ -35,7 +35,7 @@ test('lead discovery, drafts and quota stay within isolated storage', async () =
     for (const name of names) config[name] = path.join(dir, `${name}.json`);
     config.GOOGLE_API_KEY = '';
     config.HUNTER_API_KEY = '';
-    config.DEEPSEEK_API_KEY = '';
+    config.GROQ_API_KEY = '';
     config.DAILY_LEAD_LIMIT = 2;
     globalThis.fetch = () => { throw new Error('Unexpected network request'); };
 
@@ -79,8 +79,8 @@ test('lead discovery, drafts and quota stay within isolated storage', async () =
 });
 
 test('inbound inquiry fallback extracts buying context without sending', async () => {
-  const originalKey = config.DEEPSEEK_API_KEY;
-  config.DEEPSEEK_API_KEY = '';
+  const originalKey = config.GROQ_API_KEY;
+  config.GROQ_API_KEY = '';
   try {
     const result = await extractMetadataAndDraftReply(
       'Urgent quote for black pepper',
@@ -95,7 +95,7 @@ test('inbound inquiry fallback extracts buying context without sending', async (
     assert.ok(result.metadata.detectedProducts.includes('Malabar Black Pepper'));
     assert.match(result.reply, /Dear Alex/);
   } finally {
-    config.DEEPSEEK_API_KEY = originalKey;
+    config.GROQ_API_KEY = originalKey;
   }
 });
 
@@ -249,7 +249,7 @@ test('concurrent lead searches consume only one remaining quota slot', async () 
   const keys = [
     'DB_PATH', 'DAILY_USAGE_FILE', 'REPLY_USAGE_FILE', 'LEADS_HISTORY_FILE',
     'SEEN_PLACES_FILE', 'MAILBOX_HISTORY_FILE', 'OUTREACH_HISTORY_FILE',
-    'GOOGLE_API_KEY', 'HUNTER_API_KEY', 'DEEPSEEK_API_KEY', 'DAILY_LEAD_LIMIT',
+    'GOOGLE_API_KEY', 'HUNTER_API_KEY', 'GROQ_API_KEY', 'DAILY_LEAD_LIMIT',
   ];
   const original = Object.fromEntries(keys.map((key) => [key, config[key]]));
   const originalFetch = globalThis.fetch;
@@ -259,7 +259,7 @@ test('concurrent lead searches consume only one remaining quota slot', async () 
     }
     config.GOOGLE_API_KEY = '';
     config.HUNTER_API_KEY = '';
-    config.DEEPSEEK_API_KEY = '';
+    config.GROQ_API_KEY = '';
     config.DAILY_LEAD_LIMIT = 1;
     globalThis.fetch = async () => { throw new Error('Unexpected network call'); };
     const options = { businessType: 'spice importer', city: 'Hamburg', country: 'Germany', requestedCount: 1, mode: 'simulated' };
@@ -282,7 +282,7 @@ test('concurrent inbound drafts consume one reply slot and preserve mailbox hist
   const keys = [
     'DB_PATH', 'DAILY_USAGE_FILE', 'REPLY_USAGE_FILE', 'LEADS_HISTORY_FILE',
     'SEEN_PLACES_FILE', 'MAILBOX_HISTORY_FILE', 'OUTREACH_HISTORY_FILE',
-    'DEEPSEEK_API_KEY', 'DAILY_REPLY_LIMIT', 'AUTO_SEND',
+    'GROQ_API_KEY', 'DAILY_REPLY_LIMIT', 'AUTO_SEND',
   ];
   const original = Object.fromEntries(keys.map((key) => [key, config[key]]));
   const originalFetch = globalThis.fetch;
@@ -290,7 +290,7 @@ test('concurrent inbound drafts consume one reply slot and preserve mailbox hist
     for (const key of keys.filter((key) => key.endsWith('_FILE') || key === 'DB_PATH')) {
       config[key] = path.join(dir, `${key}.db`);
     }
-    config.DEEPSEEK_API_KEY = '';
+    config.GROQ_API_KEY = '';
     config.DAILY_REPLY_LIMIT = 1;
     config.AUTO_SEND = false;
     globalThis.fetch = async () => { throw new Error('Unexpected network call'); };
@@ -319,7 +319,7 @@ test('concurrent sends dispatch each saved draft once', async (t) => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'spicecoast-concurrent-send-'));
   const keys = [
     'DB_PATH', 'DAILY_USAGE_FILE', 'REPLY_USAGE_FILE', 'LEADS_HISTORY_FILE',
-    'SEEN_PLACES_FILE', 'MAILBOX_HISTORY_FILE', 'OUTREACH_HISTORY_FILE', 'HOSTINGER_API_TOKEN', 'DEEPSEEK_API_KEY',
+    'SEEN_PLACES_FILE', 'MAILBOX_HISTORY_FILE', 'OUTREACH_HISTORY_FILE', 'HOSTINGER_API_TOKEN', 'GROQ_API_KEY',
     'NODE_ENV', 'ADMIN_EMAIL', 'ADMIN_PASSWORD_HASH',
   ];
   const original = Object.fromEntries(keys.map((key) => [key, config[key]]));
@@ -331,7 +331,7 @@ test('concurrent sends dispatch each saved draft once', async (t) => {
       config[key] = path.join(dir, `${key}.db`);
     }
     config.HOSTINGER_API_TOKEN = 'configured-test-token';
-    config.DEEPSEEK_API_KEY = '';
+    config.GROQ_API_KEY = '';
     config.NODE_ENV = 'development';
     config.ADMIN_EMAIL = '';
     config.ADMIN_PASSWORD_HASH = '';
@@ -408,8 +408,8 @@ test('concurrent sends dispatch each saved draft once', async (t) => {
     assert.equal(afterSendLeads.all_leads[0].coldMailDraft.status, 'sent');
     assert.equal(afterSendLeads.all_leads[0].coldMailDraft.subject, 'Spice partnership');
     assert.ok(afterSendLeads.all_leads[0].coldMailDraft.sentAt);
-    config.DEEPSEEK_API_KEY = 'test-only-no-network';
-    const aiClient = getDeepseekClient();
+    config.GROQ_API_KEY = 'test-only-no-network';
+    const aiClient = getGroqClient();
     const originalCreate = aiClient.chat.completions.create;
     let aiCalls = 0;
     aiClient.chat.completions.create = async () => { aiCalls++; throw new Error('AI must not be called for sent outreach'); };
@@ -422,7 +422,7 @@ test('concurrent sends dispatch each saved draft once', async (t) => {
       assert.equal(aiCalls, 0);
     } finally {
       aiClient.chat.completions.create = originalCreate;
-      config.DEEPSEEK_API_KEY = '';
+      config.GROQ_API_KEY = '';
     }
     const editSent = await originalFetch(`${baseUrl}/api/mailbox/update-draft`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -490,7 +490,7 @@ test('concurrent sends dispatch each saved draft once', async (t) => {
 test('POST /api/leads/generate-coldmail is idempotent and regenerates with force: true', async () => {
   const keys = [
     'DB_PATH', 'DAILY_USAGE_FILE', 'REPLY_USAGE_FILE', 'LEADS_HISTORY_FILE',
-    'SEEN_PLACES_FILE', 'MAILBOX_HISTORY_FILE', 'OUTREACH_HISTORY_FILE', 'HOSTINGER_API_TOKEN', 'DEEPSEEK_API_KEY',
+    'SEEN_PLACES_FILE', 'MAILBOX_HISTORY_FILE', 'OUTREACH_HISTORY_FILE', 'HOSTINGER_API_TOKEN', 'GROQ_API_KEY',
     'NODE_ENV', 'ADMIN_EMAIL', 'ADMIN_PASSWORD_HASH',
   ];
   const original = Object.fromEntries(keys.map((key) => [key, config[key]]));
@@ -504,7 +504,7 @@ test('POST /api/leads/generate-coldmail is idempotent and regenerates with force
     config.NODE_ENV = 'development';
     config.ADMIN_EMAIL = '';
     config.ADMIN_PASSWORD_HASH = '';
-    config.DEEPSEEK_API_KEY = 'test-key';
+    config.GROQ_API_KEY = 'test-key';
 
     saveLeadsHistory({
       leads: [{
@@ -521,7 +521,7 @@ test('POST /api/leads/generate-coldmail is idempotent and regenerates with force
     await new Promise((resolve) => server.once('listening', resolve));
     const baseUrl = `http://127.0.0.1:${server.address().port}`;
 
-    const aiClient = getDeepseekClient();
+    const aiClient = getGroqClient();
     const originalCreate = aiClient.chat.completions.create;
     let aiCalls = 0;
     aiClient.chat.completions.create = async () => {
@@ -549,7 +549,7 @@ test('POST /api/leads/generate-coldmail is idempotent and regenerates with force
       const data1 = await res1.json();
       assert.equal(data1.success, true);
       assert.equal(data1.draft.subject, 'AI Pitch #1');
-      assert.equal(data1.draft.source, 'deepseek');
+      assert.equal(data1.draft.source, 'groq');
       assert.equal(aiCalls, 1);
 
       // Second call (idempotent): should return cached draft without invoking AI
@@ -577,7 +577,7 @@ test('POST /api/leads/generate-coldmail is idempotent and regenerates with force
 
       // Fourth call simulating AI failure: fallback template tagged 'template_fallback'
       aiClient.chat.completions.create = async () => {
-        throw new Error('DeepSeek API unavailable');
+        throw new Error('Groq API unavailable');
       };
       const res4 = await originalFetch(`${baseUrl}/api/leads/generate-coldmail`, {
         method: 'POST',

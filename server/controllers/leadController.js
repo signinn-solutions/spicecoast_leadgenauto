@@ -9,7 +9,7 @@ import {
   withOutreachHistoryLock,
 } from '../services/storageService.js';
 import { executeLeadSearch, isHunterQuotaExceeded } from '../services/leadFinderService.js';
-import { generateColdEmail } from '../services/deepseekService.js';
+import { generateColdEmail } from '../services/groqService.js';
 
 export async function getStatus(req, res, next) {
   try {
@@ -212,8 +212,8 @@ export async function generateLeadColdMail(req, res, next) {
         draft: {
           subject: existingRecord.subject,
           body: existingRecord.body,
-          model: existingRecord.model || (existingRecord.source === 'live' ? 'deepseek' : 'Local template'),
-          source: existingRecord.draftSource || (existingRecord.model === 'Local template' ? 'template_fallback' : 'deepseek'),
+          model: existingRecord.model || (existingRecord.source === 'live' ? 'groq' : 'Local template'),
+          source: existingRecord.draftSource || (existingRecord.model === 'Local template' ? 'template_fallback' : 'groq'),
           fallbackReason: existingRecord.fallbackReason || '',
         },
         outreachRecord: existingRecord,
@@ -232,7 +232,7 @@ export async function generateLeadColdMail(req, res, next) {
 
     // Run AI call outside the mutex lock so multiple draft requests execute concurrently in parallel
     const draft = await generateColdEmail(leadObj, { useAI: force === true || savedLead.source === 'live', force: force === true });
-    const draftSource = draft.model === 'Local template' ? 'template_fallback' : 'deepseek';
+    const draftSource = draft.model === 'Local template' ? 'template_fallback' : (draft.provider || 'groq');
 
     // Atomically persist to outreach history under lock
     const outreachRecord = await withOutreachHistoryLock(() => {

@@ -1,4 +1,5 @@
 import config from '../config/env.js';
+import { getAiSettings } from '../services/aiProvider.js';
 import {
   loadReplyUsage,
   loadMailboxHistory,
@@ -46,10 +47,11 @@ export async function getMailboxStatus(req, res, next) {
       used_today: usedToday,
       remaining_today: Math.max(0, config.DAILY_REPLY_LIMIT - usedToday),
       date: today,
-      has_deepseek_key: Boolean(config.DEEPSEEK_API_KEY),
+      ai_provider: getAiSettings().label,
+      has_groq_key: Boolean(getAiSettings().apiKey),
       has_hostinger_token: Boolean(config.HOSTINGER_API_TOKEN),
       has_webhook_token: Boolean(config.HOSTINGER_WEBHOOK_BEARER_TOKEN),
-      deepseek_model: config.DEEPSEEK_MODEL,
+      groq_model: getAiSettings().model,
       send_endpoint: config.HOSTINGER_SEND_ENDPOINT,
       outreachStats: {
         total: outreach.length,

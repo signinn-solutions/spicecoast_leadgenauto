@@ -180,7 +180,7 @@ export default function OutreachView({
           ...existing,
           lead,
           draftState: "ready",
-          draftSource: existing.draftSource || (existing.source === "live" ? "deepseek" : "template_fallback"),
+          draftSource: existing.draftSource || (existing.source === "live" ? "groq" : "template_fallback"),
         };
       }
       const fresh = draftDataMap[lead.id];
@@ -189,7 +189,7 @@ export default function OutreachView({
           ...fresh,
           lead,
           draftState: "ready",
-          draftSource: fresh.draftSource || "deepseek",
+          draftSource: fresh.draftSource || "groq",
         };
       }
       if (lead.coldMailDraft) {
@@ -205,7 +205,7 @@ export default function OutreachView({
           body: lead.coldMailDraft.body || "",
           status: lead.coldMailDraft.status || "pending_review",
           draftState: "ready",
-          draftSource: lead.coldMailDraft.source || "deepseek",
+          draftSource: lead.coldMailDraft.source || "groq",
           lead,
         };
       }
@@ -656,7 +656,7 @@ export default function OutreachView({
                       style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 5 }}
                       onClick={() => handleRegenerateWithAI(item)}
                       disabled={isRegeneratingId === (item.leadId || item.id)}
-                      title="Try regenerating this draft with DeepSeek AI"
+                      title="Try regenerating this draft with AI"
                     >
                       {isRegeneratingId === (item.leadId || item.id) ? (
                         <Loader2 size={12} className="spin" />
@@ -680,7 +680,7 @@ export default function OutreachView({
                     <div className="lf-skeleton-line" style={{ width: "70%", height: 12, marginBottom: 14 }} />
                     <div className="lf-generating-hint">
                       <Sparkles size={13} className="spin text-amber" />
-                      <span>Synthesizing custom B2B export proposal with DeepSeek AI...</span>
+                      <span>Synthesizing custom B2B export proposal with AI...</span>
                     </div>
                   </div>
                 ) : isFailed ? (

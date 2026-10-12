@@ -423,7 +423,7 @@ export default function DiscoveryView({
                 </div>
                 <div className="lf-radar-step active">
                   <span className="lf-radar-dot pulse" />
-                  <span>Synthesizing DeepSeek cold outreach pitches</span>
+                  <span>Generating AI cold outreach pitches</span>
                 </div>
               </div>
             )}

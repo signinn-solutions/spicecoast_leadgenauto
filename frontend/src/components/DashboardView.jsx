@@ -266,7 +266,7 @@ export default function DashboardView({
               {outreachList.filter(isLiveOutreach).length}
             </div>
             <div className="lf-step-name">AI Drafts Synthesized</div>
-            <div className="lf-step-sub">DeepSeek Personalized Specs</div>
+            <div className="lf-step-sub">Personalized AI Drafts</div>
           </div>
 
           <div className="lf-step-arrow">&rarr;</div>

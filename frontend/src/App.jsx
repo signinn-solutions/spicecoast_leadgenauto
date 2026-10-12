@@ -64,10 +64,10 @@ export default function LeadFinderApp({ onLogout, currentUser = null }) {
     daily_limit: 30,
     used_today: 0,
     remaining_today: 30,
-    has_deepseek_key: false,
+    has_groq_key: false,
     has_hostinger_token: false,
     has_webhook_token: false,
-    deepseek_model: "deepseek-chat",
+    groq_model: "openai/gpt-oss-120b",
   });
   const [mailboxMessages, setMailboxMessages] = useState([]);
   const [outreachList, setOutreachList] = useState([]);

@@ -1,10 +1,14 @@
 import OpenAI from 'openai';
 import config from '../config/env.js';
+import { getAiSettings } from './aiProvider.js';
 import { SPICE_COAST_BRAND_CONTEXT } from './spiceCoastBrand.js';
+import { createGroqPacer } from './groqPacing.js';
 
-let deepseekClient = null;
+let groqClient = null;
+let clientIdentity = "";
 let aiUnavailableUntil = 0;
 let aiUnavailableReason = '';
+const reserveGroqTokens = createGroqPacer();
 
 export function isAiTemporarilyUnavailable() {
   return Date.now() < aiUnavailableUntil;
@@ -17,22 +21,36 @@ export function resetAiUnavailableState() {
 
 const textValue = (value, fallback) => typeof value === 'string' && value.trim() ? value.trim().slice(0, 2000) : fallback;
 
-export function getDeepseekClient() {
-  if (!config.DEEPSEEK_API_KEY) return null;
-  if (!deepseekClient) {
+export function getGroqClient() {
+  const settings = getAiSettings();
+  if (!settings.apiKey) return null;
+  const identity = `${settings.provider}:${settings.apiKey}:${settings.model}`;
+  if (!groqClient || clientIdentity !== identity) {
     try {
-      deepseekClient = new OpenAI({
-        apiKey: config.DEEPSEEK_API_KEY,
-        baseURL: 'https://api.deepseek.com',
+      groqClient = new OpenAI({
+        apiKey: settings.apiKey,
+        baseURL: settings.baseURL,
         timeout: 45000,
         maxRetries: 0,
       });
+      clientIdentity = identity;
+      resetAiUnavailableState();
+      if (settings.provider === 'groq') {
+        const create = groqClient.chat.completions.create.bind(groqClient.chat.completions);
+        groqClient.chat.completions.create = async (request) => {
+          const payload = { ...request, reasoning_effort: 'low', max_tokens: Math.max(request.max_tokens || 0, 1500) };
+          const reconcile = await reserveGroqTokens(payload);
+          const response = await create(payload);
+          reconcile(response.usage?.total_tokens);
+          return response;
+        };
+      }
     } catch (e) {
-      console.warn(`[DeepSeek Warning] Failed to initialize client: ${e.message}`);
+      console.warn(`[${getAiSettings().label} Warning] Failed to initialize client: ${e.message}`);
       return null;
     }
   }
-  return deepseekClient;
+  return groqClient;
 }
 
 /**
@@ -49,10 +67,10 @@ export async function generateColdEmail(lead = {}, { useAI = true, force = false
   const country = lead.country || (lead.address ? lead.address.split(',').pop()?.trim() : '') || '';
   const businessType = lead.businessType || 'Spice Import & Distribution';
 
-  const client = useAI && !isAiTemporarilyUnavailable() ? getDeepseekClient() : null;
-  let fallbackReason = !useAI ? 'AI generation is disabled for this lead.' : !config.DEEPSEEK_API_KEY ? 'DeepSeek API key is not configured.' : isAiTemporarilyUnavailable() ? aiUnavailableReason : 'DeepSeek returned an unusable draft.';
+  const client = useAI && !isAiTemporarilyUnavailable() ? getGroqClient() : null;
+  let fallbackReason = !useAI ? 'AI generation is disabled for this lead.' : !getAiSettings().apiKey ? `${getAiSettings().label} API key is not configured.` : isAiTemporarilyUnavailable() ? aiUnavailableReason : `${getAiSettings().label} returned an unusable draft.`;
 
-  if (useAI && client && config.DEEPSEEK_API_KEY) {
+  if (useAI && client && getAiSettings().apiKey) {
     try {
       const prompt = `You write outreach for Spice Coast's export team.
 
@@ -83,7 +101,7 @@ Output Format: Provide strictly valid JSON with keys "subject" and "body". Do no
 
       for (let attempt = 0; attempt < 2; attempt++) {
       const response = await client.chat.completions.create({
-        model: config.DEEPSEEK_MODEL || 'deepseek-chat',
+        model: getAiSettings().model,
         messages: [
           {
             role: 'system',
@@ -93,6 +111,7 @@ Output Format: Provide strictly valid JSON with keys "subject" and "body". Do no
         ],
         response_format: { type: 'json_object' },
         max_tokens: 1500,
+        ...(getAiSettings().provider === 'groq' ? { reasoning_effort: 'low' } : {}),
         temperature: 0.7,
       });
 
@@ -103,27 +122,28 @@ Output Format: Provide strictly valid JSON with keys "subject" and "body". Do no
           const parsed = JSON.parse(jsonMatch[0]);
           if (typeof parsed.subject === 'string' && parsed.subject.trim() && typeof parsed.body === 'string' && parsed.body.trim()) {
             return {
-              model: config.DEEPSEEK_MODEL,
+              model: getAiSettings().model,
+              provider: getAiSettings().provider,
               subject: parsed.subject.trim(),
               body: parsed.body.trim(),
             };
           }
         }
       } catch (err) {
-        console.warn('[DeepSeek ColdMail JSON Parse Issue]:', err.message);
+        console.warn(`[${getAiSettings().label} ColdMail JSON Parse Issue]:`, err.message);
       }
-      fallbackReason = response.choices?.[0]?.finish_reason === 'length' ? 'DeepSeek response was truncated. Try regenerating the draft.' : 'DeepSeek returned empty or invalid draft JSON. Try regenerating the draft.';
+      fallbackReason = response.choices?.[0]?.finish_reason === 'length' ? `${getAiSettings().label} response was truncated. Try regenerating the draft.` : `${getAiSettings().label} returned empty or invalid draft JSON. Try regenerating the draft.`;
       }
     } catch (e) {
       const errMsg = e.message || String(e);
-      fallbackReason = e.status === 401 ? 'DeepSeek rejected the API key. Update it in the server configuration.' : e.status === 402 ? 'DeepSeek account balance is insufficient. Add credit and retry.' : e.status === 429 ? 'DeepSeek rate limit reached. Wait briefly and retry.' : e.status === 404 ? 'The configured DeepSeek model was not found. Check DEEPSEEK_MODEL.' : /timeout|timed out/i.test(errMsg) ? 'DeepSeek generation timed out. Try again.' : 'DeepSeek could not generate a draft. Check the connection and retry.';
+      fallbackReason = e.status === 401 ? `${getAiSettings().label} rejected the API key. Update it in the server configuration.` : e.status === 402 ? `${getAiSettings().label} account balance is insufficient. Add credit and retry.` : e.status === 429 ? `${getAiSettings().label} rate limit reached. Wait briefly and retry.` : e.status === 404 ? `The configured ${getAiSettings().label} model was not found. Check AI model configuration.` : /timeout|timed out/i.test(errMsg) ? `${getAiSettings().label} generation timed out. Try again.` : `${getAiSettings().label} could not generate a draft. Check the connection and retry.`;
       const isQuotaOrAuth = e.status === 402 || e.status === 401 || errMsg.includes('402') || errMsg.toLowerCase().includes('insufficient balance') || errMsg.toLowerCase().includes('quota');
       if (isQuotaOrAuth) {
         aiUnavailableUntil = Date.now() + 60000;
         aiUnavailableReason = fallbackReason;
-        console.warn(`[DeepSeek Circuit Breaker]: Tripped (${errMsg}). Fast-failing with local fallback template for 60s.`);
+        console.warn(`[${getAiSettings().label} Circuit Breaker]: Tripped (${errMsg}). Fast-failing with local fallback template for 60s.`);
       } else {
-        console.warn(`[DeepSeek ColdMail API Error]: ${errMsg}. Using fallback template.`);
+        console.warn(`[${getAiSettings().label} ColdMail API Error]: ${errMsg}. Using fallback template.`);
       }
     }
   }
@@ -162,10 +182,10 @@ export async function extractMetadataAndDraftReply(
   receiverName = '',
   { useAI = true } = {}
 ) {
-  const client = useAI ? getDeepseekClient() : null;
+  const client = useAI ? getGroqClient() : null;
   const receiverEffective = receiverEmail || config.SENDER_MAILBOX;
 
-  if (useAI && client && config.DEEPSEEK_API_KEY) {
+  if (useAI && client && getAiSettings().apiKey) {
     try {
       const prompt = `You draft replies for Spice Coast's export team.
 
@@ -218,7 +238,7 @@ Output strictly JSON:
 `;
 
       const response = await client.chat.completions.create({
-        model: config.DEEPSEEK_MODEL || 'deepseek-chat',
+        model: getAiSettings().model,
         messages: [
           {
             role: 'system',
@@ -236,7 +256,8 @@ Output strictly JSON:
         const parsed = JSON.parse(jsonMatch[0]);
         if (typeof parsed.reply === 'string' && parsed.reply.trim()) {
           return {
-            model: config.DEEPSEEK_MODEL,
+            model: getAiSettings().model,
+              provider: getAiSettings().provider,
             reply: parsed.reply.trim(),
             metadata: {
               buyerName: textValue(parsed.buyerName, senderName || senderEmail.split('@')[0]),
@@ -255,7 +276,7 @@ Output strictly JSON:
         }
       }
     } catch (e) {
-      console.warn(`[DeepSeek Metadata Extraction Error]: ${e.message}`);
+      console.warn(`[${getAiSettings().label} Metadata Extraction Error]: ${e.message}`);
     }
   }
 
@@ -348,16 +369,16 @@ export async function draftReply(subject, body, senderName = '') {
 
 /**
  * Classifies an incoming reply's sentiment/intent as 'positive', 'neutral', or 'negative'.
- * Uses DeepSeek chat completion when configured, with accurate rule-based heuristics as fallback.
+ * Uses ${getAiSettings().label} chat completion when configured, with accurate rule-based heuristics as fallback.
  */
 export async function classifyReplySentiment(subject = '', body = '') {
-  const client = getDeepseekClient();
+  const client = getGroqClient();
   const textCombined = `${subject} ${body}`.trim();
 
-  if (client && config.DEEPSEEK_API_KEY && textCombined) {
+  if (client && getAiSettings().apiKey && textCombined) {
     try {
       const response = await client.chat.completions.create({
-        model: config.DEEPSEEK_MODEL || 'deepseek-chat',
+        model: getAiSettings().model,
         messages: [
           {
             role: 'system',
@@ -382,7 +403,7 @@ export async function classifyReplySentiment(subject = '', body = '') {
         }
       }
     } catch (err) {
-      console.warn(`[DeepSeek Sentiment Error]: ${err.message}. Using heuristic fallback.`);
+      console.warn(`[${getAiSettings().label} Sentiment Error]: ${err.message}. Using heuristic fallback.`);
     }
   }
 

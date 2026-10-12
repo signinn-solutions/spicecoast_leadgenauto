@@ -1,5 +1,5 @@
 import { LIFECYCLE_CONFIG } from '../config/mailLifecycleConfig.js';
-import { classifyReplySentiment } from './deepseekService.js';
+import { classifyReplySentiment } from './groqService.js';
 
 /**
  * Checks if text contains any buying-intent keywords.
@@ -31,7 +31,7 @@ export function isFastReply(outreachSentAt, replyReceivedAt) {
  * 2. Replied within 24 hours: +2
  * 3. Buying-intent keywords present: +2
  * 4. More than one back-and-forth exchange: +2
- * 5. Positive sentiment classified by DeepSeek: +2
+ * 5. Positive sentiment classified by Groq: +2
  *
  * Threshold: Score >= 6 is classified as "hot".
  */
@@ -71,7 +71,7 @@ export async function computeLeadEngagementScore(lead = {}, inboundMessages = []
   const multiExchangeEarned =
     inboundMessages.length >= 2 || (outboundMessages.length >= 2 && inboundMessages.length >= 1) || totalThreadExchanges >= 3;
 
-  // Signal 5: DeepSeek sentiment classification is positive (+2)
+  // Signal 5: Groq sentiment classification is positive (+2)
   let positiveSentimentEarned = false;
   if (hasInbound) {
     // Check if sentiment was already recorded in metadata
@@ -83,7 +83,7 @@ export async function computeLeadEngagementScore(lead = {}, inboundMessages = []
       const lower = existingSentiment.toLowerCase();
       positiveSentimentEarned = lower === 'positive' || lower === 'urgent';
     } else {
-      // Classify using DeepSeek or heuristic
+      // Classify using Groq or heuristic
       const sentiment = await classifyReplySentiment(firstInbound.subject || '', firstInbound.body || '');
       positiveSentimentEarned = sentiment === 'positive';
       firstInbound.metadata = firstInbound.metadata || {};
@@ -140,7 +140,7 @@ export async function computeLeadEngagementScore(lead = {}, inboundMessages = []
       points: 2,
       earned: positiveSentimentEarned,
       icon: 'Sparkles',
-      description: 'DeepSeek classified reply tone as commercially receptive',
+      description: 'Groq classified reply tone as commercially receptive',
     },
   ];
 

@@ -79,13 +79,13 @@ export default function SystemHealthView({
         : "Active as automatic fallback when Hunter.io has no hits or reaches quota limits.",
     },
     {
-      name: `DeepSeek AI (${mailboxStatus.deepseek_model || "deepseek-chat"})`,
+      name: `${mailboxStatus.ai_provider || "AI"} (${mailboxStatus.groq_model || ""})`,
       role: "Autonomous Proposal Synthesis & Procurement Triage",
-      active: mailboxStatus.has_deepseek_key,
-      statusLabel: mailboxStatus.has_deepseek_key ? "Configured" : "Not configured",
-      statusColor: mailboxStatus.has_deepseek_key ? "green" : "gold",
-      details: mailboxStatus.has_deepseek_key
-        ? "Active DeepSeek API Token"
+      active: mailboxStatus.has_groq_key,
+      statusLabel: mailboxStatus.has_groq_key ? "Configured" : "Not configured",
+      statusColor: mailboxStatus.has_groq_key ? "green" : "gold",
+      details: mailboxStatus.has_groq_key
+        ? "AI API key configured"
         : "Missing key (uses built-in export templates)",
     },
     {

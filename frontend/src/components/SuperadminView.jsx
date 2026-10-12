@@ -219,7 +219,7 @@ export default function SuperadminView({ currentUser, onNotify, mailboxStatus = 
     providerTestRef.current = true;
     setTestingAll(true);
     try {
-      for (const service of ["google_places", "hunter", "deepseek", "hostinger"]) {
+      for (const service of ["google_places", "hunter", "groq", "hostinger"]) {
         await runProviderTest(service);
       }
     } finally {
@@ -1294,27 +1294,27 @@ export default function SuperadminView({ currentUser, onNotify, mailboxStatus = 
               </div>
             </div>
 
-            {/* DeepSeek AI */}
+            {/* Groq AI */}
             <div className="lf-panel" style={{ padding: "16px", border: "1px solid var(--border-subtle)" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "10px" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                   <Bot size={18} className="text-emerald" />
                   <div>
-                    <div style={{ fontWeight: "700", fontSize: "14px", color: "var(--text-main)" }}>DeepSeek AI Engine</div>
+                    <div style={{ fontWeight: "700", fontSize: "14px", color: "var(--text-main)" }}>{healthData?.integrations?.groq_ai?.label || 'AI'} Draft Engine</div>
                     <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>Outreach Synthesis & Inbound Intent Extraction</div>
                   </div>
                 </div>
-                <span className={`lf-badge-pill ${healthData?.integrations?.deepseek_ai?.configured ? "emerald" : "red"}`}>
-                  {healthData?.integrations?.deepseek_ai?.configured ? "Configured" : "Missing Key"}
+                <span className={`lf-badge-pill ${healthData?.integrations?.groq_ai?.configured ? "emerald" : "red"}`}>
+                  {healthData?.integrations?.groq_ai?.configured ? "Configured" : "Missing Key"}
                 </span>
               </div>
               <p style={{ fontSize: "12px", color: "var(--text-secondary)", margin: "8px 0" }}>
-                {healthData?.integrations?.deepseek_ai?.details}
+                {healthData?.integrations?.groq_ai?.details}
               </p>
-              {testResults.deepseek && (
+              {testResults.groq && (
                 <div style={{ padding: "8px 10px", background: "var(--bg-surface-2)", borderRadius: "var(--radius-sm)", fontSize: "11px", margin: "8px 0" }}>
-                  <div style={{ color: testResults.deepseek.ok ? "#10b981" : "#ef4444", fontWeight: "600" }}>
-                    {testResults.deepseek.ok ? `Verified in ${testResults.deepseek.latency}ms` : `Failed: ${testResults.deepseek.error}`}
+                  <div style={{ color: testResults.groq.ok ? "#10b981" : "#ef4444", fontWeight: "600" }}>
+                    {testResults.groq.ok ? `Verified in ${testResults.groq.latency}ms` : `Failed: ${testResults.groq.error}`}
                   </div>
                 </div>
               )}
@@ -1322,11 +1322,11 @@ export default function SuperadminView({ currentUser, onNotify, mailboxStatus = 
                 <button
                   type="button"
                   className="lf-btn-secondary sm"
-                  onClick={() => handleTestConnection("deepseek")}
+                  onClick={() => handleTestConnection("groq")}
                   disabled={testingAll || testingService !== null}
                 >
-                  {testingService === "deepseek" ? <Loader2 size={12} className="spin" /> : <Bot size={12} />}
-                  <span>Test DeepSeek API</span>
+                  {testingService === "groq" ? <Loader2 size={12} className="spin" /> : <Bot size={12} />}
+                  <span>Test AI API</span>
                 </button>
               </div>
             </div>

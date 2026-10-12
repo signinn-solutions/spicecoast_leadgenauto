@@ -22,7 +22,7 @@ test('admin actions persist changes, report failures and revoke changed user ses
     config.HOSTINGER_API_TOKEN = '';
     config.GOOGLE_API_KEY = '';
     config.HUNTER_API_KEY = '';
-    config.DEEPSEEK_API_KEY = '';
+    config.GROQ_API_KEY = '';
     await createUser({ name: 'Test Administrator', email: 'operator@example.test', password: 'Operator-test-password', role: 'superadmin' });
     server = app.listen(0, '127.0.0.1');
     await new Promise(resolve => server.once('listening', resolve));
@@ -64,7 +64,7 @@ test('admin actions persist changes, report failures and revoke changed user ses
 
     // No external provider calls, messages, or production user mutations.
     globalThis.fetch = async () => { throw new Error('External requests prohibited in this test'); };
-    for (const service of ['google_places', 'hunter', 'deepseek', 'hostinger']) {
+    for (const service of ['google_places', 'hunter', 'groq', 'hostinger']) {
       const response = await request('/api/admin/system/test-connection', 'POST', { service });
       assert.equal(response.status, 400);
       assert.equal((await response.json()).ok, false);

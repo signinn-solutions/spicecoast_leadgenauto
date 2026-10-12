@@ -243,7 +243,7 @@ export default function LeadDetailDrawer({
             <div className="lf-pitch-box-header">
               <div className="lf-pitch-title-wrap">
                 <Sparkles size={16} className="text-amber" />
-                <span className="lf-pitch-title">DeepSeek AI B2B Cold Pitch</span>
+                <span className="lf-pitch-title">AI B2B Cold Pitch</span>
               </div>
               {lead.coldMailDraft && (
                 <span
@@ -270,7 +270,7 @@ export default function LeadDetailDrawer({
                   {isGeneratingPitch ? (
                     <>
                       <Loader2 size={15} className="spin" />
-                      <span>Synthesizing Proposal with DeepSeek...</span>
+                      <span>Synthesizing Proposal with AI...</span>
                     </>
                   ) : (
                     <>
