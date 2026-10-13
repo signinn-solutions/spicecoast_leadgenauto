@@ -1,4 +1,5 @@
 import config from '../config/env.js';
+import { resetOperationalData } from '../services/resetData.js';
 import { getAiSettings } from '../services/aiProvider.js';
 import { requestHunter } from '../services/hunterClient.js';
 import {
@@ -37,6 +38,14 @@ export async function listUsersHandler(req, res, next) {
   } catch (err) {
     next(err);
   }
+}
+
+export async function resetDataHandler(req, res, next) {
+  try {
+    const { scope, confirmation } = req.body || {};
+    if (!['leads', 'all'].includes(scope) || confirmation !== (scope === 'all' ? 'RESET DATA' : 'RESET LEADS')) return res.status(400).json({ error: 'Choose a reset scope and type the exact confirmation phrase.' });
+    return res.json(await resetOperationalData(scope, req.dashboardSession.email));
+  } catch (error) { next(error); }
 }
 
 export async function createUserHandler(req, res, next) {

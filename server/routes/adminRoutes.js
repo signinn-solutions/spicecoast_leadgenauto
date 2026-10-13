@@ -2,6 +2,7 @@ import express from 'express';
 import { requireDashboardAuth, requireSuperadmin } from '../middleware/dashboardAuth.js';
 import {
   listUsersHandler,
+  resetDataHandler,
   createUserHandler,
   updateUserHandler,
   deleteUserHandler,
@@ -26,6 +27,7 @@ router.delete('/users/:id', deleteUserHandler);
 
 // System Health & Monitoring
 router.get('/system/health', getSystemHealthHandler);
+router.post('/system/reset-data', resetDataHandler);
 router.post('/system/engine', toggleEngineHandler);
 router.post('/system/reset-hunter-quota', resetHunterQuotaHandler);
 router.post('/system/reset-daily-usage', resetDailyUsageHandler);
