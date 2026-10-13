@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import Database from 'better-sqlite3';
+import Database from './sqliteDatabase.js';
 import config from '../config/env.js';
 
 const datasets = {

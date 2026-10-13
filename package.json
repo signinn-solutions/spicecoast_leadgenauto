@@ -19,7 +19,6 @@
     "backup": "node server/scripts/backup.js"
   },
   "dependencies": {
-    "better-sqlite3": "^12.2.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
@@ -36,6 +35,6 @@
     "vite": "^6.2.0"
   },
   "engines": {
-    "node": "22.x || 24.x"
+    "node": "^22.16.0 || 24.x"
   }
 }

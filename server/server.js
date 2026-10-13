@@ -17,8 +17,11 @@ async function startServer(port) {
     console.warn('⚠️  [User Initialization Warning]:', err.message);
   }
 
-  const server = app.listen(port, config.HOST, () => {
-    console.log(`\n🌶️  SpiceCoast Express API Server running on http://${config.HOST}:${port}`);
+  const listenTarget = typeof port === 'string' ? { path: port } : { port, host: config.HOST };
+  const server = app.listen(listenTarget, () => {
+    const address = server.address();
+    const actualPort = typeof address === "object" && address ? address.port : port;
+    console.log(`\n🌶️  SpiceCoast Express API Server running on http://${config.HOST}:${actualPort}`);
     console.log(`📡  Health Check: http://${config.HOST}:${port}/health`);
     console.log(`📧  Hostinger Webhook: http://${config.HOST}:${port}/webhook`);
     console.log(`📮  Mailbox: ${config.SENDER_MAILBOX} | Auto-Send: ${config.AUTO_SEND}`);

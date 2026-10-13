@@ -10,9 +10,11 @@ process.env.TZ ||= 'Asia/Kolkata';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const rootDir = path.resolve(__dirname, '../..');
+const rawPort = process.env.PORT || '5000';
+const numericPort = Number(rawPort);
 
 export const config = {
-  PORT: parseInt(process.env.PORT || '5000', 10),
+  PORT: Number.isFinite(numericPort) ? numericPort : rawPort,
   HOST: process.env.HOST || '0.0.0.0',
   CORS_ORIGIN: process.env.CORS_ORIGIN || '*',
   NODE_ENV: process.env.NODE_ENV || 'development',
