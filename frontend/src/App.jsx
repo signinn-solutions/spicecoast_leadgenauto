@@ -402,6 +402,7 @@ export default function LeadFinderApp({ onLogout, currentUser = null }) {
           name: lead.name,
           email: lead.email,
           force,
+          async: true,
           city: lead.city || city,
           country: lead.country || country,
           businessType: lead.businessType || businessType,
@@ -410,7 +411,20 @@ export default function LeadFinderApp({ onLogout, currentUser = null }) {
       });
 
       if (res.ok) {
-        const data = await res.json();
+        let data = await res.json();
+        if (res.status === 202 && data.jobId) {
+          const jobId = data.jobId;
+          const deadline = Date.now() + 10 * 60 * 1000;
+          while (true) {
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            const progressResponse = await fetch(`/api/jobs/${encodeURIComponent(jobId)}`, { signal: AbortSignal.timeout(10000) });
+            const progress = await progressResponse.json();
+            if (!progressResponse.ok) throw new Error(progress.error || 'Draft job could not be read.');
+            if (progress.status === 'failed') throw new Error(progress.error || 'Draft generation failed.');
+            if (progress.status === 'completed') { data = progress.result; break; }
+            if (Date.now() > deadline) throw new Error('Draft is still queued. Refresh Outreach later to check for the saved draft.');
+          }
+        }
         const draft = data.draft;
 
         // Update lead in memory without mutating a React state object.

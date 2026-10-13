@@ -187,7 +187,35 @@ export function streamJobProgress(req, res) {
   });
 }
 
+const activeDraftJobs = new Map();
+
 export async function generateLeadColdMail(req, res, next) {
+  if (req.body?.async !== true) return generateLeadColdMailSync(req, res, next);
+  const { leadId, email } = req.body || {};
+  const lead = loadLeadsHistory().leads?.find(item => item.id === leadId);
+  if (!lead || lead.email !== email || !['deliverable', 'valid', 'mx_valid'].includes(lead.emailStatus)) return res.status(400).json({ error: 'A saved lead with a matching email is required.' });
+  const key = `${leadId}:${email}`;
+  const active = activeDraftJobs.get(key);
+  if (active) return res.status(202).json({ jobId: active, status: 'running' });
+  const job = jobManager.createJob('coldmail', { leadId });
+  activeDraftJobs.set(key, job.id);
+  res.status(202).json({ jobId: job.id, status: 'running' });
+  // Provider waits and token pacing happen outside the HTTP response lifetime.
+  setImmediate(async () => {
+    try {
+      jobManager.updateProgress(job.id, { message: 'Preparing AI draft...', percent: 10 });
+      const response = { code: 200, status(code) { this.code = code; return this; }, json(payload) {
+        if (this.code >= 400) jobManager.failJob(job.id, new Error(payload.error || 'Draft generation failed.'));
+        else jobManager.completeJob(job.id, payload);
+        return this;
+      } };
+      await generateLeadColdMailSync(req, response, error => jobManager.failJob(job.id, error));
+    } catch (error) { jobManager.failJob(job.id, error); }
+    finally { activeDraftJobs.delete(key); }
+  });
+}
+
+async function generateLeadColdMailSync(req, res, next) {
   try {
     const { leadId, email, force } = req.body || {};
     const savedLead = loadLeadsHistory().leads?.find((lead) => lead.id === leadId);

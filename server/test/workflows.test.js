@@ -580,6 +580,30 @@ test('POST /api/leads/generate-coldmail is idempotent and regenerates with force
       assert.equal(data3.draft.subject, 'AI Pitch #2');
       assert.equal(aiCalls, 2);
 
+      // Background drafts return before a slow provider, deduplicate, then persist.
+      let releaseDraft;
+      aiClient.chat.completions.create = () => new Promise(resolve => { releaseDraft = resolve; });
+      const background = await originalFetch(`${baseUrl}/api/leads/generate-coldmail`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ leadId: 'test-lead-1', email: 'info@hanseatic-spice.de', force: true, async: true }),
+      });
+      assert.equal(background.status, 202);
+      const queued = await background.json();
+      const duplicate = await originalFetch(`${baseUrl}/api/leads/generate-coldmail`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ leadId: 'test-lead-1', email: 'info@hanseatic-spice.de', force: true, async: true }),
+      });
+      assert.equal((await duplicate.json()).jobId, queued.jobId);
+      releaseDraft({ choices: [{ message: { content: JSON.stringify({ subject: 'Background pitch', body: 'Catalog invitation' }) } }] });
+      let completed;
+      for (let attempt = 0; attempt < 20; attempt++) {
+        completed = await (await originalFetch(`${baseUrl}/api/jobs/${queued.jobId}`)).json();
+        if (completed.status === 'completed') break;
+        await new Promise(resolve => setTimeout(resolve, 10));
+      }
+      assert.equal(completed.status, 'completed');
+      assert.equal(completed.result.draft.subject, 'Background pitch');
+
       // Fourth call simulating AI failure: fallback template tagged 'template_fallback'
       aiClient.chat.completions.create = async () => {
         throw new Error('Groq API unavailable');
