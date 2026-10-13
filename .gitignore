@@ -1,6 +1,5 @@
 # Node & Build
 node_modules/
-dist/
 
 # Python
 __pycache__/
@@ -17,6 +16,9 @@ ENV/
 .env
 .env.*
 !.env.example
+*.env.txt
+*.env
+
 
 # IDE & OS
 .DS_Store

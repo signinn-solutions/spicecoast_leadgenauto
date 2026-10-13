@@ -9,6 +9,7 @@ export default defineConfig(({ mode }) => {
     root: 'frontend',
     plugins: [react()],
     build: {
+      target: 'es2022',
       outDir: '../dist',
       emptyOutDir: true,
     },

@@ -35,6 +35,12 @@
     "vite": "^6.2.0"
   },
   "engines": {
-    "node": "^22.16.0 || 24.x"
+    "node": ">=18.0.0"
+  },
+  "overrides": {
+    "proxy-addr": "^2.0.8",
+    "shell-quote": "^1.11.0",
+    "source-map-js": "^1.2.2",
+    "esbuild": "^0.28.1"
   }
 }

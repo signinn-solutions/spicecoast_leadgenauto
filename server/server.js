@@ -17,17 +17,22 @@ async function startServer(port) {
     console.warn('⚠️  [User Initialization Warning]:', err.message);
   }
 
-  const listenTarget = typeof port === 'string' ? { path: port } : { port, host: config.HOST };
-  const server = app.listen(listenTarget, () => {
-    const address = server.address();
-    const actualPort = typeof address === "object" && address ? address.port : port;
-    console.log(`\n🌶️  SpiceCoast Express API Server running on http://${config.HOST}:${actualPort}`);
-    console.log(`📡  Health Check: http://${config.HOST}:${port}/health`);
-    console.log(`📧  Hostinger Webhook: http://${config.HOST}:${port}/webhook`);
-    console.log(`📮  Mailbox: ${config.SENDER_MAILBOX} | Auto-Send: ${config.AUTO_SEND}`);
-    console.log(`🤖  AI Model: ${config.GROQ_MODEL}`);
-    console.log(`🌍  Environment: ${config.NODE_ENV}\n`);
-  });
+  const isNamedPipeOrSocket = typeof port === 'string' && isNaN(Number(port));
+  const server = isNamedPipeOrSocket
+    ? app.listen(port, () => {
+        console.log(`\n🌶️  SpiceCoast Express API Server running on socket/pipe: ${port}`);
+        console.log(`📡  Health Check: mounted on socket`);
+        console.log(`📮  Mailbox: ${config.SENDER_MAILBOX} | Auto-Send: ${config.AUTO_SEND}`);
+        console.log(`🌍  Environment: ${config.NODE_ENV}\n`);
+      })
+    : app.listen(port, config.HOST, () => {
+        console.log(`\n🌶️  SpiceCoast Express API Server running on http://${config.HOST}:${port}`);
+        console.log(`📡  Health Check: http://${config.HOST}:${port}/health`);
+        console.log(`📧  Hostinger Webhook: http://${config.HOST}:${port}/webhook`);
+        console.log(`📮  Mailbox: ${config.SENDER_MAILBOX} | Auto-Send: ${config.AUTO_SEND}`);
+        console.log(`🤖  AI Model: ${config.GROQ_MODEL}`);
+        console.log(`🌍  Environment: ${config.NODE_ENV}\n`);
+      });
 
   server.on('error', (err) => {
     if (err.code === 'EADDRINUSE') {
@@ -62,6 +67,7 @@ async function startServer(port) {
 }
 
 startServer(config.PORT).catch(err => {
-  console.error('Startup failed:', err.message);
+  console.error('❌ Startup failed:', err.message);
+  if (err.stack) console.error(err.stack);
   process.exitCode = 1;
 });
