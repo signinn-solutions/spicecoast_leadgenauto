@@ -1,5 +1,6 @@
 import config from '../config/env.js';
 import { resetOperationalData } from '../services/resetData.js';
+import { jobManager } from '../services/jobManager.js';
 import { getAiSettings } from '../services/aiProvider.js';
 import { requestHunter } from '../services/hunterClient.js';
 import {
@@ -44,6 +45,7 @@ export async function resetDataHandler(req, res, next) {
   try {
     const { scope, confirmation } = req.body || {};
     if (!['leads', 'all'].includes(scope) || confirmation !== (scope === 'all' ? 'RESET DATA' : 'RESET LEADS')) return res.status(400).json({ error: 'Choose a reset scope and type the exact confirmation phrase.' });
+    if ([...jobManager.jobs.values()].some(job => ['pending', 'running'].includes(job.status))) return res.status(409).json({ error: 'Wait for active searches and draft jobs to finish before resetting data.' });
     return res.json(await resetOperationalData(scope, req.dashboardSession.email));
   } catch (error) { next(error); }
 }

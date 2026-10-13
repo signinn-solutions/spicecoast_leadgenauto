@@ -1135,6 +1135,7 @@ export default function LeadFinderApp({ onLogout, currentUser = null }) {
               currentUser={currentUser}
               onNotify={(notice) => {
                 setNotice(notice);
+                if (notice.title === 'Data Reset') { setOutreachQueueLeads([]); setSelectedLead(null); setCurrentResults([]); sessionStorage.removeItem('spicecoast_outreach_queue'); refreshAffected(['status', 'leads', 'outreach', 'messages', 'lifecycle', 'mailbox'], { reload: false }); }
                 if (notice.title === 'User Deleted') refreshAffected(['leads', 'outreach', 'messages', 'lifecycle'], { reload: false });
               }}
               mailboxStatus={mailboxStatus}

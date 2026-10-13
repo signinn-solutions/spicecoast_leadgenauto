@@ -365,7 +365,6 @@ export function getSystemMetrics() {
       externalMb: (mem.external / 1024 / 1024).toFixed(1),
     },
     database: {
-      path: path.resolve(config.DB_PATH),
       path: dbFile,
       sizeBytes: dbSize,
       sizeFormatted: `${(dbSize / 1024 / 1024).toFixed(2)} MB`,

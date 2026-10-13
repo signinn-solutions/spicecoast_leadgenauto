@@ -1,3 +1,4 @@
+import DataResetControl from './DataResetControl.jsx';
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import {
   ShieldAlert,
@@ -921,6 +922,7 @@ export default function SuperadminView({ currentUser, onNotify, mailboxStatus = 
               </div>
             </div>
 
+            <DataResetControl databasePath={healthData?.system?.database?.path} onNotify={onNotify} onComplete={() => refreshAdminAfterAction(["health", "users", "audit"])} />
             {/* Quick Diagnostic Shortcuts Panel */}
             <div className="lf-panel" style={{ padding: "20px" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "14px" }}>
