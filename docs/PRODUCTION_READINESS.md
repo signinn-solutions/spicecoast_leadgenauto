@@ -7,7 +7,7 @@ The confirmed code blockers identified in the audit have been patched. Deploymen
 - Removed Render configuration and obsolete standalone System Health UI.
 - Updated optional Docker settings to Groq and the required admin/mailbox settings.
 - Production startup validates required credentials and rejects active seeded development passwords. Development accounts are never created in production.
-- Production passwords require at least 14 characters when creating or updating users.
+- Production passwords require at least 8 characters when creating or updating users.
 - Cold outreach, reviewed replies and follow-ups persist send-attempt state before contacting the provider. Uncertain or accepted attempts block retries. Draft regeneration cannot erase these protections.
 - Follow-up templates no longer assert unconfirmed stock/grades; sent follow-up history retains the dispatched subject and body.
 - Hostinger connection check now verifies token and sender resource access rather than reporting configuration alone.

@@ -32,12 +32,18 @@ let seeded = false;
 export async function seedDefaultUsers() {
   if (config.NODE_ENV === 'production') {
     const db = getDatabase();
+    if (config.ADMIN_EMAIL && /^scrypt:[a-f0-9]{32}:[a-f0-9]{128}$/.test(config.ADMIN_PASSWORD_HASH)) {
+      db.prepare(`INSERT OR IGNORE INTO users (id,email,password_hash,name,role,status,active,version,daily_lead_limit,notes)
+        VALUES (?, ?, ?, ?, 'superadmin', 'active', 1, 1, -1, ?)`)
+        .run('usr_configured_superadmin', config.ADMIN_EMAIL.toLowerCase(), config.ADMIN_PASSWORD_HASH, 'Signinn SuperAdmin', 'Provisioned from explicit administrator configuration');
+    }
     // Existing installations must rotate seeded credentials before going public.
     for (const [email, password] of [
       ['admin@signinn.in', 'Admin@Signinn123'],
       ['admin@thespicecoast.com', 'SpiceCoast_Admin_c3031b5744c12df9!'],
     ]) {
       const user = db.prepare('SELECT password_hash, status FROM users WHERE LOWER(email) = ?').get(email);
+      if (email === config.ADMIN_EMAIL?.toLowerCase() && user?.password_hash === config.ADMIN_PASSWORD_HASH) continue;
       if (user?.status === 'active' && await verifyUserPassword(password, user.password_hash)) {
         throw new Error('An active account still uses a development default password. Change its password or suspend it before production startup.');
       }
@@ -132,8 +138,8 @@ export async function createUser({ name, email, password, role = 'user', created
     err.statusCode = 400;
     throw err;
   }
-  if (!password || password.length < (config.NODE_ENV === 'production' ? 14 : 8)) {
-    const err = new Error(`Password must be at least ${config.NODE_ENV === 'production' ? 14 : 8} characters long.`);
+  if (!password || password.length < 8) {
+    const err = new Error(`Password must be at least 8 characters long.`);
     err.statusCode = 400;
     throw err;
   }
@@ -184,8 +190,8 @@ export async function updateUser(id, { name, role, status, password, notes }, ac
 
   let newHash = user.password_hash;
   if (password) {
-    if (password.length < (config.NODE_ENV === 'production' ? 14 : 8)) {
-      const err = new Error(`New password must be at least ${config.NODE_ENV === 'production' ? 14 : 8} characters long.`);
+    if (password.length < 8) {
+      const err = new Error(`New password must be at least 8 characters long.`);
       err.statusCode = 400;
       throw err;
     }
