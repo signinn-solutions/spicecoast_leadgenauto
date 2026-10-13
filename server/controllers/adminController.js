@@ -20,6 +20,9 @@ import {
   loadAutoSendSetting,
   saveAutoSendSetting,
   getTodayDateString,
+  withStorageOperationLock,
+  withOutreachHistoryLock,
+  withMailboxHistoryLock,
 } from '../services/storageService.js';
 import {
   isHunterQuotaExceeded,
@@ -69,7 +72,7 @@ export async function deleteUserHandler(req, res, next) {
   try {
     const { id } = req.params;
     const actorEmail = req.dashboardSession?.email || 'superadmin';
-    const result = await deleteUser(id, actorEmail);
+    const result = await withStorageOperationLock('lead-search', () => withMailboxHistoryLock(() => withOutreachHistoryLock(() => deleteUser(id, actorEmail))));
     return res.status(200).json(result);
   } catch (err) {
     if (err.statusCode) {

@@ -481,7 +481,7 @@ export async function executeLeadSearch(options, onProgress = () => {}) {
   return withStorageOperationLock('lead-search', () => runLeadSearch(options, onProgress));
 }
 
-async function runLeadSearch({ businessType, city, country, requestedCount = 20, mode = 'live', engine }, onProgress = () => {}) {
+async function runLeadSearch({ businessType, city, country, requestedCount = 20, mode = 'live', engine, ownerUserId }, onProgress = () => {}) {
   const cleanType = (businessType || '').trim();
   const cleanCity = (city || '').trim();
   const cleanCountry = (country || '').trim();
@@ -779,6 +779,7 @@ async function runLeadSearch({ businessType, city, country, requestedCount = 20,
   };
 
   insertLeadsBatch(processedLeads, {
+    ownerUserId,
     today,
     totalDailyCount: usedToday,
     searchRecord: newSearchRecord,

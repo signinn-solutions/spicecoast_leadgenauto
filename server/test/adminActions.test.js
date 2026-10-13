@@ -7,7 +7,7 @@ import app from '../app.js';
 import config from '../config/env.js';
 import { hashPassword } from '../middleware/dashboardAuth.js';
 import { createUser } from '../services/userService.js';
-import { closeStorage, getTodayDateString, saveDailyUsage, saveReplyUsage, loadDailyUsage, loadReplyUsage } from '../services/storageService.js';
+import { closeStorage, getTodayDateString, saveDailyUsage, saveReplyUsage, loadDailyUsage, loadReplyUsage, saveLeadsHistory, loadLeadsHistory, saveOutreachHistory, loadOutreachHistory, saveMailboxHistory, loadMailboxHistory, saveSeenPlaces, loadSeenPlaces } from '../services/storageService.js';
 
 test('admin actions persist changes, report failures and revoke changed user sessions', async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'spicecoast-admin-actions-'));
@@ -117,7 +117,18 @@ test('admin actions persist changes, report failures and revoke changed user ses
     assert.equal((await request('/api/leads', 'GET', undefined, session)).status, 401);
     session = await login(user.email, 'New-buyer-test-password');
     assert.equal((await request(`/api/admin/users/${admin.user.id}`, 'PUT', { status: 'suspended' })).status, 400);
-    assert.equal((await request(`/api/admin/users/${user.id}`, 'DELETE')).status, 200);
+    saveLeadsHistory({ leads: [{ id: 'owned', name: 'Owned buyer', ownerUserId: user.id }, { id: 'shared', name: 'Shared buyer' }, { id: 'other', name: 'Other buyer', ownerUserId: 'another-user' }], searches: [{ id: 'owned-search', ownerUserId: user.id }, { id: 'shared-search' }] });
+    saveOutreachHistory([{ id: 'owned-pitch', leadId: 'owned' }, { id: 'shared-pitch', leadId: 'shared' }]);
+    saveMailboxHistory([{ id: 'owned-message', ownerUserId: user.id }, { id: 'shared-message' }]);
+    saveSeenPlaces({ owned: { name: 'Owned' }, shared: { name: 'Shared' } });
+    const deletion = await request(`/api/admin/users/${user.id}`, 'DELETE');
+    assert.equal(deletion.status, 200);
+    assert.deepEqual((await deletion.json()).deletedData, { leads: 1, searches: 1, outreach: 1, mailbox: 1 });
+    assert.deepEqual(loadLeadsHistory().leads.map(lead => lead.id).sort(), ['other', 'shared']);
+    assert.equal(loadLeadsHistory().searches[0].id, 'shared-search');
+    assert.equal(loadOutreachHistory()[0].id, 'shared-pitch');
+    assert.equal(loadMailboxHistory()[0].id, 'shared-message');
+    assert.deepEqual(Object.keys(loadSeenPlaces()).sort(), ['other', 'shared']);
     assert.equal((await request('/api/leads', 'GET', undefined, session)).status, 401);
     const logs = await (await request('/api/admin/audit-logs')).json();
     for (const action of ['user_created', 'user_updated', 'user_deleted', 'engine_switch', 'daily_usage_reset', 'quota_reset']) assert.ok(logs.logs.some(log => log.action === action), `Missing audit action ${action}`);

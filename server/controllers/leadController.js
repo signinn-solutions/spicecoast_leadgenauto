@@ -77,6 +77,7 @@ export async function searchLeads(req, res, next) {
       country,
       requestedCount: count || requestedCount,
       mode: mode || 'live',
+      ownerUserId: req.dashboardSession?.userId || null,
       engine: req.dashboardSession?.role === 'superadmin' ? engine || discoveryEngine : undefined,
     };
 
@@ -267,6 +268,11 @@ async function generateLeadColdMailSync(req, res, next) {
 
     // Atomically persist to outreach history under lock
     const outreachRecord = await withOutreachHistoryLock(() => {
+      if (!loadLeadsHistory().leads.some(lead => lead.id === leadId)) {
+        const error = new Error('Lead was deleted while the draft was being generated.');
+        error.statusCode = 409;
+        throw error;
+      }
       const currentHistory = loadOutreachHistory();
       const currentExistingIdx = currentHistory.findIndex((o) => o.leadId === leadId || (o.recipient && o.recipient === email));
       if (currentExistingIdx >= 0 && ['sending', 'unknown', 'sent'].includes(currentHistory[currentExistingIdx].dispatch?.state)) {
@@ -280,6 +286,7 @@ async function generateLeadColdMailSync(req, res, next) {
         throw err;
       }
       const record = {
+        ownerUserId: savedLead.ownerUserId || null,
         id: currentExistingIdx >= 0 ? currentHistory[currentExistingIdx].id : `outreach-${leadObj.id}`,
         leadId: leadObj.id,
         source: savedLead?.source || 'unknown',

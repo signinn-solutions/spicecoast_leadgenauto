@@ -211,6 +211,7 @@ export function getDatabase() {
     `);
 
     // Column migrations for users table
+    if (!db.prepare('PRAGMA table_info(searches)').all().some(column => column.name === 'owner_user_id')) db.exec('ALTER TABLE searches ADD COLUMN owner_user_id TEXT');
     try { db.exec("ALTER TABLE users ADD COLUMN status TEXT DEFAULT 'active'"); } catch {}
     try { db.exec("ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'user'"); } catch {}
     try { db.exec("ALTER TABLE users ADD COLUMN active INTEGER DEFAULT 1"); } catch {}
@@ -373,6 +374,7 @@ export function loadLeadsHistory() {
       duplicatesSkipped: s.duplicates_skipped,
       date: s.date,
       mode: s.mode,
+      ownerUserId: s.owner_user_id || null,
     })),
   };
 }
@@ -438,6 +440,7 @@ export function saveLeadsHistory(value) {
         s.mode || 'live',
         s.date || getTodayDateString()
       );
+      if (s.ownerUserId) db.prepare('UPDATE searches SET owner_user_id = ? WHERE id = ?').run(s.ownerUserId, String(s.id));
     }
     save('leads_history', value);
   });
@@ -499,7 +502,7 @@ export function insertLeadsBatch(leadsList, options = {}) {
 
   const insertBatch = db.transaction((leads) => {
     for (const lead of leads) {
-      insertStmt.run(leadToRow(lead));
+      insertStmt.run(leadToRow({ ...lead, ownerUserId: options.ownerUserId || lead.ownerUserId || null }));
     }
     if (today && totalDailyCount !== undefined) {
       updateDailyUsageStmt.run(today, totalDailyCount);
@@ -519,6 +522,7 @@ export function insertLeadsBatch(leadsList, options = {}) {
   });
 
   insertBatch(leadsList || []);
+  if (searchRecord && options.ownerUserId) db.prepare('UPDATE searches SET owner_user_id = ? WHERE id = ?').run(options.ownerUserId, String(searchRecord.id));
 
   if (seenPlaces) {
     saveSeenPlaces(seenPlaces);

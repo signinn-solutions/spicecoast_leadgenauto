@@ -75,6 +75,8 @@ export default function SuperadminView({ currentUser, onNotify, mailboxStatus = 
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
+  const [deleteConfirmation, setDeleteConfirmation] = useState('');
+  useEffect(() => { setDeleteConfirmation(''); }, [isDeleteModalOpen, selectedUser?.id]);
   const adminDialogRef = useRef(null);
   const closeAdminDialog = () => {
     if (submittingUser) return;
@@ -442,6 +444,7 @@ export default function SuperadminView({ currentUser, onNotify, mailboxStatus = 
 
   // Delete User
   const handleDeleteUser = async () => {
+    if (deleteConfirmation.trim().toLowerCase() !== selectedUser?.email?.toLowerCase()) return;
     if (!selectedUser || submittingUser) return;
     setSubmittingUser(true);
     try {
@@ -453,7 +456,7 @@ export default function SuperadminView({ currentUser, onNotify, mailboxStatus = 
         onNotify({
           type: "success",
           title: "User Deleted",
-          text: `User ${selectedUser.email} removed from system.`,
+          text: `User ${selectedUser.email} deleted with ${data.deletedData?.leads || 0} owned leads, ${data.deletedData?.searches || 0} searches, ${data.deletedData?.outreach || 0} outreach records and ${data.deletedData?.mailbox || 0} mailbox records.`,
         });
       }
       setIsDeleteModalOpen(false);
@@ -1682,9 +1685,10 @@ export default function SuperadminView({ currentUser, onNotify, mailboxStatus = 
 
             <p style={{ fontSize: "13px", color: "var(--text-secondary)", lineHeight: "1.5" }}>
               Are you sure you want to permanently delete <strong>{selectedUser.name}</strong> ({selectedUser.email})?
-              This user will lose access to the system immediately.
+              This user will lose access immediately. Their owned leads, searches, outreach and linked mailbox records will be permanently deleted. Older unassigned records remain shared. Security audit logs are retained.
             </p>
 
+            <label style={{ display: "block", fontSize: 13, marginTop: 12 }}>Type {selectedUser.email} to confirm<input className="lf-input" value={deleteConfirmation} onChange={event => setDeleteConfirmation(event.target.value)} disabled={submittingUser} autoComplete="off" /></label>
             <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", marginTop: "18px" }}>
               <button type="button" className="lf-btn-secondary" disabled={submittingUser} onClick={() => setIsDeleteModalOpen(false)}>
                 Cancel
@@ -1692,7 +1696,7 @@ export default function SuperadminView({ currentUser, onNotify, mailboxStatus = 
               <button
                 type="button"
                 className="lf-btn-primary"
-                disabled={submittingUser}
+                disabled={submittingUser || deleteConfirmation.trim().toLowerCase() !== selectedUser.email.toLowerCase()}
                 onClick={handleDeleteUser}
                 style={{ background: "#dc2626", borderColor: "#dc2626" }}
               >

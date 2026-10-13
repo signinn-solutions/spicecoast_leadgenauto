@@ -226,6 +226,7 @@ async function runIncomingEmail(payload, forceBypassAuth, manualAutoSend) {
   messageRecord.score = scoreResult;
 
   if (matchedOutreach) {
+    messageRecord.ownerUserId = matchedOutreach.ownerUserId || null;
     matchedOutreach.status = scoreResult.isHot ? 'hot' : 'replied';
     matchedOutreach.score_result = scoreResult;
     saveOutreachHistory(outreach);

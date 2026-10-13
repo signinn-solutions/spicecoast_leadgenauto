@@ -253,16 +253,44 @@ export function deleteUser(id, actorEmail = 'superadmin') {
   }
 
   const db = getDatabase();
-  db.prepare('DELETE FROM users WHERE id = ?').run(id);
+  const deletedData = db.transaction(() => {
+    const owned = db.prepare("SELECT id FROM leads WHERE json_extract(data, '$.ownerUserId') = ?").all(id);
+    const leadIds = new Set(owned.map(lead => lead.id));
+    const leadCount = db.prepare("DELETE FROM leads WHERE json_extract(data, '$.ownerUserId') = ?").run(id).changes;
+    const searchCount = db.prepare('DELETE FROM searches WHERE owner_user_id = ?').run(id).changes;
+    const removed = { leads: leadCount, searches: searchCount, outreach: 0, mailbox: 0 };
+    for (const [name, category] of [['outreach_history', 'outreach'], ['mailbox_history', 'mailbox']]) {
+      const row = db.prepare('SELECT value FROM datasets WHERE name = ?').get(name);
+      const records = row ? JSON.parse(row.value) : [];
+      const remaining = records.filter(record => record.ownerUserId !== id && !(category === 'outreach' && leadIds.has(record.leadId)));
+      removed[category] = records.length - remaining.length;
+      db.prepare('UPDATE datasets SET value = ? WHERE name = ?').run(JSON.stringify(remaining), name);
+    }
+    const seen = db.prepare("SELECT value FROM datasets WHERE name = 'seen_places'").get();
+    if (seen) {
+      const records = JSON.parse(seen.value);
+      for (const [key, record] of Object.entries(records)) if (leadIds.has(key) || record.ownerUserId === id) delete records[key];
+      db.prepare("UPDATE datasets SET value = ? WHERE name = 'seen_places'").run(JSON.stringify(records));
+    }
+    const legacy = db.prepare("SELECT value FROM datasets WHERE name = 'leads_history'").get();
+    if (legacy) {
+      const records = JSON.parse(legacy.value);
+      records.leads = (records.leads || []).filter(lead => lead.ownerUserId !== id && !leadIds.has(lead.id));
+      records.searches = (records.searches || []).filter(search => search.ownerUserId !== id);
+      db.prepare("UPDATE datasets SET value = ? WHERE name = 'leads_history'").run(JSON.stringify(records));
+    }
+    db.prepare('DELETE FROM users WHERE id = ?').run(id);
+    return removed;
+  })();
 
   addAuditLog({
     userEmail: actorEmail,
     action: 'user_deleted',
-    details: `Deleted account: ${user.email} (${user.name})`,
+    details: `Deleted account: ${user.email} (${user.name}); owned records removed: ${JSON.stringify(deletedData)}`,
     category: 'admin',
   });
 
-  return { success: true, deletedEmail: user.email };
+  return { success: true, deletedEmail: user.email, deletedData };
 }
 
 export function recordUserLogin(id, ipAddress = '') {

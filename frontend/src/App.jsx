@@ -1133,7 +1133,10 @@ export default function LeadFinderApp({ onLogout, currentUser = null }) {
           {activeView === "admin" && isSuperadmin && (
             <SuperadminView
               currentUser={currentUser}
-              onNotify={setNotice}
+              onNotify={(notice) => {
+                setNotice(notice);
+                if (notice.title === 'User Deleted') refreshAffected(['leads', 'outreach', 'messages', 'lifecycle'], { reload: false });
+              }}
               mailboxStatus={mailboxStatus}
               onCopyWebhook={handleCopyWebhook}
             />
