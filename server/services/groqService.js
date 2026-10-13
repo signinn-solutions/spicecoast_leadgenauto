@@ -1,4 +1,5 @@
 import OpenAI from 'openai';
+import { createHash } from 'node:crypto';
 import config from '../config/env.js';
 import { getAiSettings } from './aiProvider.js';
 import { SPICE_COAST_BRAND_CONTEXT } from './spiceCoastBrand.js';
@@ -9,6 +10,9 @@ let clientIdentity = "";
 let aiUnavailableUntil = 0;
 let aiUnavailableReason = '';
 const reserveGroqTokens = createGroqPacer();
+const completionCache = new Map();
+const inFlightCompletions = new Map();
+let rateLimitedUntil = 0;
 
 export function isAiTemporarilyUnavailable() {
   return Date.now() < aiUnavailableUntil;
@@ -38,11 +42,34 @@ export function getGroqClient() {
       if (settings.provider === 'groq') {
         const create = groqClient.chat.completions.create.bind(groqClient.chat.completions);
         groqClient.chat.completions.create = async (request) => {
-          const payload = { ...request, reasoning_effort: 'low', max_tokens: Math.max(request.max_tokens || 0, 1500) };
-          const reconcile = await reserveGroqTokens(payload);
-          const response = await create(payload);
-          reconcile(response.usage?.total_tokens);
-          return response;
+          const { onProgress, bypassCache = false, ...fields } = request;
+          const payload = { ...fields, reasoning_effort: 'low', max_tokens: Math.max(request.max_tokens || 0, 1500) };
+          const key = createHash('sha256').update(identity + JSON.stringify(payload)).digest('hex');
+          for (const [key, cached] of completionCache) if (cached.expires <= Date.now()) completionCache.delete(key);
+          if (!bypassCache && completionCache.has(key)) return completionCache.get(key).response;
+          if (inFlightCompletions.has(key)) return inFlightCompletions.get(key);
+          const work = (async () => {
+            if (Date.now() < rateLimitedUntil) throw Object.assign(new Error('AI rate limit cooldown is active.'), { status: 429 });
+            const reconcile = await reserveGroqTokens(payload, onProgress);
+            if (Date.now() < rateLimitedUntil) throw Object.assign(new Error('AI rate limit cooldown is active.'), { status: 429 });
+            try {
+              const response = await create(payload);
+              reconcile(response.usage?.total_tokens);
+              if (response.choices?.[0]?.message?.content?.trim() && response.choices?.[0]?.finish_reason !== 'length') {
+                if (completionCache.size >= 200) completionCache.delete(completionCache.keys().next().value);
+                completionCache.set(key, { response, expires: Date.now() + 10 * 60 * 1000 });
+              }
+              return response;
+            } catch (error) {
+              if (error.status === 429) {
+                const retry = Number(error.headers?.['retry-after']) || 60;
+                rateLimitedUntil = Date.now() + Math.max(60, Math.min(retry, 900)) * 1000;
+              }
+              throw error;
+            }
+          })();
+          inFlightCompletions.set(key, work);
+          try { return await work; } finally { inFlightCompletions.delete(key); }
         };
       }
     } catch (e) {
@@ -57,7 +84,7 @@ export function getGroqClient() {
  * Generates a highly customized B2B cold email draft for a discovered deliverable lead.
  * Does NOT send the email — saves it as a draft for human confirmation.
  */
-export async function generateColdEmail(lead = {}, { useAI = true, force = false } = {}) {
+export async function generateColdEmail(lead = {}, { useAI = true, force = false, onProgress } = {}) {
   if (force) {
     resetAiUnavailableState();
   }
@@ -110,6 +137,8 @@ Output Format: Provide strictly valid JSON with keys "subject" and "body". Do no
           { role: 'user', content: prompt },
         ],
         response_format: { type: 'json_object' },
+        onProgress,
+        bypassCache: force || attempt > 0,
         max_tokens: 1500,
         ...(getAiSettings().provider === 'groq' ? { reasoning_effort: 'low' } : {}),
         temperature: 0.7,
@@ -371,8 +400,8 @@ export async function draftReply(subject, body, senderName = '') {
  * Classifies an incoming reply's sentiment/intent as 'positive', 'neutral', or 'negative'.
  * Uses ${getAiSettings().label} chat completion when configured, with accurate rule-based heuristics as fallback.
  */
-export async function classifyReplySentiment(subject = '', body = '') {
-  const client = getGroqClient();
+export async function classifyReplySentiment(subject = '', body = '', { useAI = false } = {}) {
+  const client = useAI ? getGroqClient() : null;
   const textCombined = `${subject} ${body}`.trim();
 
   if (client && getAiSettings().apiKey && textCombined) {

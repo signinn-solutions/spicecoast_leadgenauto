@@ -1,3 +1,4 @@
+import { outreachBlockReason } from '../outreachEligibility.js';
 import React, { useState, useMemo } from "react";
 import { safeUrl } from "../safeUrl.js";
 import {
@@ -245,7 +246,8 @@ export default function LeadsView({
           type="button"
           className="lf-btn-primary sm"
           onClick={handleSendSelectedToOutreach}
-          disabled={selectedLeadIds.size === 0}
+              title="Only live leads with usable verified email addresses can enter Outreach"
+          disabled={!sortedLeads.some(lead => selectedLeadIds.has(lead.id) && !outreachBlockReason(lead))}
         >
           <Send size={14} />
           <span>
@@ -336,12 +338,14 @@ export default function LeadsView({
           <div className="lf-bulk-info">
             <span className="lf-bulk-count lf-mono">{selectedLeadIds.size}</span>
             <span>lead(s) selected</span>
+            <span role="status">{sortedLeads.filter(lead => selectedLeadIds.has(lead.id) && outreachBlockReason(lead)).length} blocked: requires a usable verified email</span>
           </div>
           <div className="lf-bulk-actions">
             <button
               type="button"
               className="lf-btn-primary sm"
               onClick={handleSendSelectedToOutreach}
+              title="Only live leads with usable verified email addresses can enter Outreach"
             >
               <Send size={14} />
               <span>Send {selectedLeadIds.size} to Outreach Studio</span>
@@ -516,6 +520,7 @@ export default function LeadsView({
                               <XCircle size={10} />
                             )}
                             <span>{isLiveLead(lead) ? (lead.emailStatus === "mx_valid" ? "Published / MX confirmed" : lead.emailStatus) || "Not found" : "Unverified"}</span>
+                            {outreachBlockReason(lead) && <span title={outreachBlockReason(lead)} style={{fontSize:11,color:"var(--text-muted)"}}>Outreach blocked</span>}
                           </span>
                         </div>
                         <div className="lf-contact-val lf-mono">

@@ -193,7 +193,7 @@ export async function generateLeadColdMail(req, res, next) {
   if (req.body?.async !== true) return generateLeadColdMailSync(req, res, next);
   const { leadId, email } = req.body || {};
   const lead = loadLeadsHistory().leads?.find(item => item.id === leadId);
-  if (!lead || lead.email !== email || !['deliverable', 'valid', 'mx_valid'].includes(lead.emailStatus)) return res.status(400).json({ error: 'A saved lead with a matching email is required.' });
+  if (!lead || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email || '') || lead.email !== email || !['deliverable', 'valid', 'mx_valid'].includes(lead.emailStatus)) return res.status(400).json({ error: 'A saved lead with a matching email is required.' });
   const key = `${leadId}:${email}`;
   const active = activeDraftJobs.get(key);
   if (active) return res.status(202).json({ jobId: active, status: 'running' });
@@ -209,7 +209,7 @@ export async function generateLeadColdMail(req, res, next) {
         else jobManager.completeJob(job.id, payload);
         return this;
       } };
-      await generateLeadColdMailSync(req, response, error => jobManager.failJob(job.id, error));
+      await generateLeadColdMailSync({ body: req.body, draftProgress: message => jobManager.updateProgress(job.id, { message }) }, response, error => jobManager.failJob(job.id, error));
     } catch (error) { jobManager.failJob(job.id, error); }
     finally { activeDraftJobs.delete(key); }
   });
@@ -219,7 +219,7 @@ async function generateLeadColdMailSync(req, res, next) {
   try {
     const { leadId, email, force } = req.body || {};
     const savedLead = loadLeadsHistory().leads?.find((lead) => lead.id === leadId);
-    if (!savedLead || !email || savedLead.email !== email || !['deliverable', 'valid', 'mx_valid'].includes(savedLead.emailStatus)) {
+    if (!savedLead || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email || '') || savedLead.email !== email || !['deliverable', 'valid', 'mx_valid'].includes(savedLead.emailStatus)) {
       return res.status(400).json({ error: 'A saved lead with a matching email is required.' });
     }
     const outreachHistory = loadOutreachHistory();
@@ -262,7 +262,7 @@ async function generateLeadColdMailSync(req, res, next) {
     };
 
     // Run AI call outside the mutex lock so multiple draft requests execute concurrently in parallel
-    const draft = await generateColdEmail(leadObj, { useAI: force === true || savedLead.source === 'live', force: force === true });
+    const draft = await generateColdEmail(leadObj, { useAI: force === true || savedLead.source === 'live', force: force === true, onProgress: req.draftProgress });
     const draftSource = draft.model === 'Local template' ? 'template_fallback' : (draft.provider || 'groq');
 
     // Atomically persist to outreach history under lock

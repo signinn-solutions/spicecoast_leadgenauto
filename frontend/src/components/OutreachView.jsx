@@ -71,6 +71,8 @@ export default function OutreachView({
   const [editBody, setEditBody] = useState("");
   const [isSavingInline, setIsSavingInline] = useState(false);
 
+  const [draftProgressMap, setDraftProgressMap] = useState({});
+
   // When queueLeads changes or arrives, default filterTab to 'queue' if non-empty
   useEffect(() => {
     if (queueLeads && queueLeads.length > 0) {
@@ -119,7 +121,7 @@ export default function OutreachView({
           const lead = queueToProcess[idx++];
           if (!lead) break;
           try {
-            const res = await onGeneratePitch?.(lead, { force: false, silent: true });
+            const res = await onGeneratePitch?.(lead, { force: false, silent: true, onProgress: message => setDraftProgressMap(prev => ({...prev,[lead.id]:message})) });
             setDraftStatusMap((prev) => ({ ...prev, [lead.id]: "ready" }));
             if (res?.outreachRecord) {
               setDraftDataMap((prev) => ({ ...prev, [lead.id]: res.outreachRecord }));
@@ -680,7 +682,7 @@ export default function OutreachView({
                     <div className="lf-skeleton-line" style={{ width: "70%", height: 12, marginBottom: 14 }} />
                     <div className="lf-generating-hint">
                       <Sparkles size={13} className="spin text-amber" />
-                      <span>Synthesizing custom B2B export proposal with AI...</span>
+                      <span>{draftProgressMap[item.leadId] || "Queued for AI drafting..."}</span>
                     </div>
                   </div>
                 ) : isFailed ? (

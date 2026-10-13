@@ -1,3 +1,4 @@
+import { outreachBlockReason } from './outreachEligibility.js';
 import React, { useState, useEffect, useCallback, useRef, lazy, Suspense } from "react";
 import Sidebar from "./components/Sidebar.jsx";
 import Header from "./components/Header.jsx";
@@ -80,7 +81,11 @@ export default function LeadFinderApp({ onLogout, currentUser = null }) {
 
   // Navigate selected leads to Outreach Studio
   const handleSendToOutreach = (selectedLeads) => {
-    setOutreachQueueLeads(selectedLeads);
+    const eligible = selectedLeads.filter(lead => !outreachBlockReason(lead));
+    const blocked = selectedLeads.filter(lead => outreachBlockReason(lead));
+    if (blocked.length) setNotice({type:'warning',title:'Leads blocked from Outreach',text:blocked.map(lead => lead.name + ': ' + outreachBlockReason(lead)).join(' ')});
+    if (!eligible.length) return;
+    setOutreachQueueLeads(eligible);
     setActiveView("outreach");
   };
 
@@ -380,7 +385,7 @@ export default function LeadFinderApp({ onLogout, currentUser = null }) {
   };
 
   // AI Cold Pitch Generation Handler
-  const handleGeneratePitch = async (lead, { force = false, silent = false } = {}) => {
+  const handleGeneratePitch = async (lead, { force = false, silent = false, onProgress } = {}) => {
     if (!lead || !lead.email) {
       if (!silent) {
         setNotice({
@@ -419,6 +424,7 @@ export default function LeadFinderApp({ onLogout, currentUser = null }) {
             await new Promise(resolve => setTimeout(resolve, 2000));
             const progressResponse = await fetch(`/api/jobs/${encodeURIComponent(jobId)}`, { signal: AbortSignal.timeout(10000) });
             const progress = await progressResponse.json();
+            onProgress?.(progress.progress?.message || "Preparing draft...");
             if (!progressResponse.ok) throw new Error(progress.error || 'Draft job could not be read.');
             if (progress.status === 'failed') throw new Error(progress.error || 'Draft generation failed.');
             if (progress.status === 'completed') { data = progress.result; break; }
