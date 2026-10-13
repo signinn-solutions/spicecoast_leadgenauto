@@ -1,6 +1,5 @@
 # Node & Build
 node_modules/
-dist/
 
 # Python
 __pycache__/

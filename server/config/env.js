@@ -11,8 +11,12 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const rootDir = path.resolve(__dirname, '../..');
 
+const rawPort = process.env.PORT || '5000';
+const parsedPort = Number(rawPort);
+const isNumericPort = !isNaN(parsedPort) && isFinite(parsedPort);
+
 export const config = {
-  PORT: parseInt(process.env.PORT || '5000', 10),
+  PORT: isNumericPort ? parsedPort : rawPort,
   HOST: process.env.HOST || '0.0.0.0',
   CORS_ORIGIN: process.env.CORS_ORIGIN || '*',
   NODE_ENV: process.env.NODE_ENV || 'development',
@@ -57,7 +61,7 @@ export const config = {
   DAILY_REPLY_LIMIT: parseInt(process.env.DAILY_REPLY_LIMIT || '30', 10),
 
   // SQLite storage and preserved legacy JSON import sources
-  DB_PATH: process.env.SPICECOAST_DB_PATH || path.join(rootDir, 'spicecoast.sqlite'),
+  DB_PATH: path.resolve(rootDir, process.env.SPICECOAST_DB_PATH || 'spicecoast.sqlite'),
   DAILY_USAGE_FILE: path.join(rootDir, 'daily_usage.json'),
   REPLY_USAGE_FILE: path.join(rootDir, 'reply_usage.json'),
   LEADS_HISTORY_FILE: path.join(rootDir, 'leads_history.json'),
