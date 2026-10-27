@@ -253,6 +253,7 @@ async function generateLeadColdMailSync(req, res, next) {
     }
 
     const leadObj = {
+      ...savedLead,
       id: savedLead.id,
       name: savedLead.name || 'Valued Partner',
       email: savedLead.email,

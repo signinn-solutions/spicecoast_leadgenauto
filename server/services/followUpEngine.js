@@ -1,3 +1,4 @@
+import { SPICE_COAST_ADDRESS } from './spiceCoastBrand.js';
 import config from '../config/env.js';
 import { dispatchOnce } from './dispatchGuard.js';
 import { LIFECYCLE_CONFIG } from '../config/mailLifecycleConfig.js';
@@ -53,7 +54,8 @@ Would product details be useful for ${company}'s sourcing review?
 
 Warm regards,
 The SpiceCoast Export Team
-Spice Coast | Kochi, Kerala, India
+Spice Coast
+${SPICE_COAST_ADDRESS}
 https://thespicecoast.com/
 ${config.SENDER_MAILBOX}`;
 
@@ -76,7 +78,8 @@ If you already have established seasonal contracts in place, no problem at all. 
 
 Best regards,
 The SpiceCoast Export Team
-The Spice Coast | Cochin, Kerala, India
+The Spice Coast
+${SPICE_COAST_ADDRESS}
 ${config.SENDER_MAILBOX}`;
 
   return {

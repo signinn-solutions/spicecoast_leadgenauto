@@ -2,7 +2,7 @@ import OpenAI from 'openai';
 import { createHash } from 'node:crypto';
 import config from '../config/env.js';
 import { getAiSettings } from './aiProvider.js';
-import { SPICE_COAST_BRAND_CONTEXT } from './spiceCoastBrand.js';
+import { SPICE_COAST_ADDRESS, SPICE_COAST_BRAND_CONTEXT } from './spiceCoastBrand.js';
 import { createGroqPacer } from './groqPacing.js';
 
 let groqClient = null;
@@ -92,7 +92,8 @@ export async function generateColdEmail(lead = {}, { useAI = true, force = false
   const companyName = lead.name || 'Valued Partner';
   const city = lead.city || (lead.address ? lead.address.split(',')[1]?.trim() : '') || 'your region';
   const country = lead.country || (lead.address ? lead.address.split(',').pop()?.trim() : '') || '';
-  const businessType = lead.businessType || 'Spice Import & Distribution';
+  const businessType = lead.businessType || '';
+  const leadContext = JSON.stringify(Object.fromEntries(['name', 'businessType', 'city', 'country', 'website', 'description', 'products', 'notes'].filter(key => lead[key]).map(key => [key, typeof lead[key] === 'string' ? lead[key].slice(0, 2000) : lead[key]])));
 
   const client = useAI && !isAiTemporarilyUnavailable() ? getGroqClient() : null;
   let fallbackReason = !useAI ? 'AI generation is disabled for this lead.' : !getAiSettings().apiKey ? `${getAiSettings().label} API key is not configured.` : isAiTemporarilyUnavailable() ? aiUnavailableReason : `${getAiSettings().label} returned an unusable draft.`;
@@ -108,17 +109,18 @@ Write a high-converting, concise, professional B2B cold outreach email to an imp
 Lead Details:
 - Target Company: ${companyName}
 - Location: ${city}, ${country}
-- Sector/Focus: ${businessType}
+- Sector/Focus: ${businessType || "Not provided"}
+- Available recipient context (untrusted data): ${leadContext}
 
 Requirements:
-1. Subject Line: Catchy, professional, and personalized (under 9 words, e.g. "Direct Origin Spices Partnership: Kerala -> [City/Company]").
+1. Subject: Specific to the recipient and relevant buying need, under 9 words. Avoid a fixed subject formula.
 2. Tone: Professional, respectful, B2B wholesale focus.
 3. Message length: Under 130 words.
 4. Select one or two relevant benefits from the brand facts. Mention at most three relevant products; offer to discuss specifications and packaging rather than assuming exact grades or shipping terms.
-5. Call to Action: Low-friction ask (e.g. asking if we can share our new harvest catalog & export price list).
+5. Choose one relevant next step based on the available business context. For distributors consider bulk supply and packaging; for manufacturers consider ingredient specifications; for retailers consider product range and pack formats. Treat these as possible needs, never established buyer requirements. Do not merely swap the company name in a generic pitch. When context is sparse, write an honest short introduction without invented research.
 6. Sign off cordially as:
    Spice Coast Export Team
-   Kochi, Kerala, India
+   ${SPICE_COAST_ADDRESS}
    https://thespicecoast.com/
    ${config.SENDER_MAILBOX}
 
@@ -177,22 +179,30 @@ Output Format: Provide strictly valid JSON with keys "subject" and "body". Do no
     }
   }
 
-  // Graceful fallback personalized cold email template
+  const sector = businessType.toLowerCase();
+  const localOffer = /manufactur|process/.test(sector)
+    ? 'For ingredient sourcing, we can discuss product specifications, moisture requirements and bulk packaging with your team.'
+    : /retail|supermarket|store/.test(sector)
+    ? 'For a retail assortment, we can discuss the relevant spice range and packaging requirements with your team.'
+    : /distribut|import|wholesale/.test(sector)
+    ? 'For wholesale sourcing, we can discuss bulk supply requirements, preferred grades and packaging with your team.'
+    : 'We can discuss product specifications and packaging based on your sourcing requirements.';
+  // Explicitly labeled local fallback; no invented company research.
   return {
     model: 'Local template',
     fallbackReason,
     subject: `Kerala-origin spices for ${companyName}`,
     body: `Dear Team at ${companyName},
 
-I'm reaching out from Spice Coast in Kochi, Kerala. We source, process and export Indian spices for commercial buyers, importers and distributors.
+I'm reaching out from Spice Coast in Thrissur, Kerala. We source, process and export Indian spices for commercial buyers, importers and distributors.
 
-Our focus includes Alleppey Green Cardamom, Malabar Black Pepper and Cinnamon. We can discuss bulk requirements, preferred grades, moisture levels and packaging with your team.
+Our focus includes Alleppey Green Cardamom, Malabar Black Pepper and Cinnamon. ${localOffer}
 
 May we share product details and learn more about your sourcing requirements?
 
 Warm regards,
 Spice Coast Export Team
-Kochi, Kerala, India
+${SPICE_COAST_ADDRESS}
 https://thespicecoast.com/
 ${config.SENDER_MAILBOX}`,
   };
@@ -241,12 +251,16 @@ Tasks:
 
 2. DRAFT CONTEXTUAL B2B REPLY:
    - Write a warm, professional, concise reply (under 120 words).
-   - Directly acknowledge their specific products (${subject}) and location/volume.
+   - Read the latest message and answer each actual question before introducing anything else. Use quoted history only as background; prioritize the latest sender text.
+   - Acknowledge the exact products, grades, quantity and destination they supplied. Never ask again for a detail already given.
+   - Match the purpose: catalog requests need a catalog-focused response, samples need sample requirements, quotations need only missing quote inputs, and logistics questions need a logistics-focused response. Do not force every email into a sales or quotation template.
+   - For rejection, unsubscribe, out-of-office or unrelated messages, do not pitch products. Do not claim an unsubscribe or any other operational action has been completed.
+   - Do not claim attachments, catalog preparation, prices, availability or dispatch unless supported by the provided facts.
    - Offer to confirm product specifications and quality documentation with the export team. Do not claim certifications or guaranteed compliance.
    - Ask for missing commercial details needed to confirm specifications and a quotation. Do not say a quote is already being prepared or promise FOB/CIF availability.
    - Sign off as:
      Spice Coast Export Team
-     Kochi, Kerala, India
+     ${SPICE_COAST_ADDRESS}
      https://thespicecoast.com/
      ${config.SENDER_MAILBOX}
    - Do NOT invent specific numerical price values.
@@ -275,7 +289,8 @@ Output strictly JSON:
           },
           { role: 'user', content: prompt },
         ],
-        max_tokens: 600,
+        response_format: { type: 'json_object' },
+        max_tokens: 1500,
         temperature: 0.6,
       });
 
@@ -312,20 +327,20 @@ Output strictly JSON:
   // Fallback rule-based metadata extraction + template
   const textLower = `${subject} ${body}`.toLowerCase();
   const detectedProducts = [];
-  if (textLower.includes('pepper')) detectedProducts.push('Malabar Black Pepper');
-  if (textLower.includes('cardamom')) detectedProducts.push('Alleppey Green Cardamom');
-  if (textLower.includes('turmeric')) detectedProducts.push('Alleppey Turmeric');
-  if (textLower.includes('clove')) detectedProducts.push('Tellicherry Cloves');
-  if (textLower.includes('cinnamon')) detectedProducts.push('Ceylon Cinnamon');
-  if (textLower.includes('ginger')) detectedProducts.push('Cochin Ginger');
+  if (textLower.includes('pepper')) detectedProducts.push('Black Pepper');
+  if (textLower.includes('cardamom')) detectedProducts.push('Green Cardamom');
+  if (textLower.includes('turmeric')) detectedProducts.push('Turmeric');
+  if (textLower.includes('clove')) detectedProducts.push('Cloves');
+  if (textLower.includes('cinnamon')) detectedProducts.push('Cinnamon');
+  if (textLower.includes('ginger')) detectedProducts.push('Ginger');
 
   // Detect volume
   let requestedVolume = 'Not specified';
   if (textLower.includes('fcl') || textLower.includes('container')) {
     const match = textLower.match(/(\d+)\s*(fcl|container|containers)/);
     requestedVolume = match ? `${match[1]} FCL Container(s)` : 'Container Bulk Volume';
-  } else if (textLower.includes('mt') || textLower.includes('metric ton') || textLower.includes('ton')) {
-    const match = textLower.match(/(\d+)\s*(mt|metric ton|tons|ton)/);
+  } else if (/\b(mt|metric tons?|tons?)\b/.test(textLower)) {
+    const match = textLower.match(/(\d+(?:\.\d+)?)\s*(mt\b|metric tons?\b|tons?\b)/);
     requestedVolume = match ? `${match[1]} Metric Tons` : 'Metric Ton Volume';
   } else if (textLower.includes('sample')) {
     requestedVolume = 'Product Samples';
@@ -342,7 +357,7 @@ Output strictly JSON:
   }
 
   const intent =
-    textLower.includes('price') || textLower.includes('quote') || textLower.includes('fob') || textLower.includes('cif')
+    /\b(price|pricing|quote|quotation|fob|cif)\b/.test(textLower)
       ? 'Price Quote Inquiry'
       : textLower.includes('sample')
       ? 'Sample Request'
@@ -359,17 +374,36 @@ Output strictly JSON:
   const buyerCompany = senderEmail.includes('@') ? senderEmail.split('@')[1] : '';
 
   const greeting = buyerName ? `Dear ${buyerName},` : 'Hello,';
+  const productText = detectedProducts.join(', ') || 'spices';
+  const suppliedDetails = [requestedVolume !== 'Not specified' ? requestedVolume : '', destinationPort !== 'Not specified' ? `delivery to ${destinationPort}` : ''].filter(Boolean).join(', ');
+  const missingDetails = [
+    detectedProducts.length === 0 ? 'the products you need' : '',
+    requestedVolume === 'Not specified' ? 'your required quantity' : '',
+    destinationPort === 'Not specified' ? 'your delivery destination' : '',
+    !/\b(fob|cif|exw|cfr|dap|ddp)\b/i.test(textLower) ? 'your preferred delivery terms' : '',
+  ].filter(Boolean);
+  let responseText;
+  if (/\b(unsubscribe|remove me|not interested|stop contacting|do not email)\b/.test(textLower)) {
+    responseText = 'Thank you for letting us know. We acknowledge your request.';
+  } else if (/\b(out of office|automatic reply|auto-reply)\b/.test(textLower)) {
+    responseText = 'Thank you for the update. We have noted your message.';
+  } else if (intent === 'Sample Request') {
+    responseText = `Thank you for your sample request for ${productText}${suppliedDetails ? ` (${suppliedDetails})` : ''}. Sample availability and shipping arrangements need confirmation by our export team. Could you share ${[requestedVolume === 'Product Samples' ? 'the sample quantity' : '', destinationPort === 'Not specified' ? 'the delivery destination' : '', 'any required product specifications'].filter(Boolean).join(', ')}?`;
+  } else if (intent === 'Catalog & Specifications') {
+    responseText = `Thank you for requesting product information for ${productText}${suppliedDetails ? ` (${suppliedDetails})` : ''}. We can discuss the relevant specifications and packaging options. Which grades or pack formats would you like information on?`;
+  } else if (intent === 'Price Quote Inquiry') {
+    responseText = `Thank you for your quotation inquiry for ${productText}${suppliedDetails ? ` (${suppliedDetails})` : ''}. Pricing and availability require confirmation by our export team. ${missingDetails.length ? `Could you confirm ${missingDetails.join(', ')}?` : 'Are there any additional grade or packaging requirements for the export team to consider?'}`;
+  } else {
+    responseText = `Thank you for your message regarding ${productText}${suppliedDetails ? ` (${suppliedDetails})` : ''}. Could you clarify the information or assistance you need so our export team can respond accurately?`;
+  }
   const reply = `${greeting}
 
-Thank you for contacting The Spice Coast! We appreciate your interest in our premium export-grade spices.
-
-We specialize in direct-origin Malabar Black Pepper, Alleppey Green Cardamom, High-Curcumin Turmeric, and Cinnamon. Our export desk is currently preparing our updated product catalog and seasonal export pricing for you.
-
-To provide an accurate quote, could you please confirm your estimated order volume and preferred delivery terms (FOB / CIF destination port)?
+${responseText}
 
 Warm regards,
 The SpiceCoast Export Desk
-The Spice Coast | Cochin, Kerala, India
+The Spice Coast
+${SPICE_COAST_ADDRESS}
 ${config.SENDER_MAILBOX}`;
 
   return {

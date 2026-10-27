@@ -27,3 +27,26 @@ test('Groq drafts use the selected endpoint, model, brand prompt and provider me
     Object.assign(config, original);
   }
 });
+
+ test('local replies follow the inquiry and do not ask again for supplied quote details', async () => {
+  const { extractMetadataAndDraftReply } = await import('../services/groqService.js');
+  const quote = await extractMetadataAndDraftReply('Pepper quote', 'Please quote 2.5 MT pepper CIF Hamburg.', 'buyer@example.com', 'Alex', '', '', { useAI: false });
+  assert.match(quote.reply, /2.5 Metric Tons/);
+  assert.match(quote.reply, /Hamburg/);
+  assert.doesNotMatch(quote.reply, /confirm your required quantity|confirm your delivery destination|confirm your preferred delivery terms|currently preparing/);
+  const catalog = await extractMetadataAndDraftReply('Catalog', 'Please share cardamom specifications.', '', '', '', '', { useAI: false });
+  assert.match(catalog.reply, /product information for Green Cardamom/);
+  assert.doesNotMatch(catalog.reply, /accurate quote|seasonal export pricing|Alleppey/);
+  const sample = await extractMetadataAndDraftReply('Samples', 'Could I get cinnamon samples in Dubai?', '', '', '', '', { useAI: false });
+  assert.match(sample.reply, /sample request for Cinnamon/);
+  assert.doesNotMatch(sample.reply, /Ceylon|share the delivery destination/);
+  const rejection = await extractMetadataAndDraftReply('No thanks', 'Not interested. Do not email.', '', '', '', '', { useAI: false });
+  assert.doesNotMatch(rejection.reply, /quotation|specifications|bulk|Could you/);
+ });
+
+ test('local cold drafts adapt to business role', async () => {
+  const manufacturer = await generateColdEmail({ name: 'Factory', businessType: 'Food Manufacturer' }, { useAI: false });
+  const retailer = await generateColdEmail({ name: 'Shop', businessType: 'Retailer' }, { useAI: false });
+  assert.match(manufacturer.body, /ingredient sourcing/);
+  assert.match(retailer.body, /retail assortment/);
+ });

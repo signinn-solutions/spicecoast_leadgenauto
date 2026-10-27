@@ -92,7 +92,7 @@ test('inbound inquiry fallback extracts buying context without sending', async (
     assert.equal(result.metadata.requestedVolume, '5 Metric Tons');
     assert.equal(result.metadata.destinationPort, 'Rotterdam');
     assert.equal(result.metadata.priority, 'High');
-    assert.ok(result.metadata.detectedProducts.includes('Malabar Black Pepper'));
+    assert.ok(result.metadata.detectedProducts.includes('Black Pepper'));
     assert.match(result.reply, /Dear Alex/);
   } finally {
     config.GROQ_API_KEY = originalKey;

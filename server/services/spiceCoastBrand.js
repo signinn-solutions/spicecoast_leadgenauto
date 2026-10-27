@@ -1,7 +1,17 @@
+// Business address supplied by the owner; shared by all email draft signatures.
+export const SPICE_COAST_ADDRESS = `Seemati Building
+Paliyekkara,
+Chittissery P.O.
+Thrissur, Kerala 680301
+India`;
+
 // Editorial snapshot of https://thespicecoast.com/ (12 October 2026).
 // Update deliberately when the public positioning changes; no per-draft website calls.
-export const SPICE_COAST_BRAND_CONTEXT = `Brand facts from https://thespicecoast.com/:
-- Spice Coast is based in Kochi, Kerala, India and serves international importers, distributors, manufacturers and commercial processors.
+export const SPICE_COAST_BRAND_CONTEXT = `Business address (owner-provided; use in email signatures):
+${SPICE_COAST_ADDRESS}
+
+Brand facts from https://thespicecoast.com/:
+- Spice Coast is based in Thrissur, Kerala, India and serves international importers, distributors, manufacturers and commercial processors.
 - Its focus is direct-origin sourcing, processing and export of Indian spices, particularly Alleppey Green Cardamom, Malabar Black Pepper, Cinnamon and regional spices.
 - Services include bulk supply and discussion of buyer-specific grades, density, moisture and packaging requirements.
 - Positioning emphasizes origin, consistent quality, transparent trade and export documentation. Its process covers sourcing, selection, processing, packing and shipping.
