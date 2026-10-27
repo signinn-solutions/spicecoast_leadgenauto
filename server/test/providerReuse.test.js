@@ -10,8 +10,9 @@ test('Groq reuses identical completions and sentiment reads make zero AI calls',
   const client = getGroqClient();
   const originalFetch = client.fetch;
   let calls = 0;
-  client.fetch = async () => {
+  client.fetch = async (_url, options) => {
     calls++;
+    assert.equal(JSON.parse(options.body).max_tokens, 20);
     return Response.json({ choices: [{ finish_reason: 'stop', message: { content: '{"subject":"Spices","body":"Catalog?"}' } }], usage: { total_tokens: 10 } });
   };
   try {

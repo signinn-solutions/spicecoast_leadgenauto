@@ -43,7 +43,7 @@ export function getGroqClient() {
         const create = groqClient.chat.completions.create.bind(groqClient.chat.completions);
         groqClient.chat.completions.create = async (request) => {
           const { onProgress, bypassCache = false, ...fields } = request;
-          const payload = { ...fields, reasoning_effort: 'low', max_tokens: Math.max(request.max_tokens || 0, 1500) };
+          const payload = { ...fields, reasoning_effort: 'low', max_tokens: request.max_tokens || 1500 };
           const key = createHash('sha256').update(identity + JSON.stringify(payload)).digest('hex');
           for (const [key, cached] of completionCache) if (cached.expires <= Date.now()) completionCache.delete(key);
           if (!bypassCache && completionCache.has(key)) return completionCache.get(key).response;

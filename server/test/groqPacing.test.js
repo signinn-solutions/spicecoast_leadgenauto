@@ -14,3 +14,20 @@ test('Groq starts small batches immediately and waits only when token budget is 
   await reserve(request);
   assert.deepEqual(waits, [60000]);
 });
+
+test('queued batches start when completed calls free capacity, without waiting a minute', async () => {
+  let notifyWaiting;
+  const waiting = new Promise(resolve => { notifyWaiting = resolve; });
+  const reserve = createGroqPacer({ budget: 3000 });
+  const request = { messages: [], max_tokens: 1000 };
+  const firstBatch = await Promise.all([reserve(request), reserve(request)]);
+  let started = false;
+  const next = reserve(request, message => {
+    if (message.startsWith('Waiting')) notifyWaiting();
+  }).then(reconcile => { started = true; return reconcile; });
+  await waiting;
+  assert.equal(started, false);
+  firstBatch[0](100);
+  await next;
+  assert.equal(started, true);
+});
