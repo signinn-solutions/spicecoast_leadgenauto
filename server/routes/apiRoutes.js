@@ -5,6 +5,7 @@ import {
   getLeads,
   searchLeads,
   getJobStatus,
+  cancelLeadSearch,
   streamJobProgress,
   generateLeadColdMail,
   toggleHunterSetting,
@@ -32,6 +33,7 @@ router.get('/status', getStatus);
 router.get('/leads', getLeads);
 router.post('/search', searchLeads);
 router.get('/jobs/:jobId', getJobStatus);
+router.post('/jobs/:jobId/cancel', cancelLeadSearch);
 router.get('/jobs/:jobId/stream', streamJobProgress);
 router.post('/leads/generate-coldmail', generateLeadColdMail);
 router.post('/settings/toggle-hunter', requireSuperadmin, toggleHunterSetting);

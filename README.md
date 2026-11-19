@@ -11,6 +11,8 @@ A **single-business, single-tenant** application for finding business leads, enr
 
 Simulated leads and test inquiries are clearly marked and cannot be sent. Simulated searches still consume the application's daily discovery quota; they do not call discovery/enrichment providers. Drafting falls back to local templates when AI is unavailable.
 
+For Google Places scheduling, quota and cost settings, pause and resume behavior, and mock benchmarks, see [Google Places search](docs/google-places-optimisation.md).
+
 ## Dashboard access
 
 Production requires `ADMIN_EMAIL` and `ADMIN_PASSWORD_HASH`. There is one administrator for this business, with no public registration or tenant system.

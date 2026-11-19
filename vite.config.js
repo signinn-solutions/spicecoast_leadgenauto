@@ -3,7 +3,8 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
-  const apiTarget = env.VITE_API_TARGET || `http://127.0.0.1:${env.PORT || 5000}`;
+  const backendPort = env.PORT || '5000';
+  const apiTarget = env.VITE_API_TARGET || `http://127.0.0.1:${backendPort}`;
 
   return {
     root: 'frontend',
@@ -15,6 +16,7 @@ export default defineConfig(({ mode }) => {
     },
     server: {
       port: 3000,
+      strictPort: true,
       proxy: {
         '/api': { target: apiTarget, changeOrigin: false },
         '/webhook': { target: apiTarget, changeOrigin: false },

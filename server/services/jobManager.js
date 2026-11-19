@@ -1,4 +1,5 @@
 import { EventEmitter } from 'node:events';
+import { randomUUID } from 'node:crypto';
 
 class JobManager {
   constructor() {
@@ -18,13 +19,14 @@ class JobManager {
   }
 
   createJob(type, payload = {}) {
-    const id = `job_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    const id = `job_${randomUUID()}`;
     const total = payload.requestedCount || payload.count || 0;
     const job = {
       id,
       type,
       payload,
       status: 'pending',
+      controller: type === 'lead_search' ? new AbortController() : null,
       progress: {
         current: 0,
         total,
@@ -44,6 +46,19 @@ class JobManager {
 
   getJob(id) {
     return this.jobs.get(id) || null;
+  }
+
+  cancelSearch(id) {
+    const job = this.getJob(id);
+    if (!job?.controller || job.controller.signal.aborted || ['completed', 'failed'].includes(job.status)) return false;
+    job.controller.abort('cancelled');
+    return true;
+  }
+
+  async stopSearchJobs() {
+    const jobs = [...this.jobs.values()].filter(job => job.controller && ['pending', 'running'].includes(job.status));
+    for (const job of jobs) job.controller.abort('shutdown');
+    await Promise.allSettled(jobs.map(job => job.work));
   }
 
   updateProgress(id, { step = 'progress', message, current, total, percent } = {}) {
@@ -85,7 +100,7 @@ class JobManager {
     job.result = result;
     job.completedAt = Date.now();
     job.updatedAt = Date.now();
-    job.progress.current = job.progress.total;
+    job.progress.current = result.count ?? job.progress.total;
     job.progress.percent = 100;
     job.progress.message = 'Lead discovery completed.';
 
