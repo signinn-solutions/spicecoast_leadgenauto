@@ -1,14 +1,13 @@
 import config from '../config/env.js';
 import { requestHunter, resetHunterRequestQuota } from './hunterClient.js';
+import { schedulePlacesSearch } from './placesSearchScheduler.js';
+import { matchesPlacesGeography, matchesPlacesNiche } from './placesSearchPlan.js';
 import {
   getTodayDateString,
   loadDailyUsage,
-  saveDailyUsage,
   loadLeadsHistory,
-  saveLeadsHistory,
   insertLeadsBatch,
   loadSeenPlaces,
-  saveSeenPlaces,
   loadHunterSetting,
   withStorageOperationLock,
 } from './storageService.js';
@@ -145,85 +144,6 @@ export function generateSimulatedLeads(businessType, city, country, count, seenM
     });
   }
   return simulated;
-}
-
-export async function searchPlaces(query, neededCount = 20, seenMap = {}, existingLeads = []) {
-  const url = 'https://places.googleapis.com/v1/places:searchText';
-  const headers = {
-    'Content-Type': 'application/json',
-    'X-Goog-Api-Key': config.GOOGLE_API_KEY,
-    'X-Goog-FieldMask':
-      'places.id,places.displayName,places.formattedAddress,places.websiteUri,places.nationalPhoneNumber,places.internationalPhoneNumber,nextPageToken',
-  };
-
-  const newUniquePlaces = [];
-  let duplicatesSkipped = 0;
-  let providerError = null;
-  let pageToken = null;
-  const MAX_PAGES = Math.max(10, Math.ceil(neededCount / 20));
-
-  for (let pageNum = 0; pageNum < MAX_PAGES; pageNum++) {
-    if (newUniquePlaces.length >= neededCount) break;
-
-    const body = {
-      textQuery: query,
-      pageSize: 20,
-    };
-    if (pageToken) {
-      body.pageToken = pageToken;
-    }
-
-    try {
-      const response = await fetch(url, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(body),
-        signal: AbortSignal.timeout(10000),
-      });
-
-      if (response.status === 403) {
-        const errJson = await response.json().catch(() => ({}));
-        const msg = errJson.error?.message || 'Permission Denied';
-        console.warn(`[Google Places API Error 403]: ${msg}`);
-        providerError = `Google Places denied the request: ${msg}`;
-        break;
-      }
-
-      if (!response.ok) {
-        console.warn(`[Google Places API Error ${response.status}]`);
-        providerError = `Google Places returned HTTP ${response.status}`;
-        break;
-      }
-
-      const data = await response.json();
-      const places = Array.isArray(data.places) ? data.places : [];
-      if (places.length === 0) break;
-
-      for (const place of places) {
-        if (isPlaceDuplicate(place, seenMap, existingLeads, newUniquePlaces)) {
-          duplicatesSkipped++;
-        } else {
-          newUniquePlaces.push(place);
-          if (newUniquePlaces.length >= neededCount) break;
-        }
-      }
-
-      pageToken = data.nextPageToken;
-      if (!pageToken || newUniquePlaces.length >= neededCount) break;
-
-      await new Promise((r) => setTimeout(r, 1000));
-    } catch (e) {
-      console.warn(`[Google Places API Request Error]: ${e.message}`);
-      providerError = `Google Places request failed: ${e.message}`;
-      break;
-    }
-  }
-
-  return {
-    places: newUniquePlaces.slice(0, neededCount),
-    duplicatesSkipped,
-    providerError,
-  };
 }
 
 const SOCIAL_AND_DIRECTORY_DOMAINS = new Set([
@@ -381,18 +301,20 @@ export async function verifyEmail(email) {
   return result.ok && typeof result.data?.status === 'string' ? result.data.status : 'unknown';
 }
 
-export async function scrapeWebsiteContacts(websiteUrl, domain) {
+export async function scrapeWebsiteContacts(websiteUrl, domain, signal) {
   const targetDomain = domain || extractDomain(websiteUrl);
   if (isSocialOrDirectoryDomain(targetDomain)) return { emails: [], phones: [], status: 'not_a_business_site' };
   const baseUrl = websiteUrl || (targetDomain ? `https://${targetDomain}` : '');
   if (!baseUrl) return { emails: [], phones: [], status: 'missing_website' };
   try {
-    const result = await scrapeEmailsForWebsite(baseUrl);
+    const result = await scrapeEmailsForWebsite(baseUrl, { signal });
     return {
       emails: (result.emails || []).map(candidate => ({ ...candidate, value: candidate.email, source: 'website' })),
       phones: result.phones || [],
       status: result.status,
       failure: result.failure,
+      publicWebsite: result.publicWebsite,
+      publicName: result.publicName,
     };
   } catch {
     return { emails: [], phones: [], status: 'unreachable' };
@@ -425,11 +347,10 @@ export async function mapConcurrent(items, concurrency, asyncFn) {
   return results;
 }
 
-async function processLivePlace(place, idx, { cleanCity, cleanCountry, cleanType, today, hunterEnabled }) {
-  const placeId = place.id || `live-${Date.now()}-${idx}`;
-  const name = place.displayName?.text || `${cleanCity} ${cleanType} ${idx + 1}`;
-  const address = place.formattedAddress || `${cleanCity}, ${cleanCountry}`;
-  let phone = place.nationalPhoneNumber || place.internationalPhoneNumber || '—';
+async function processLivePlace(place, { cleanCity, cleanCountry, cleanType, today, signal }) {
+  const licensed = config.GOOGLE_PLACES_CRM_LICENSED;
+  const address = licensed ? place.formattedAddress || '' : '';
+  let phone = (licensed && (place.internationalPhoneNumber || place.nationalPhoneNumber)) || '—';
   const website = place.websiteUri || '';
   const domain = extractDomain(website);
 
@@ -438,7 +359,7 @@ async function processLivePlace(place, idx, { cleanCity, cleanCountry, cleanType
 
   let contactDiscovery = { status: 'missing_website' };
   if (domain || website) {
-    contactDiscovery = await scrapeWebsiteContacts(website, domain);
+    contactDiscovery = await scrapeWebsiteContacts(website, domain, signal);
     if (!phone || phone === '—') phone = contactDiscovery.phones?.[0] || phone;
     const candidates = contactDiscovery.emails || [];
     const best = candidates.find(item => item.hasMx !== false) || candidates[0];
@@ -451,8 +372,8 @@ async function processLivePlace(place, idx, { cleanCity, cleanCountry, cleanType
   const phoneStatus = typeof phone === 'string' && phone.replace(/\D/g, '').length >= 6 ? 'valid' : 'invalid';
 
   const leadObj = {
-    id: placeId,
-    name,
+    id: place.id,
+    name: (licensed && place.displayName?.text) || contactDiscovery.publicName || extractDomain(contactDiscovery.publicWebsite) || cleanType,
     address,
     city: cleanCity,
     country: cleanCountry,
@@ -461,14 +382,14 @@ async function processLivePlace(place, idx, { cleanCity, cleanCountry, cleanType
     phoneStatus,
     email,
     emailStatus,
-    website: website || (domain ? `https://${domain}` : '#'),
+    website: (licensed && website) || contactDiscovery.publicWebsite || '',
     foundAt: today,
     source: 'live',
     emailVerification: 'domain_mx',
     contactDiscoveryStatus: contactDiscovery.status,
   };
 
-  return { leadObj, domain };
+  return leadObj;
 }
 
 export function hasPublishedContact(lead) {
@@ -481,24 +402,29 @@ export async function executeLeadSearch(options, onProgress = () => {}) {
   return withStorageOperationLock('lead-search', () => runLeadSearch(options, onProgress));
 }
 
-async function runLeadSearch({ businessType, city, country, requestedCount = 20, mode = 'live', engine, ownerUserId }, onProgress = () => {}) {
-  const cleanType = (businessType || '').trim();
-  const cleanCity = (city || '').trim();
-  const cleanCountry = (country || '').trim();
+async function runLeadSearch({ businessType, city, country, requestedCount = 20, mode = 'live', engine, ownerUserId, geographyLevel, searchId, signal }, onProgress = () => {}) {
+  const cleanType = typeof businessType === 'string' ? businessType.trim() : '';
+  const cleanCity = typeof city === 'string' ? city.trim() : '';
+  const cleanCountry = typeof country === 'string' ? country.trim() : '';
   const count = requestedCount == null || requestedCount === '' ? 20 : Number(requestedCount);
 
-  if (!cleanType || !cleanCity || !cleanCountry) {
+  if (!cleanType || (!cleanCity && geographyLevel !== 'country') || !cleanCountry) {
     const err = new Error('Business type, city, and country are required.');
     err.statusCode = 400;
     throw err;
   }
 
-  if (!Number.isInteger(count) || count < 1 || count > 200) {
-    const err = new Error('Number to find must be between 1 and 200.');
+  if (!Number.isInteger(count) || count < 1 || count > config.MAX_LEADS_PER_SEARCH) {
+    const err = new Error(`Number to find must be between 1 and ${config.MAX_LEADS_PER_SEARCH}.`);
     err.statusCode = 400;
     throw err;
   }
 
+  if (geographyLevel && !['country', 'state', 'district', 'city'].includes(geographyLevel)) {
+    const err = new Error('Geographic level must be country, state, district, or city.');
+    err.statusCode = 400;
+    throw err;
+  }
   if (!['live', 'simulated'].includes(mode)) {
     const err = new Error('Search mode must be live or simulated.');
     err.statusCode = 400;
@@ -553,7 +479,7 @@ async function runLeadSearch({ businessType, city, country, requestedCount = 20,
   }
 
   const fetchCount = Math.min(count, remaining);
-  const query = `${cleanType} in ${cleanCity}, ${cleanCountry}`;
+  const historyQuery = `${cleanType} · ${cleanCity || cleanCountry}, ${cleanCountry}`;
 
   onProgress({
     step: 'start',
@@ -574,6 +500,7 @@ async function runLeadSearch({ businessType, city, country, requestedCount = 20,
   let contactsMissing = 0;
   const warnings = [];
   let unreadableSites = 0;
+  let placesSummary;
 
   // Execute Live APIs
   if (mode === 'live') {
@@ -662,83 +589,71 @@ async function runLeadSearch({ businessType, city, country, requestedCount = 20,
         }
       }
     } else {
-      // 2. GOOGLE PLACES + INBUILT MAIL SCRAPER MODE
-      const searchRes = await searchPlaces(query, fetchCount, seenMap, existingLeads);
-      if (searchRes.providerError && searchRes.places.length === 0) {
-        const err = new Error(searchRes.providerError);
-        err.statusCode = 502;
-        throw err;
-      }
-      const places = searchRes.places || [];
-      duplicatesSkipped = searchRes.duplicatesSkipped || 0;
-
-      if (places && places.length > 0) {
-        const maxToProcess = Math.min(places.length, remaining);
-        const placesToProcess = places.slice(0, maxToProcess);
-
-        onProgress({
-          step: 'places_found',
-          message: `Found ${places.length} business locations from Google Places (${duplicatesSkipped} duplicates skipped). Deep-crawling websites...`,
-          current: 0,
-          total: placesToProcess.length,
-          percent: 15,
-        });
-
-        // Concurrency Pool: process up to 4 places simultaneously
-        let finishedWorkers = 0;
-        const CONCURRENCY_LIMIT = 4;
-        const results = await mapConcurrent(placesToProcess, CONCURRENCY_LIMIT, async (place, idx) => {
-          const placeName = place.displayName?.text || `Business #${idx + 1}`;
-          onProgress({
-            step: 'scraping_place',
-            message: `Crawling website & MX records for ${placeName}...`,
-            current: finishedWorkers,
-            total: placesToProcess.length,
-            percent: 15 + Math.round((finishedWorkers / placesToProcess.length) * 75),
-          });
-
-          // In scraper mode, hunterEnabled is false to use inbuilt scraper & MX verification with zero Hunter API credit usage
-          const res = await processLivePlace(place, idx, { cleanCity, cleanCountry, cleanType, today, hunterEnabled: false });
-          finishedWorkers++;
-
-          const emailInfo = res?.leadObj?.email && res.leadObj.email !== '—'
-            ? `extracted ${res.leadObj.email}`
-            : 'no email published';
-          onProgress({
-            step: 'place_enriched',
-            message: `${placeName}: ${emailInfo}`,
-            current: finishedWorkers,
-            total: placesToProcess.length,
-            percent: 15 + Math.round((finishedWorkers / placesToProcess.length) * 75),
-          });
-
-          return res;
-        });
-
-        for (const res of results) {
-          if (!res?.leadObj) continue;
-          if (["blocked_by_site", "robots_disallowed", "unreachable", "rejected_address", "js_rendered"].includes(res.leadObj.contactDiscoveryStatus)) unreadableSites += 1;
-          if (res.warning) warnings.push(res.warning);
-          if (!hasPublishedContact(res.leadObj)) { contactsMissing += 1; continue; }
-          const { leadObj, domain } = res;
-          leadObj.discoveryEngine = 'scraper';
-          usedToday += 1;
-
-          seenMap[leadObj.id] = {
-            id: leadObj.id,
-            name: leadObj.name,
-            address: leadObj.address,
-            phone: leadObj.phone,
-            website: leadObj.website,
-            domain,
-            email: leadObj.email,
-            emailStatus: leadObj.emailStatus,
-            foundAt: today,
-          };
-
-          processedLeads.push(leadObj);
-        }
-      }
+      const evaluated = new Set();
+      const savePage = (leads, id, total, duplicates) => insertLeadsBatch(leads, {
+        ownerUserId, today, totalDailyCount: usedToday,
+        searchRecord: { id, query: historyQuery, count: total, duplicatesSkipped: duplicates, date: today, mode },
+      });
+      const search = await schedulePlacesSearch({
+        id: searchId, owner: ownerUserId, niche: cleanType, area: cleanCity, country: cleanCountry,
+        geographyLevel, target: count, signal,
+        remaining: () => Math.min(count - processedLeads.length, config.DAILY_LEAD_LIMIT - usedToday),
+        onResume(ids) {
+          const wanted = new Set(ids);
+          for (const lead of existingLeads) {
+            if (wanted.has(lead.id)) processedLeads.push(lead);
+          }
+          return processedLeads.map(lead => lead.id);
+        },
+        async collect(places, { country, area, national, phrase, signal: searchSignal }) {
+          const candidates = [];
+          const ids = [];
+          let duplicates = 0;
+          let irrelevant = 0;
+          for (const place of places) {
+            if (!matchesPlacesGeography(place, country, area, national) || !matchesPlacesNiche(place, cleanType, phrase)) {
+              irrelevant++;
+              continue;
+            }
+            if (evaluated.has(place.id) || isPlaceDuplicate(place, seenMap, existingLeads, candidates)) {
+              duplicates++;
+              continue;
+            }
+            evaluated.add(place.id);
+            candidates.push(place);
+          }
+          for (let index = 0; index < candidates.length && !searchSignal.aborted;) {
+            const available = Math.min(count - processedLeads.length, config.DAILY_LEAD_LIMIT - usedToday);
+            if (available <= 0) break;
+            const group = candidates.slice(index, index + Math.min(4, available));
+            index += group.length;
+            const batch = await Promise.all(group.map(place => processLivePlace(place, {
+              cleanCity: area, cleanCountry, cleanType, today, signal: searchSignal,
+            })));
+            for (const leadObj of batch) {
+              if (['blocked_by_site', 'robots_disallowed', 'unreachable', 'rejected_address', 'js_rendered'].includes(leadObj.contactDiscoveryStatus)) unreadableSites++;
+              if (!hasPublishedContact(leadObj)) { if (!searchSignal.aborted) contactsMissing++; continue; }
+              if (isPlaceDuplicate(leadObj, seenMap, existingLeads, processedLeads)) { duplicates++; continue; }
+              leadObj.discoveryEngine = 'scraper';
+              usedToday++;
+              processedLeads.push(leadObj);
+              ids.push(leadObj.id);
+            }
+          }
+          return { ids, duplicates, irrelevant };
+        },
+        commit(ids, id, total, duplicates) {
+          savePage(ids.length ? processedLeads.slice(-ids.length) : [], id, total, duplicates);
+        },
+        onProgress(current, region) {
+          onProgress({ step: 'places_page', message: `Checked ${region}. Found ${current} usable contacts.`, current, total: count });
+        },
+      });
+      placesSummary = search.summary;
+      duplicatesSkipped = search.summary.duplicateResults;
+      if (placesSummary.terminationReason !== 'target_reached') warnings.push(placesSummary.message);
+      if (search.providerError && !processedLeads.length) throw search.providerError;
+      savePage([], search.id, processedLeads.length, duplicatesSkipped);
     }
   }
 
@@ -771,14 +686,14 @@ async function runLeadSearch({ businessType, city, country, requestedCount = 20,
   // Atomic Batch Transaction: write all discovered leads, update daily usage, record search, and update seen places
   const newSearchRecord = {
     id: Date.now(),
-    query: `${cleanType} · ${cleanCity}, ${cleanCountry}`,
+    query: historyQuery,
     count: processedLeads.length,
     duplicatesSkipped,
     date: today,
     mode,
   };
 
-  insertLeadsBatch(processedLeads, {
+  if (!placesSummary) insertLeadsBatch(processedLeads, {
     ownerUserId,
     today,
     totalDailyCount: usedToday,
@@ -801,6 +716,7 @@ async function runLeadSearch({ businessType, city, country, requestedCount = 20,
     contactsMissing,
     warnings,
     mode,
+    ...(placesSummary ? { placesSummary } : {}),
     usage: {
       date: today,
       count: usedToday,

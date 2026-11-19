@@ -46,15 +46,19 @@ export default function LeadFinderApp({ onLogout, currentUser = null }) {
   const [allLeads, setAllLeads] = useState([]);
   const [currentResults, setCurrentResults] = useState([]);
   const [searchHistory, setSearchHistory] = useState([]);
-  const [leadUsage, setLeadUsage] = useState({ date: "", count: 0, limit: 200 });
+  const [leadUsage, setLeadUsage] = useState({ date: "", count: 0, limit: 200, maxPerSearch: 1000 });
   const [serverStatus, setServerStatus] = useState({});
 
   // Discovery Form State
   const [businessType, setBusinessType] = useState("Spice Importer & Wholesaler");
   const [city, setCity] = useState("Hamburg");
   const [country, setCountry] = useState("Germany");
+  const [geographyLevel, setGeographyLevel] = useState("auto");
   const [count, setCount] = useState(15);
   const [searching, setSearching] = useState(false);
+  const searchInFlight = useRef(false);
+  const [searchJobId, setSearchJobId] = useState(null);
+  const [cancellingSearch, setCancellingSearch] = useState(false);
   const [lastSearchInfo, setLastSearchInfo] = useState(null);
   const [discoveryEngine, setDiscoveryEngine] = useState("scraper");
 
@@ -116,7 +120,7 @@ export default function LeadFinderApp({ onLogout, currentUser = null }) {
       if (url === WORKSPACE_RESOURCES.status) {
         setServerStatus(data);
         setDiscoveryEngine(data.hunter_enabled === true ? "hunter" : "scraper");
-        setLeadUsage({ date: data.date, count: data.count, limit: data.limit });
+        setLeadUsage({ date: data.date, count: data.count, limit: data.limit, maxPerSearch: data.max_leads_per_search ?? 1000 });
       } else if (url === WORKSPACE_RESOURCES.leads) {
         setAllLeads(data.all_leads || []);
         setSearchHistory(data.search_history || []);
@@ -168,19 +172,22 @@ export default function LeadFinderApp({ onLogout, currentUser = null }) {
   // Lead Discovery Search Handler
   const handleSearch = async (e) => {
     if (e && e.preventDefault) e.preventDefault();
-    if (!businessType.trim() || !city.trim() || !country.trim()) {
+    if (searchInFlight.current) return;
+    const searchLevel = discoveryEngine === "hunter" || geographyLevel === "auto" ? undefined : geographyLevel;
+    const targetArea = (searchLevel === "country" ? country : city).trim();
+    if (!businessType.trim() || !targetArea || !country.trim()) {
       setNotice({
         type: "warning",
         title: "Incomplete Query",
-        text: "Please provide a business niche, city, and country.",
+        text: "Please provide a business niche, target area, and country.",
       });
       return;
     }
-    if (count > remainingLeads) {
+    if (!Number.isSafeInteger(count) || count < 1 || count > leadUsage.maxPerSearch || remainingLeads <= 0) {
       setNotice({
         type: "warning",
-        title: "Daily Quota Exceeded",
-        text: `Requested ${count} leads, but only ${remainingLeads} quota slots remain today.`,
+        title: remainingLeads <= 0 ? "Daily Lead Limit Reached" : "Invalid Lead Target",
+        text: remainingLeads <= 0 ? "The daily lead allowance has been used." : `Enter a whole number from 1 to ${leadUsage.maxPerSearch}.`,
       });
       return;
     }
@@ -212,16 +219,23 @@ export default function LeadFinderApp({ onLogout, currentUser = null }) {
         count: leads.length,
         duplicatesSkipped: data.duplicatesSkipped || 0,
         contactsMissing: data.contactsMissing || 0,
+        placesSummary: data.placesSummary,
         warnings: data.warnings || [],
         mode: data.mode,
-        query: { businessType, city, country, count },
+        query: { businessType, city: targetArea, country, count },
       });
 
-      if (leads.length > 0) {
+      if (data.placesSummary && data.placesSummary.terminationReason !== "target_reached") {
+        setNotice({
+          type: "info",
+          title: data.placesSummary.paused ? "Discovery Paused" : "Discovery Finished",
+          text: `${leads.length} of ${count} contacts saved. ${data.placesSummary.message}${data.placesSummary.paused ? " Submit the same search to resume when capacity returns." : ""}`,
+        });
+      } else if (leads.length > 0) {
         setNotice({
           type: "success",
           title: "Discovery Complete",
-          text: `Harvested ${leads.length} new unique lead(s) for ${city}, ${country}.`,
+          text: `Harvested ${leads.length} new unique lead(s) for ${targetArea}, ${country}.`,
         });
       } else {
         setNotice({
@@ -238,12 +252,13 @@ export default function LeadFinderApp({ onLogout, currentUser = null }) {
       refreshAffected(["status", "leads"]);
     };
 
+    searchInFlight.current = true;
     setSearching(true);
     setSearchProgress({
       current: 0,
       total: count,
       percent: 0,
-      message: `Initiating discovery for ${businessType} in ${city}, ${country}...`,
+      message: `Initiating discovery for ${businessType} in ${targetArea}, ${country}...`,
       logs: [],
     });
 
@@ -253,9 +268,10 @@ export default function LeadFinderApp({ onLogout, currentUser = null }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           business_type: businessType.trim(),
-          city: city.trim(),
+          city: targetArea,
           country: country.trim(),
           count,
+          geographyLevel: searchLevel,
           mode: "live",
         }),
       });
@@ -269,6 +285,7 @@ export default function LeadFinderApp({ onLogout, currentUser = null }) {
 
       // If server returned an asynchronous job (HTTP 202 Accepted)
       if (initialData.jobId) {
+        setSearchJobId(initialData.jobId);
         await new Promise((resolve, reject) => {
           let settled = false;
           let pollTimer = null;
@@ -359,13 +376,29 @@ export default function LeadFinderApp({ onLogout, currentUser = null }) {
         text: err.message,
       });
     } finally {
+      searchInFlight.current = false;
+      setSearchJobId(null);
+      setCancellingSearch(false);
       setSearching(false);
       setSearchProgress(null);
     }
   };
 
+  const cancelSearch = async () => {
+    if (!searchJobId || cancellingSearch) return;
+    setCancellingSearch(true);
+    try {
+      const response = await fetch(`/api/jobs/${encodeURIComponent(searchJobId)}/cancel`, { method: "POST" });
+      if (!response.ok) throw new Error("Could not cancel the search.");
+    } catch (error) {
+      setCancellingSearch(false);
+      setNotice({ type: "error", title: "Cancellation Failed", text: error.message });
+    }
+  };
+
   // 1-Click Preset Discovery Launcher
   const handleQuickSearch = (niche, qCity, qCountry) => {
+    setGeographyLevel("auto");
     setBusinessType(niche);
     setCity(qCity);
     setCountry(qCountry);
@@ -374,12 +407,17 @@ export default function LeadFinderApp({ onLogout, currentUser = null }) {
 
   // 1-Click Re-run historical query
   const handleRerunSearch = (queryStr) => {
-    const parts = queryStr.split(" · ");
-    if (parts[0]) setBusinessType(parts[0]);
-    if (parts[1]) {
-      const loc = parts[1].split(", ");
-      if (loc[0]) setCity(loc[0]);
-      if (loc[1]) setCountry(loc[1]);
+    setGeographyLevel("auto");
+    const separator = queryStr.includes(" · ") ? " · " : " in ";
+    const separatorIndex = queryStr.lastIndexOf(separator);
+    const countryIndex = queryStr.lastIndexOf(", ");
+    if (separatorIndex > 0 && countryIndex >= separatorIndex + separator.length) {
+      const savedCountry = queryStr.slice(countryIndex + 2);
+      setBusinessType(queryStr.slice(0, separatorIndex));
+      setCity(queryStr.slice(separatorIndex + separator.length, countryIndex) || savedCountry);
+      setCountry(savedCountry);
+    } else if (queryStr) {
+      setBusinessType(queryStr);
     }
     setActiveView("search");
   };
@@ -1042,12 +1080,16 @@ export default function LeadFinderApp({ onLogout, currentUser = null }) {
               setCity={setCity}
               country={country}
               setCountry={setCountry}
+              geographyLevel={geographyLevel}
+              setGeographyLevel={setGeographyLevel}
               count={count}
               setCount={setCount}
               searching={searching}
               searchProgress={searchProgress}
               onSearch={handleSearch}
-              leadLimit={leadUsage.limit || 200}
+              onCancelSearch={searchJobId && discoveryEngine !== "hunter" ? cancelSearch : null}
+              cancellingSearch={cancellingSearch}
+              leadLimit={leadUsage.maxPerSearch}
               remainingLeads={remainingLeads}
               lastSearchInfo={lastSearchInfo}
               onViewResults={() => setActiveView("results")}

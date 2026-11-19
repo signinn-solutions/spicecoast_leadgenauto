@@ -3,6 +3,7 @@ import { resetOperationalData } from '../services/resetData.js';
 import { jobManager } from '../services/jobManager.js';
 import { getAiSettings } from '../services/aiProvider.js';
 import { requestHunter } from '../services/hunterClient.js';
+import { logPlacesAttempt, placesUsage, requestGooglePlaces } from '../services/googlePlacesClient.js';
 import {
   getAllUsers,
   createUser,
@@ -100,12 +101,16 @@ export async function getSystemHealthHandler(req, res, next) {
     const autoSend = loadAutoSendSetting();
     const { date: todayDate, count: dailyLeads } = loadDailyUsage();
     const { count: dailyReplies } = loadReplyUsage();
+    const googleQuota = placesUsage();
 
     const diagnostics = {
       google_places: {
         configured: Boolean(config.GOOGLE_API_KEY),
-        status: config.GOOGLE_API_KEY ? 'healthy' : 'unconfigured',
-        details: config.GOOGLE_API_KEY ? 'Google Places API key loaded' : 'Missing API key',
+        status: !config.GOOGLE_API_KEY ? 'unconfigured' : googleQuota.dailyCircuitOpen ? 'quota_exceeded' : 'healthy',
+        details: config.GOOGLE_API_KEY
+          ? `${googleQuota.attemptsToday}/${googleQuota.dailyLimit} local Text Search attempts today. ${googleQuota.estimatedRemaining} estimated local requests remaining.${googleQuota.dailyCircuitOpen ? ' Google reported its daily quota exhausted.' : ''}`
+          : 'Missing API key',
+        quota: { textSearch: googleQuota, placeDetails: placesUsage('place_details'), other: placesUsage('other') },
       },
       hunter_io: {
         configured: Boolean(config.HUNTER_API_KEY),
@@ -227,27 +232,16 @@ export async function testConnectionHandler(req, res, next) {
         return res.status(400).json({ ok: false, error: 'Google Places API key is not configured.' });
       }
       try {
-        const resp = await fetch(
-          `https://places.googleapis.com/v1/places:searchText`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'X-Goog-Api-Key': config.GOOGLE_API_KEY,
-              'X-Goog-FieldMask': 'places.id',
-            },
-            body: JSON.stringify({ textQuery: 'Spices in Dubai', pageSize: 1 }),
-            signal: AbortSignal.timeout(5000),
-          }
-        );
+        const { attempt, reused } = await requestGooglePlaces({
+          body: { textQuery: 'Spices in Dubai', pageSize: 1 },
+          mask: 'places.id', region: 'Dubai, UAE', cost: 0, maxRetries: 0,
+          signal: AbortSignal.timeout(5000), timeout: 5000, reuseStatusForMs: 60000,
+        });
+        if (attempt) logPlacesAttempt(attempt);
         const latency = Date.now() - startTime;
-        if (!resp.ok) {
-          const err = await resp.json().catch(() => ({}));
-          return res.status(200).json({ ok: false, status: resp.status, latency, error: err.error?.message || `HTTP ${resp.status}` });
-        }
-        return res.status(200).json({ ok: true, latency, message: 'Google Places API connection verified successfully.' });
+        return res.status(200).json({ ok: true, latency, ...(reused ? { reused: true } : {}), message: 'Google Places API connection verified successfully.' });
       } catch (err) {
-        return res.status(200).json({ ok: false, latency: Date.now() - startTime, error: err.message });
+        return res.status(200).json({ ok: false, status: err.providerStatus, latency: Date.now() - startTime, error: err.message });
       }
     }
 

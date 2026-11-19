@@ -25,6 +25,7 @@ test('default scraper saves website phone and email contacts without any Hunter 
     config.GOOGLE_API_KEY = 'test-only';
     config.HUNTER_API_KEY = 'must-never-be-used';
     config.DAILY_LEAD_LIMIT = 200;
+    config.GOOGLE_PLACES_CRM_LICENSED = true; // The fixture includes businesses whose only phone came from Places.
     assert.equal(loadHunterSetting(), false, 'New workspaces must default to scraper');
     globalThis.fetch = async url => {
       const parsed = new URL(url);
@@ -37,7 +38,7 @@ test('default scraper saves website phone and email contacts without any Hunter 
         { id: 'unknown-email', displayName: { text: 'Unknown email' }, websiteUri: 'https://unknown-buyer.com' },
         { id: 'blocked-phone', displayName: { text: 'Blocked website phone' }, websiteUri: 'https://blocked-buyer.com', nationalPhoneNumber: '+49 7778889' },
         { id: 'empty', displayName: { text: 'No contacts' } },
-      ] });
+      ].map(place => ({ ...place, formattedAddress: 'Hamburg, Germany' })) });
       if (parsed.pathname === '/robots.txt') return new Response(`User-agent: *\n${parsed.hostname === 'blocked-buyer.com' ? 'Disallow: /' : 'Allow: /'}`, { headers: { 'content-type': 'text/plain' } });
       if (parsed.hostname === 'blocked-buyer.com' || parsed.hostname === 'www.blocked-buyer.com') throw new Error('Robots disallow must prevent page reads');
       if (parsed.hostname === 'phone-buyer.com' && parsed.pathname === '/') return html('<a href="tel:+49%2040%20987654">Call us</a>');

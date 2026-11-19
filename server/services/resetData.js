@@ -4,10 +4,12 @@ import { randomUUID } from 'node:crypto';
 import config from '../config/env.js';
 import { getDatabase, withStorageOperationLock, withMailboxHistoryLock, withOutreachHistoryLock } from './storageService.js';
 import { addAuditLog } from './userService.js';
+import { placesDatabase } from './googlePlacesClient.js';
 
 export async function resetOperationalData(scope, actorEmail) {
   return withStorageOperationLock('lead-search', () => withMailboxHistoryLock(() => withOutreachHistoryLock(async () => {
     const db = getDatabase();
+    placesDatabase();
     const backupDir = path.join(path.dirname(config.DB_PATH), 'backups', `reset-${Date.now()}-${randomUUID()}`);
     fs.mkdirSync(backupDir, { recursive: true });
     const backupFile = path.join(backupDir, 'spicecoast.sqlite');
@@ -23,6 +25,7 @@ export async function resetOperationalData(scope, actorEmail) {
     }
     db.transaction(() => {
       db.exec('DELETE FROM leads; DELETE FROM searches; DELETE FROM daily_usage;');
+      db.prepare("UPDATE google_places_searches SET state = 'reset' WHERE state IN ('running', 'paused')").run();
       for (const [name, [, value]] of Object.entries(empty)) db.prepare('INSERT INTO datasets(name,value) VALUES (?,?) ON CONFLICT(name) DO UPDATE SET value=excluded.value').run(name, JSON.stringify(value));
       addAuditLog({ userEmail: actorEmail, action: 'operational_data_reset', category: 'admin', details: `Reset scope: ${scope}; automatic backup: ${backupFile}. Accounts and settings preserved.` });
     })();

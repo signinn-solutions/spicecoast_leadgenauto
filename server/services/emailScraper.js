@@ -241,6 +241,7 @@ async function fetchOnce(url, opts, { typeRe = HTML_TYPE_RE, sniff = true } = {}
   let current = url;
   const t0 = Date.now();
   for (let hop = 0; hop <= opts.maxRedirects; hop++) {
+    opts.signal?.throwIfAborted();
     if (Date.now() >= opts.deadline) throw new FetchError("timeout", "Website crawl time budget exceeded");
     const u = new URL(current);
     if (!['http:', 'https:'].includes(u.protocol)) throw new FetchError('unsupported', 'unsupported protocol');
@@ -254,9 +255,10 @@ async function fetchOnce(url, opts, { typeRe = HTML_TYPE_RE, sniff = true } = {}
 
     let res;
     try {
+      const timeout = AbortSignal.timeout(Math.max(1, Math.min(opts.timeoutMs, opts.deadline - Date.now())));
       res = await fetch(current, {
         redirect: 'manual',
-        signal: AbortSignal.timeout(Math.max(1, Math.min(opts.timeoutMs, opts.deadline - Date.now()))),
+        signal: opts.signal ? AbortSignal.any([opts.signal, timeout]) : timeout,
         headers: {
           'user-agent': opts.userAgent,
           accept: 'text/html,application/xhtml+xml,text/plain;q=0.8',
@@ -310,6 +312,7 @@ async function fetchText(url, opts, extra) {
     try {
       return await fetchOnce(url, opts, extra);
     } catch (e) {
+      opts.signal?.throwIfAborted();
       const retryable = ['timeout', 'connection'].includes(e.kind) || (e.kind === 'http_error' && e.status >= 500);
       if (!retryable || attempt >= opts.retries) throw e;
       await sleep(opts.retryDelayMs ?? 800);
@@ -724,6 +727,7 @@ export async function scrapeEmailsForWebsite(website, options = {}) {
 
   const robotsCache = new Map();
   const allowed = async (url) => {
+    opts.signal?.throwIfAborted();
     if (!opts.respectRobots) return true;
     const origin = new URL(url).origin;
     if (!robotsCache.has(origin)) {
@@ -786,6 +790,12 @@ export async function scrapeEmailsForWebsite(website, options = {}) {
 
   const siteHost = stripWww(new URL(finalUrl).hostname.toLowerCase());
   result.domain = siteHost;
+  result.publicWebsite = finalUrl;
+  const siteName = [...html.matchAll(/<meta\s[^>]*>/gi)]
+    .map(match => match[0])
+    .find(tag => /\b(?:property|name)\s*=\s*["']og:site_name["']/i.test(tag));
+  const publicName = siteName?.match(/\bcontent\s*=\s*(["'])(.*?)\1/i)?.[2];
+  if (publicName) result.publicName = decodeEntities(publicName).trim().slice(0, 160);
   const origin = new URL(finalUrl).origin;
 
   const found = new Map(); // email -> { email, sources:Set, pages:Set }
@@ -822,6 +832,7 @@ export async function scrapeEmailsForWebsite(website, options = {}) {
 
     const visited = new Set([finalUrl]);
     while (queue.length && result.pagesChecked.length < opts.maxPages && result.attempts.length < opts.maxAttempts) {
+      opts.signal?.throwIfAborted();
       const url = queue.shift();
       if (visited.has(url)) continue;
       visited.add(url);

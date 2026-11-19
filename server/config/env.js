@@ -14,6 +14,11 @@ const rootDir = path.resolve(__dirname, '../..');
 const rawPort = process.env.PORT || '5000';
 const parsedPort = Number(rawPort);
 const isNumericPort = !isNaN(parsedPort) && isFinite(parsedPort);
+const integerSetting = (name, fallback, minimum = 1) => {
+  const raw = process.env[name]?.trim();
+  const value = Number(raw);
+  return raw && Number.isSafeInteger(value) && value >= minimum ? value : fallback;
+};
 
 export const config = {
   PORT: isNumericPort ? parsedPort : rawPort,
@@ -26,6 +31,20 @@ export const config = {
 
   // Google Places API
   GOOGLE_API_KEY: process.env.GOOGLE_API_KEY || '',
+  GOOGLE_PLACES_PROJECT: process.env.GOOGLE_PLACES_PROJECT || 'default',
+  GOOGLE_PLACES_TEXT_PER_DAY: integerSetting('GOOGLE_PLACES_TEXT_PER_DAY', 60, 0),
+  GOOGLE_PLACES_TEXT_PER_MINUTE: integerSetting('GOOGLE_PLACES_TEXT_PER_MINUTE', 20),
+  GOOGLE_PLACES_OTHER_PER_DAY: integerSetting('GOOGLE_PLACES_OTHER_PER_DAY', 10, 0),
+  GOOGLE_PLACES_OTHER_PER_MINUTE: integerSetting('GOOGLE_PLACES_OTHER_PER_MINUTE', 5),
+  GOOGLE_PLACES_CONCURRENCY: integerSetting('GOOGLE_PLACES_CONCURRENCY', 1),
+  GOOGLE_PLACES_REQUESTS_PER_SEARCH: integerSetting('GOOGLE_PLACES_REQUESTS_PER_SEARCH', 60, 0),
+  GOOGLE_PLACES_TEXT_COST_MICROS: integerSetting('GOOGLE_PLACES_TEXT_COST_MICROS', 35000, 0),
+  GOOGLE_PLACES_SEARCH_COST_MICROS: integerSetting('GOOGLE_PLACES_SEARCH_COST_MICROS', 2100000, 0),
+  GOOGLE_PLACES_DAILY_COST_MICROS: integerSetting('GOOGLE_PLACES_DAILY_COST_MICROS', 2100000, 0),
+  GOOGLE_PLACES_CRM_LICENSED: process.env.GOOGLE_PLACES_CRM_LICENSED === 'true',
+  DEEPSEEK_API_KEY: process.env.DEEPSEEK_API_KEY || '',
+  DEEPSEEK_SEARCH_MODEL: process.env.DEEPSEEK_SEARCH_MODEL || 'deepseek-flash',
+  MAX_LEADS_PER_SEARCH: integerSetting('MAX_LEADS_PER_SEARCH', 1000),
 
   // Hunter.io API
   HUNTER_API_KEY: process.env.HUNTER_API_KEY || '',
