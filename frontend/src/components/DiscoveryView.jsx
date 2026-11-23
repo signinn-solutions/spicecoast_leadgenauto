@@ -27,12 +27,16 @@ export default function DiscoveryView({
   setCity,
   country,
   setCountry,
+  geographyLevel = "auto",
+  setGeographyLevel,
   count,
   setCount,
   searching,
   searchProgress,
   onSearch,
-  leadLimit = 200,
+  onCancelSearch,
+  cancellingSearch,
+  leadLimit = 1000,
   remainingLeads = 200,
   lastSearchInfo,
   onViewResults,
@@ -49,8 +53,10 @@ export default function DiscoveryView({
     { city: "Singapore", country: "Singapore" },
   ];
 
-  const countPresets = [10, 25, 50, 100, 200];
+  const countPresets = [20, 60, 120, 500, 1000].filter(value => value <= leadLimit);
   const isHunter = discoveryEngine === "hunter";
+  const countrySearch = !isHunter && geographyLevel === "country";
+  const searchStopped = lastSearchInfo?.placesSummary?.paused || lastSearchInfo?.placesSummary?.terminationReason === "cancelled";
 
   return (
     <div className="lf-view-container lf-animate-fade">
@@ -74,7 +80,21 @@ export default function DiscoveryView({
       )}
       {/* Last Search Feedback Banner */}
       {lastSearchInfo && (
-        lastSearchInfo.count > 0 ? (
+        searchStopped ? (
+          <div className="lf-search-complete-banner" role="status">
+            <div className="lf-banner-left">
+              <Info size={20} className="text-blue" />
+              <div>
+                <div className="lf-banner-title">{lastSearchInfo.placesSummary.paused ? "Search paused" : "Search cancelled"}</div>
+                <div className="lf-banner-text">
+                  Saved {lastSearchInfo.count} of {lastSearchInfo.placesSummary.requestedLeads} requested contacts.
+                  {lastSearchInfo.placesSummary.paused && " Submit the same search to resume after capacity returns."}
+                </div>
+              </div>
+            </div>
+            {lastSearchInfo.count > 0 && <button type="button" className="lf-btn-secondary sm" onClick={onViewResults}>View Leads in CRM</button>}
+          </div>
+        ) : lastSearchInfo.count > 0 ? (
           <div className="lf-search-complete-banner">
             <div className="lf-banner-left">
               <CheckCircle2 size={18} className="text-emerald" />
@@ -244,19 +264,31 @@ export default function DiscoveryView({
 
             {/* City */}
             <div className="lf-form-field">
-              <label htmlFor="target-city">
-                <MapPin size={13} className="text-amber" />
-                <span>Target Commercial City</span>
-              </label>
+              <div className="lf-field-header-row">
+                <label htmlFor="target-city">
+                  <MapPin size={13} className="text-amber" />
+                  <span>Target Area</span>
+                </label>
+                {!isHunter && (
+                  <select aria-label="Geographic level" className="lf-select" style={{ width: "auto", padding: "4px 8px" }}
+                    value={geographyLevel} onChange={event => setGeographyLevel(event.target.value)} disabled={searching}>
+                    <option value="auto">Auto</option>
+                    <option value="country">Country</option>
+                    <option value="state">State or region</option>
+                    <option value="district">District</option>
+                    <option value="city">City</option>
+                  </select>
+                )}
+              </div>
               <input
                 id="target-city"
                 type="text"
                 className="lf-input"
-                placeholder="e.g. Hamburg, Dubai, Rotterdam"
-                value={city}
+                placeholder="e.g. Hamburg, Kerala, or All"
+                value={countrySearch ? country : city}
                 onChange={(e) => setCity(e.target.value)}
-                disabled={searching}
-                required
+                disabled={searching || countrySearch}
+                required={!countrySearch}
               />
             </div>
 
@@ -306,7 +338,7 @@ export default function DiscoveryView({
               <div className="lf-field-header-row">
                 <label htmlFor="target-count">
                   <Sliders size={13} className="text-amber" />
-                  <span>Harvest Volume (Max {leadLimit || 200} per batch)</span>
+                  <span>Harvest Volume (Max {leadLimit} per batch)</span>
                 </label>
                 <span className="lf-count-indicator lf-mono">{count} Leads</span>
               </div>
@@ -315,7 +347,7 @@ export default function DiscoveryView({
                   id="target-count"
                   type="range"
                   min={1}
-                  max={Math.min(leadLimit || 200, remainingLeads > 0 ? remainingLeads : (leadLimit || 200))}
+                  max={leadLimit}
                   value={count}
                   onChange={(e) => setCount(parseInt(e.target.value, 10))}
                   className="lf-range-slider"
@@ -328,7 +360,7 @@ export default function DiscoveryView({
                       type="button"
                       className={`lf-count-preset-btn ${count === val ? "active" : ""}`}
                       onClick={() => setCount(val)}
-                      disabled={searching || val > remainingLeads}
+                      disabled={searching}
                     >
                       {val}
                     </button>
@@ -357,6 +389,11 @@ export default function DiscoveryView({
                 </>
               )}
             </button>
+            {onCancelSearch && (
+              <button type="button" className="lf-btn-secondary" onClick={onCancelSearch} disabled={cancellingSearch}>
+                {cancellingSearch ? "Cancelling…" : "Cancel search"}
+              </button>
+            )}
           </div>
         </form>
 
@@ -388,7 +425,7 @@ export default function DiscoveryView({
                 Progress: {searchProgress?.current || 0} / {searchProgress?.total || count} entities processed
               </span>
               <span className="lf-progress-badge-live">
-                <span className="lf-radar-dot pulse" /> 4x Concurrent Workers Active
+                <span className="lf-radar-dot pulse" /> Search active
               </span>
             </div>
 

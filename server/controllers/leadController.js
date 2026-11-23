@@ -10,6 +10,8 @@ import {
 } from '../services/storageService.js';
 import { executeLeadSearch, isHunterQuotaExceeded } from '../services/leadFinderService.js';
 import { generateColdEmail } from '../services/groqService.js';
+import { normalizePlacesText } from '../services/googlePlacesClient.js';
+import { savedPlacesSearch } from '../services/placesSearchScheduler.js';
 
 export async function getStatus(req, res, next) {
   try {
@@ -21,6 +23,7 @@ export async function getStatus(req, res, next) {
       count: usedToday,
       limit: config.DAILY_LEAD_LIMIT,
       remaining,
+      max_leads_per_search: config.MAX_LEADS_PER_SEARCH,
       has_google_key: Boolean(config.GOOGLE_API_KEY),
       has_hunter_key: Boolean(config.HUNTER_API_KEY),
       hunter_enabled: hunterEnabled,
@@ -67,50 +70,74 @@ export async function getLeads(req, res, next) {
 }
 
 import { jobManager } from '../services/jobManager.js';
+const activeSearches = new Map();
+const synchronousSearches = new Set();
 
 export async function searchLeads(req, res, next) {
   try {
-    const { business_type, businessType, city, country, count, requestedCount, mode, engine, discoveryEngine, sync } = req.body || {};
+    const { business_type, businessType, city, country, count, requestedCount, mode, engine, discoveryEngine, geographyLevel, sync } = req.body || {};
     const searchOptions = {
       businessType: business_type || businessType,
       city,
       country,
-      requestedCount: count || requestedCount,
+      requestedCount: count ?? requestedCount ?? 20,
       mode: mode || 'live',
       ownerUserId: req.dashboardSession?.userId || null,
       engine: req.dashboardSession?.role === 'superadmin' ? engine || discoveryEngine : undefined,
+      geographyLevel,
     };
 
     // If caller explicitly requested synchronous execution (e.g. CLI scripts or sync test runs)
     const isSync = sync === true || req.query.sync === 'true' || req.headers['x-sync-search'] === 'true';
+    const key = JSON.stringify(Object.values(searchOptions).map(normalizePlacesText));
+    const prior = activeSearches.get(key);
+    if (synchronousSearches.has(key) || (isSync && prior?.expires === null)) {
+      return res.status(409).json({ error: 'An identical lead search is already running.' });
+    }
     if (isSync) {
-      const result = await executeLeadSearch(searchOptions);
-      return res.status(200).json(result);
+      const controller = new AbortController();
+      const abort = () => { if (!res.writableEnded) controller.abort('cancelled'); };
+      res.on('close', abort);
+      synchronousSearches.add(key);
+      try {
+        const result = await executeLeadSearch({ ...searchOptions, signal: controller.signal });
+        if (!controller.signal.aborted) return res.status(200).json(result);
+        return;
+      } finally {
+        res.off('close', abort);
+        synchronousSearches.delete(key);
+      }
     }
 
-    // Default: Asynchronous Job with real-time SSE progress streaming
+    if (prior && (prior.expires > Date.now() || prior.expires === null)) {
+      return res.status(202).json(searchJobResponse(prior.job, true));
+    }
+    for (const [entryKey, entry] of activeSearches) {
+      if (entry.expires !== null && entry.expires <= Date.now()) activeSearches.delete(entryKey);
+    }
     const job = jobManager.createJob('lead_search', searchOptions);
+    const entry = { job, expires: null };
+    activeSearches.set(key, entry);
 
     // Detach from current request socket and execute in background
-    (async () => {
+    job.work = (async () => {
       try {
-        const result = await executeLeadSearch(searchOptions, (progress) => {
+        const result = await executeLeadSearch({ ...searchOptions, searchId: job.id, signal: job.controller.signal }, (progress) => {
           jobManager.updateProgress(job.id, progress);
         });
         jobManager.completeJob(job.id, result);
+        if (job.controller.signal.aborted || result.placesSummary?.paused) {
+          activeSearches.delete(key);
+        } else {
+          entry.expires = Date.now() + 10000;
+        }
       } catch (err) {
         jobManager.failJob(job.id, err);
+        activeSearches.delete(key);
       }
     })();
 
-    return res.status(202).json({
-      jobId: job.id,
-      status: 'running',
-      message: 'Lead discovery job started.',
-      streamUrl: `/api/jobs/${job.id}/stream`,
-      statusUrl: `/api/jobs/${job.id}`,
-      total: count,
-    });
+    return res.status(202).json(searchJobResponse(job, false));
   } catch (err) {
     if (err.statusCode) {
       return res.status(err.statusCode).json({ error: err.message });
@@ -119,10 +146,35 @@ export async function searchLeads(req, res, next) {
   }
 }
 
+function searchJobResponse(job, reused) {
+  return {
+    jobId: job.id, status: job.status, reused,
+    message: reused ? 'Existing lead discovery job reused.' : 'Lead discovery job started.',
+    streamUrl: `/api/jobs/${job.id}/stream`,
+    statusUrl: `/api/jobs/${job.id}`,
+    total: job.payload.requestedCount,
+  };
+}
+
+function visibleJob(req) {
+  const job = jobManager.getJob(req.params.jobId);
+  if (job?.type === 'lead_search' && job.payload.ownerUserId !== (req.dashboardSession?.userId || null)) return null;
+  return job;
+}
+
+export function cancelLeadSearch(req, res) {
+  const job = visibleJob(req);
+  if (job?.type !== 'lead_search') return res.status(404).json({ error: 'Search job not found.' });
+  const cancelling = jobManager.cancelSearch(job.id);
+  return res.status(cancelling ? 202 : 200).json({ id: job.id, status: cancelling ? 'cancelling' : job.status });
+}
+
 export function getJobStatus(req, res) {
   const { jobId } = req.params;
-  const job = jobManager.getJob(jobId);
+  const job = visibleJob(req);
   if (!job) {
+    const saved = savedPlacesSearch(jobId, req.dashboardSession?.userId);
+    if (saved) return res.status(200).json(saved);
     return res.status(404).json({ error: 'Job not found or expired.' });
   }
   return res.status(200).json({
@@ -139,7 +191,7 @@ export function getJobStatus(req, res) {
 
 export function streamJobProgress(req, res) {
   const { jobId } = req.params;
-  const job = jobManager.getJob(jobId);
+  const job = visibleJob(req);
   if (!job) {
     return res.status(404).json({ error: 'Job not found or expired.' });
   }

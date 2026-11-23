@@ -18,6 +18,7 @@ test('discovery uses POST, saves phone OR email contacts, and exposes failures h
     config.HUNTER_API_KEY = 'test-only';
     config.GOOGLE_API_KEY = '';
     config.DAILY_LEAD_LIMIT = 200;
+    config.GOOGLE_PLACES_CRM_LICENSED = true; // Exercise a contract that permits storing Google phone data.
     resetHunterQuotaState();
     saveHunterSetting(true);
     globalThis.fetch = async (url, request = {}) => {
@@ -65,7 +66,7 @@ test('discovery uses POST, saves phone OR email contacts, and exposes failures h
     saveHunterSetting(false);
     globalThis.fetch = async (url) => {
       assert.ok(String(url).includes('places.googleapis.com'), 'Search must follow the persisted admin engine');
-      return json({ places: [{ id: 'admin-engine-phone', displayName: { text: 'Admin Engine Buyer' }, nationalPhoneNumber: '+49 11122233' }] });
+      return json({ places: [{ id: 'admin-engine-phone', displayName: { text: 'Admin Engine Buyer' }, formattedAddress: 'Hamburg, Germany', internationalPhoneNumber: '+49 11122233' }] });
     };
     const { engine, ...defaultOptions } = options;
     assert.equal((await executeLeadSearch(defaultOptions)).count, 1);

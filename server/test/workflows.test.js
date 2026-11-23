@@ -629,11 +629,11 @@ test('POST /api/leads/generate-coldmail is idempotent and regenerates with force
   }
 });
 
-test('lead search accepts requestedCount up to 200 and rejects > 200', async () => {
+test('lead search accepts the configured maximum independently of the daily lead limit', async () => {
   const keys = [
     'DB_PATH', 'DAILY_USAGE_FILE', 'REPLY_USAGE_FILE', 'LEADS_HISTORY_FILE',
     'SEEN_PLACES_FILE', 'MAILBOX_HISTORY_FILE', 'OUTREACH_HISTORY_FILE', 'DAILY_LEAD_LIMIT',
-    'NODE_ENV', 'ADMIN_EMAIL', 'ADMIN_PASSWORD_HASH',
+    'NODE_ENV', 'ADMIN_EMAIL', 'ADMIN_PASSWORD_HASH', 'MAX_LEADS_PER_SEARCH',
   ];
   const original = Object.fromEntries(keys.map((key) => [key, config[key]]));
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'spicecoast-limit-test-'));
@@ -643,15 +643,14 @@ test('lead search accepts requestedCount up to 200 and rejects > 200', async () 
     }
     config.DAILY_LEAD_LIMIT = 200;
     config.NODE_ENV = 'development';
+    config.MAX_LEADS_PER_SEARCH = 1000;
 
-    // 201 should be rejected
     await assert.rejects(
-      executeLeadSearch({ businessType: 'Spice Importer', city: 'Hamburg', country: 'Germany', requestedCount: 201, mode: 'simulated' }),
-      (err) => err.statusCode === 400 && err.message.includes('between 1 and 200')
+      executeLeadSearch({ businessType: 'Spice Importer', city: 'Hamburg', country: 'Germany', requestedCount: 1001, mode: 'simulated' }),
+      (err) => err.statusCode === 400 && err.message.includes('between 1 and 1000')
     );
 
-    // 200 should be accepted
-    const result = await executeLeadSearch({ businessType: 'Spice Importer', city: 'Hamburg', country: 'Germany', requestedCount: 200, mode: 'simulated' });
+    const result = await executeLeadSearch({ businessType: 'Spice Importer', city: 'Hamburg', country: 'Germany', requestedCount: 1000, mode: 'simulated' });
     assert.equal(result.leads.length, 200);
     assert.equal(result.usage.count, 200);
   } finally {

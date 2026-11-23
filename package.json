@@ -9,7 +9,7 @@
     "server": "node server/server.js",
     "dev:server": "node server/server.js",
     "dev:ui": "vite",
-    "dev": "concurrently \"node server/server.js\" \"vite\"",
+    "dev": "concurrently --kill-others-on-fail --names API,VITE \"node server/server.js\" \"vite\"",
     "build": "vite build",
     "preview": "vite preview",
     "test": "node --test server/test/*.test.js",
