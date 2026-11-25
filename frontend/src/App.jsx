@@ -1092,6 +1092,7 @@ export default function LeadFinderApp({ onLogout, currentUser = null }) {
               leadLimit={leadUsage.maxPerSearch}
               remainingLeads={remainingLeads}
               lastSearchInfo={lastSearchInfo}
+              allLeads={allLeads}
               onViewResults={() => setActiveView("results")}
               discoveryEngine={discoveryEngine}
               onToggleEngine={(mode) => handleToggleHunter(mode === "hunter")}

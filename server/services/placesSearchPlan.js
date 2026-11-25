@@ -91,15 +91,34 @@ function validatePhrases(primary, alternatives, niche) {
   return keywords;
 }
 
-async function requestPlan({ niche, area, country, level, signal }) {
+function getPlannerConfig() {
+  if (config.DEEPSEEK_API_KEY) {
+    return {
+      url: 'https://api.deepseek.com/chat/completions',
+      apiKey: config.DEEPSEEK_API_KEY,
+      model: config.DEEPSEEK_SEARCH_MODEL,
+    };
+  }
+  if (config.GROQ_API_KEY) {
+    return {
+      url: 'https://api.groq.com/openai/v1/chat/completions',
+      apiKey: config.GROQ_API_KEY,
+      model: config.GROQ_MODEL || 'openai/gpt-oss-120b',
+    };
+  }
+  return null;
+}
+
+async function requestPlan({ niche, area, country, level, signal, planner }) {
+  if (!planner) return null;
   try {
     const timeout = AbortSignal.timeout(8000);
-    const response = await fetch('https://api.deepseek.com/chat/completions', {
+    const response = await fetch(planner.url, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${config.DEEPSEEK_API_KEY}`, 'Content-Type': 'application/json' },
+      headers: { Authorization: `Bearer ${planner.apiKey}`, 'Content-Type': 'application/json' },
       signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
       body: JSON.stringify({
-        model: config.DEEPSEEK_SEARCH_MODEL,
+        model: planner.model,
         response_format: { type: 'json_object' },
         temperature: 0,
         max_tokens: 2600,
@@ -132,15 +151,16 @@ export async function getPlacesPlan({ niche, area, country, geographyLevel, sign
   const wrapDistricts = cities => (cities || []).map(name => ({ name, children: wrapTowns(smallerAreas[geoKey(name)]) }));
   const known = level === 'country' ? Object.entries(regions).map(([name, cities]) => ({ name, children: wrapDistricts(cities) })) :
     level === 'state' ? wrapDistricts(regions[state]) : wrapTowns(smallerAreas[rootKey]);
-  const key = JSON.stringify([normalize(niche), rootKey, national, level, config.DEEPSEEK_SEARCH_MODEL]);
+  const planner = getPlannerConfig();
+  const key = JSON.stringify([normalize(niche), rootKey, national, level, planner?.model || '']);
   let generated = null;
-  if (config.DEEPSEEK_API_KEY && !signal?.aborted) {
+  if (planner && !signal?.aborted) {
     const cached = phraseCache.get(key);
     if (cached?.expires > Date.now()) generated = cached.plan;
     else {
       if (!planning.has(key)) {
         onRequest();
-        planning.set(key, requestPlan({ niche, area: root, country, level, signal }).finally(() => planning.delete(key)));
+        planning.set(key, requestPlan({ niche, area: root, country, level, signal, planner }).finally(() => planning.delete(key)));
       }
       generated = await planning.get(key);
       if (generated) {
