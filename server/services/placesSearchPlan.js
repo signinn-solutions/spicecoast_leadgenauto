@@ -86,7 +86,7 @@ function validatePhrases(primary, alternatives, niche) {
     if (!key || used.has(key)) continue;
     used.add(key);
     keywords.push(phrase.trim());
-    if (keywords.length === 3) break;
+    if (keywords.length === 6) break;
   }
   return keywords;
 }
@@ -123,7 +123,7 @@ async function requestPlan({ niche, area, country, level, signal, planner }) {
         temperature: 0,
         max_tokens: 2600,
         messages: [
-          { role: 'system', content: 'Return JSON with primary, alternatives and regions. Write one strong concise Google Places business category or phrase, and at most two distinct business phrases for the same niche. Omit geography from phrases. Use only real subdivisions within the requested area. Return regions as {name, children}, where children are the next level and may be empty. At country level prioritize commercially important administrative states or regions. At state level list districts or cities. At district level list towns or commercial areas. For a city use known commercial districts only. Avoid overlapping regions and spellings of the same region.' },
+          { role: 'system', content: 'Return JSON with primary, alternatives and regions. Write one strong concise Google Places business category or phrase, and up to five distinct business phrases for the same niche. Omit geography from phrases. Use only real subdivisions within the requested area. Return regions as {name, children}, where children are the next level and may be empty. At country level prioritize commercially important administrative states or regions. At state level list districts or cities. At district level list towns or commercial areas. For a city use known commercial districts only. Avoid overlapping regions and spellings of the same region.' },
           { role: 'user', content: JSON.stringify({ niche, area, country, level }) },
         ],
       }),

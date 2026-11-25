@@ -133,10 +133,6 @@ export default function DiscoveryView({
             Choose a buyer segment and location to find contacts.
           </p>
         </div>
-        <div className="lf-quota-badge-top">
-          <span className="lf-quota-badge-label">Remaining Daily Quota:</span>
-          <span className="lf-quota-badge-val lf-mono">{remainingLeads} / {leadLimit}</span>
-        </div>
       </div>
 
       {/* Last Search Feedback Banner */}
@@ -174,9 +170,6 @@ export default function DiscoveryView({
                   <div className="lf-banner-text">
                     Added <strong>{lastSearchInfo.count}</strong> new contact{lastSearchInfo.count === 1 ? "" : "s"}
                     {lastSearchInfo.query?.count ? ` (requested ${lastSearchInfo.query.count})` : ""} to your CRM.
-                    {lastSearchInfo.duplicatesSkipped > 0 && (
-                      <> Skipped <strong>{lastSearchInfo.duplicatesSkipped}</strong> existing contact{lastSearchInfo.duplicatesSkipped === 1 ? "" : "s"}.</>
-                    )}
                     {" "}
                     <span>
                       <strong>{searchedAreaLeadCount}</strong> lead{searchedAreaLeadCount === 1 ? "" : "s"} under <strong>{searchedLabel}</strong> {searchedAreaLeadCount === 1 ? "is" : "are"} now in your Found Leads.
@@ -355,7 +348,54 @@ export default function DiscoveryView({
               )}
             </div>
 
-            {/* City / Target Area */}
+            {/* Refined Search Scope Selector (above Country & Target Area) */}
+            {!isHunter && setGeographyLevel && (
+              <div className="lf-form-field span-2">
+                <div className="lf-preset-chips" style={{ alignItems: "center" }}>
+                  <span className="lf-preset-label">Search Scope:</span>
+                  {geoScopes.map((scope) => (
+                    <button
+                      key={scope.value}
+                      type="button"
+                      className={`lf-preset-chip ${geographyLevel === scope.value ? "active" : ""}`}
+                      onClick={() => setGeographyLevel(scope.value)}
+                      disabled={searching}
+                    >
+                      {scope.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Country (First) */}
+            <div className="lf-form-field">
+              <label htmlFor="target-country">
+                <Globe size={13} className="text-amber" />
+                <span>Country / Jurisdiction</span>
+              </label>
+              <input
+                id="target-country"
+                type="text"
+                className="lf-input"
+                placeholder="e.g. Germany, UAE, Netherlands, USA"
+                value={country}
+                onChange={(e) => {
+                  const nextCountry = e.target.value;
+                  setCountry(nextCountry);
+                  const matchedPreset = cityPresets.find(
+                    (item) => item.city.toLowerCase() === (city || "").trim().toLowerCase()
+                  );
+                  if (matchedPreset && matchedPreset.country.toLowerCase() !== nextCountry.trim().toLowerCase()) {
+                    setCity("");
+                  }
+                }}
+                disabled={searching}
+                required
+              />
+            </div>
+
+            {/* City / Target Area (Second) */}
             <div className="lf-form-field">
               <label htmlFor="target-city">
                 <MapPin size={13} className="text-amber" />
@@ -396,44 +436,6 @@ export default function DiscoveryView({
                 </div>
               )}
             </div>
-
-            {/* Country */}
-            <div className="lf-form-field">
-              <label htmlFor="target-country">
-                <Globe size={13} className="text-amber" />
-                <span>Country / Jurisdiction</span>
-              </label>
-              <input
-                id="target-country"
-                type="text"
-                className="lf-input"
-                placeholder="e.g. Germany, UAE, Netherlands, USA"
-                value={country}
-                onChange={(e) => setCountry(e.target.value)}
-                disabled={searching}
-                required
-              />
-            </div>
-
-            {/* Refined Search Scope Selector */}
-            {!isHunter && setGeographyLevel && (
-              <div className="lf-form-field span-2">
-                <div className="lf-preset-chips" style={{ alignItems: "center" }}>
-                  <span className="lf-preset-label">Search Scope:</span>
-                  {geoScopes.map((scope) => (
-                    <button
-                      key={scope.value}
-                      type="button"
-                      className={`lf-preset-chip ${geographyLevel === scope.value ? "active" : ""}`}
-                      onClick={() => setGeographyLevel(scope.value)}
-                      disabled={searching}
-                    >
-                      {scope.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
 
             {/* Geographic Trade Hub Quick Select */}
             <div className="lf-form-field span-2">
@@ -514,11 +516,6 @@ export default function DiscoveryView({
                 </>
               )}
             </button>
-            {onCancelSearch && (
-              <button type="button" className="lf-btn-secondary" onClick={onCancelSearch} disabled={cancellingSearch}>
-                {cancellingSearch ? "Cancelling…" : "Cancel search"}
-              </button>
-            )}
           </div>
         </form>
 
@@ -532,9 +529,22 @@ export default function DiscoveryView({
                   {searchProgress?.message || `Harvesting ${businessType} in ${city}, ${country}...`}
                 </span>
               </div>
-              <span className="lf-progress-percent lf-mono">
-                {searchProgress?.percent ?? 0}%
-              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
+                <span className="lf-progress-percent lf-mono">
+                  {searchProgress?.percent ?? 0}%
+                </span>
+                {onCancelSearch && (
+                  <button
+                    type="button"
+                    className="lf-btn-secondary sm"
+                    onClick={onCancelSearch}
+                    disabled={cancellingSearch}
+                    style={{ whiteSpace: 'nowrap', borderColor: 'rgba(239, 68, 68, 0.35)', color: '#dc2626', background: '#ffffff' }}
+                  >
+                    {cancellingSearch ? "Cancelling…" : "Cancel search"}
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Dynamic Progress Bar */}
