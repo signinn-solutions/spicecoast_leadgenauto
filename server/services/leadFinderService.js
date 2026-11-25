@@ -484,8 +484,8 @@ async function runLeadSearch({ businessType, city, country, requestedCount = 20,
   onProgress({
     step: 'start',
     message: isHunterEngine
-      ? `Querying Hunter.io Native Discover for "${cleanType}" in ${cleanCity}, ${cleanCountry}...`
-      : `Searching Google Places for "${cleanType}" in ${cleanCity}, ${cleanCountry}...`,
+      ? `Searching corporate directories for "${cleanType}" in ${cleanCity}, ${cleanCountry}...`
+      : `Searching business listings for "${cleanType}" in ${cleanCity}, ${cleanCountry}...`,
     current: 0,
     total: fetchCount,
     percent: 5,
@@ -531,7 +531,7 @@ async function runLeadSearch({ businessType, city, country, requestedCount = 20,
 
         onProgress({
           step: 'places_found',
-          message: `Discovered ${companies.length} corporate profiles from Hunter.io (${duplicatesSkipped} duplicates skipped). Verifying contact emails...`,
+          message: `Discovered ${companies.length} corporate profiles (${duplicatesSkipped} duplicates skipped). Verifying contact emails...`,
           current: 0,
           total: companiesToProcess.length,
           percent: 20,
@@ -543,7 +543,7 @@ async function runLeadSearch({ businessType, city, country, requestedCount = 20,
           const compName = company.name || `Company #${idx + 1}`;
           onProgress({
             step: 'scraping_place',
-            message: `Verifying Hunter emails for ${compName}...`,
+            message: `Verifying contact emails for ${compName}...`,
             current: finishedWorkers,
             total: companiesToProcess.length,
             percent: 20 + Math.round((finishedWorkers / companiesToProcess.length) * 70),
